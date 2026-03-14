@@ -1,0 +1,70 @@
+/**
+ * Preload 脚本 —— Renderer 与 Main 进程之间的安全桥接层
+ * 使用 contextBridge 暴露受控 API，确保 renderer 无法直接访问 Node.js
+ */
+
+import { contextBridge, ipcRenderer } from 'electron'
+
+// 将所有安全 API 暴露到 window.electronAPI
+contextBridge.exposeInMainWorld('electronAPI', {
+  // ────────────────────────────────────────────────
+  // 对话框 API
+  // ────────────────────────────────────────────────
+  dialog: {
+    /** 打开系统文件选择框，返回解析后的 JSON 数据 */
+    openJson: () => ipcRenderer.invoke('dialog:openJson'),
+
+    /** 打开文件夹选择框，返回选中的目录路径 */
+    selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+
+    /** 导出错误日志到用户指定的文件路径 */
+    exportLogs: () => ipcRenderer.invoke('dialog:exportLogs'),
+  },
+
+  // ────────────────────────────────────────────────
+  // 文件系统 API
+  // ────────────────────────────────────────────────
+  fs: {
+    /** 初始化项目目录结构 */
+    initFolders: (projectName: string, sizes: string[], outputPath: string) =>
+      ipcRenderer.invoke('fs:initFolders', { projectName, sizes, outputPath }),
+
+    /** 开始素材校验 */
+    startValidation: (folderPath: string, targetSizes: string[]) =>
+      ipcRenderer.invoke('fs:startValidation', { folderPath, targetSizes }),
+
+    /** 执行批量重命名 */
+    executeRename: (
+      files: unknown[],
+      template: string,
+      projectName: string,
+      producer?: string
+    ) => ipcRenderer.invoke('fs:executeRename', { files, template, projectName, producer }),
+  },
+
+  // ────────────────────────────────────────────────
+  // 持久化配置 API
+  // ────────────────────────────────────────────────
+  store: {
+    /** 读取配置项 */
+    get: (key: string) => ipcRenderer.invoke('store:get', key),
+
+    /** 写入配置项 */
+    set: (key: string, value: unknown) => ipcRenderer.invoke('store:set', { key, value }),
+
+    /** 读取全部配置 */
+    getAll: () => ipcRenderer.invoke('store:getAll'),
+
+    /** 删除指定配置项 */
+    delete: (key: string) => ipcRenderer.invoke('store:delete', key),
+  },
+
+  // ────────────────────────────────────────────────
+  // 窗口控制 API（配合自定义标题栏使用）
+  // ────────────────────────────────────────────────
+  window: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    close: () => ipcRenderer.send('window:close'),
+  },
+})
