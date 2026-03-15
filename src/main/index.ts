@@ -95,6 +95,7 @@ interface ValidationResult {
   targetSize?: string
   /** 底层错误或说明，供前端展示 */
   error?: string
+  workspaceProjectName?: string
 }
 
 interface RenameResult {
@@ -624,14 +625,16 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   const day = String(now.getDate()).padStart(2, '0')
   const today = `${year}${month}${day}`
 
-  const isSpecial = projectName && (projectName.includes('创意比特') || projectName.includes('（创意比特）') || projectName.includes('(创意比特)'))
-  const cleanProjectName = projectName ? projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '') : ''
-
   // 记录每个文件夹和媒体类型独立的序号
   const sequenceCounters: Record<string, number> = {}
 
   for (const file of files as ValidationResult[]) {
     if (!file.filePath || file.status === 'missing') continue
+
+    // 优先使用 file.workspaceProjectName (被拖入的工作区文件夹名)，后备使用全局 projectName
+    const currentProjectName = file.workspaceProjectName || projectName || ''
+    const isSpecial = currentProjectName.includes('创意比特') || currentProjectName.includes('（创意比特）') || currentProjectName.includes('(创意比特)')
+    const cleanProjectName = currentProjectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '')
 
     const originalExt = file.ext || extname(file.filePath)
     const originalBaseName = file.fileName
@@ -662,7 +665,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     const currentSequence = sequenceCounters[sequenceKey]
 
     const vars: Record<string, string> = {
-      ProjectName: projectName || 'Project',
+      ProjectName: currentProjectName || 'Project',
       CleanProjectName: cleanProjectName || 'Project',
       Date: today,
       Producer: producer || '',

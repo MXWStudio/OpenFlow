@@ -531,6 +531,7 @@ interface ValidationResult {
   targetSize?: string;
   /** 底层错误说明，在状态列展示 */
   error?: string;
+  workspaceProjectName?: string;
 }
 
 /** 格式化字节为可读字符串 */
@@ -751,8 +752,14 @@ export default function App() {
       // 逐文件夹调用校验引擎，合并结果
       const allResults: ValidationResult[] = [];
       for (const folderPath of folderPaths) {
-        const results = await window.electronAPI.fs.startValidation(folderPath, selectedSizes);
-        allResults.push(...(results as ValidationResult[]));
+        const results = await window.electronAPI.fs.startValidation(folderPath, selectedSizes) as ValidationResult[];
+
+        // 从 folderPath 中提取出根文件夹的名称作为该批文件的项目名
+        const sep = folderPath.includes('\\') ? '\\' : '/';
+        const folderNameAsProject = folderPath.substring(folderPath.lastIndexOf(sep) + 1);
+
+        const taggedResults = results.map(r => ({ ...r, workspaceProjectName: folderNameAsProject }));
+        allResults.push(...taggedResults);
       }
 
       setValidationResults(allResults);
