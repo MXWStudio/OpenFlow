@@ -123,13 +123,18 @@ export interface ElectronAPI {
     /**
      * 根据模板批量重命名文件
      * @param files 通过校验的文件列表
-     * @param template 重命名模板，如 "[Project]-[Size]-[Producer]"
+     * @param templates 4种重命名模板
      * @param projectName 项目名称（用于填充 [Project] 变量）
      * @param producer 制作人（用于填充 [Producer] 变量）
      */
     executeRename: (
       files: ValidationResult[],
-      template: string,
+      templates: {
+        videoRegular: any[];
+        videoSpecial: any[];
+        imageRegular: any[];
+        imageSpecial: any[];
+      },
       projectName: string,
       producer?: string
     ) => Promise<RenameResult[]>

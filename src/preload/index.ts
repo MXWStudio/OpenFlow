@@ -40,10 +40,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 执行批量重命名 */
     executeRename: (
       files: unknown[],
-      template: string,
+      templates: {
+        videoRegular: any[];
+        videoSpecial: any[];
+        imageRegular: any[];
+        imageSpecial: any[];
+      },
       projectName: string,
       producer?: string
-    ) => ipcRenderer.invoke('fs:executeRename', { files, template, projectName, producer }),
+    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer }),
   },
 
   // ────────────────────────────────────────────────
