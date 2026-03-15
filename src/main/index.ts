@@ -627,7 +627,8 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   const isSpecial = projectName && (projectName.includes('创意比特') || projectName.includes('（创意比特）') || projectName.includes('(创意比特)'))
   const cleanProjectName = projectName ? projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '') : ''
 
-  let sequenceCounter = 1
+  // 记录每个文件夹和媒体类型独立的序号
+  const sequenceCounters: Record<string, number> = {}
 
   for (const file of files as ValidationResult[]) {
     if (!file.filePath || file.status === 'missing') continue
@@ -651,6 +652,14 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     }
 
     const aspectRatio = file.actualWidth >= file.actualHeight ? '横' : '竖'
+    const mediaType = isImage ? 'image' : (isVideo ? 'video' : 'other')
+    const sequenceKey = `${dir}_${mediaType}`
+
+    // 初始化该文件夹及媒体类型的序号，从 1 开始
+    if (!sequenceCounters[sequenceKey]) {
+      sequenceCounters[sequenceKey] = 1
+    }
+    const currentSequence = sequenceCounters[sequenceKey]
 
     const vars: Record<string, string> = {
       ProjectName: projectName || 'Project',
@@ -659,7 +668,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
       Producer: producer || '',
       Resolution: sizeStr,
       AspectRatio: aspectRatio,
-      Sequence: `(${sequenceCounter})`,
+      Sequence: `(${currentSequence})`,
       OriginalName: originalBaseName
     }
 
@@ -679,7 +688,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     try {
       await fs.rename(file.filePath, newFilePath)
       results.push({ oldFileName: file.fileName, newFileName, success: true })
-      sequenceCounter++ // 仅在成功时累加系列号
+      sequenceCounters[sequenceKey]++ // 仅在成功时累加系列号
     } catch (err) {
       results.push({
         oldFileName: file.fileName,
