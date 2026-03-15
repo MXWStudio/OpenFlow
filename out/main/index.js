@@ -74,8 +74,16 @@ function getVideoInfo(filePath) {
     });
   });
 }
-function applyTemplate(template, vars) {
-  return template.replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? `[${key}]`);
+function applyNewTemplate(templateTokens, vars) {
+  if (!Array.isArray(templateTokens) || templateTokens.length === 0) {
+    return vars.Name || "untitled";
+  }
+  return templateTokens.map((token) => {
+    if (token.type === "CustomText") {
+      return token.value || "";
+    }
+    return vars[token.type] || "";
+  }).join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 function createWindow() {
   const mainWindow = new electron.BrowserWindow({
@@ -145,7 +153,7 @@ electron.ipcMain.handle("dialog:openJson", async () => {
   const projects = [];
   let projectName = "";
   let sizes = [];
-  const norm = (s) => (s || "").replace(/[xX×]/g, "*");
+  const norm = (s) => (s || "").replace(/[xX×-]/g, "*");
   if (Array.isArray(rawData)) {
     for (const item of rawData) {
       const name = item["其他信息"] && item["其他信息"]["项目名称"] || item["项目名称"] || item["projectName"] || item["project_name"] || item["name"] || "";
@@ -224,7 +232,7 @@ electron.ipcMain.handle("fs:initFolders", async (_, projectsData) => {
     return { success: false, destPath: "", error: String(error) };
   }
 });
-const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/;
+const SIZE_FOLDER_REGEX = /^\d+[xX-]\d+$/;
 const SKIP_DIRS_READ_SIZE = /* @__PURE__ */ new Set(["截屏素材", "录屏素材", "奇觅生成", "模糊处理", "_Assets"]);
 electron.ipcMain.handle("fs:readProjectSizes", async (_, folderPaths) => {
   const paths = Array.isArray(folderPaths) ? folderPaths : [];
@@ -256,7 +264,7 @@ electron.ipcMain.handle("fs:readProjectSizes", async (_, folderPaths) => {
       }
       if (!stat.isDirectory()) continue;
       if (!SIZE_FOLDER_REGEX.test(name)) continue;
-      sizeSet.add(name.replace(/[xX]/g, "*"));
+      sizeSet.add(name.replace(/[xX-]/g, "*"));
     }
   }
   return [...sizeSet];
@@ -303,7 +311,7 @@ async function collectMediaFiles(dirPath, fileList, isRoot) {
 electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSizes }) => {
   const results = [];
   const targetSizeSet = new Set(
-    targetSizes.map((s) => s.replace("x", "*"))
+    targetSizes.map((s) => s.replace(/[xX-]/g, "*"))
   );
   const fileList = [];
   await collectMediaFiles(folderPath, fileList, true);
@@ -381,7 +389,7 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
     }
   }
   for (const targetSize of targetSizes) {
-    const normalized = targetSize.replace("x", "*");
+    const normalized = targetSize.replace(/[xX-]/g, "*");
     const hasMatch = results.some(
       (r) => r.status === "valid" && `${r.actualWidth}*${r.actualHeight}` === normalized
     );
@@ -402,33 +410,56 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
   }
   return results;
 });
-electron.ipcMain.handle("fs:executeRename", async (_, { files, template, projectName, producer }) => {
+electron.ipcMain.handle("fs:executeRename", async (_, { files, templates, projectName, producer }) => {
   const results = [];
-  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0].replace(/-/g, "");
+  const now = /* @__PURE__ */ new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const today = `${year}${month}${day}`;
+  const isSpecial = projectName && (projectName.includes("创意比特") || projectName.includes("（创意比特）") || projectName.includes("(创意比特)"));
+  const cleanProjectName = projectName ? projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, "") : "";
+  let sequenceCounter = 1;
   for (const file of files) {
     if (!file.filePath || file.status === "missing") continue;
-    const ext = file.ext || path.extname(file.filePath);
+    const originalExt = file.ext || path.extname(file.filePath);
     const originalBaseName = file.fileName;
     const sizeStr = `${file.actualWidth}x${file.actualHeight}`;
     const dir = path.dirname(file.filePath);
-    const newBaseName = applyTemplate(template || "[Project]-[Name]-[Size]", {
-      Project: projectName || "Project",
-      Name: originalBaseName,
-      Size: sizeStr,
+    const isImage = IMAGE_EXTS.has(originalExt.toLowerCase());
+    const isVideo = VIDEO_EXTS.has(originalExt.toLowerCase());
+    let targetTemplate = [];
+    let finalExt = originalExt;
+    if (isVideo) {
+      targetTemplate = isSpecial ? templates.videoSpecial : templates.videoRegular;
+      finalExt = ".mp4";
+    } else if (isImage) {
+      targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular;
+    }
+    const aspectRatio = file.actualWidth >= file.actualHeight ? "横" : "竖";
+    const vars = {
+      ProjectName: projectName || "Project",
+      CleanProjectName: cleanProjectName || "Project",
+      Date: today,
       Producer: producer || "",
-      Date: today
-    });
-    let newFileName = `${newBaseName}${ext}`;
+      Resolution: sizeStr,
+      AspectRatio: aspectRatio,
+      Sequence: `(${sequenceCounter})`,
+      OriginalName: originalBaseName
+    };
+    const newBaseName = applyNewTemplate(targetTemplate, vars);
+    let newFileName = `${newBaseName}${finalExt}`;
     let newFilePath = path.join(dir, newFileName);
-    let counter = 1;
+    let collisionCounter = 1;
     while (await fs.pathExists(newFilePath) && newFilePath !== file.filePath) {
-      newFileName = `${newBaseName}_${counter}${ext}`;
+      newFileName = `${newBaseName}_${collisionCounter}${finalExt}`;
       newFilePath = path.join(dir, newFileName);
-      counter++;
+      collisionCounter++;
     }
     try {
       await fs.rename(file.filePath, newFilePath);
       results.push({ oldFileName: file.fileName, newFileName, success: true });
+      sequenceCounter++;
     } catch (err) {
       results.push({
         oldFileName: file.fileName,

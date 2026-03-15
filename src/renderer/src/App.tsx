@@ -174,6 +174,10 @@ const t = {
     settingsSavedDesc: "所有配置已成功保存到本地。",
     cacheCleared: "缓存已清理",
     logExported: "日志已导出",
+    videoRegular: "常规视频",
+    videoSpecial: "特殊视频 (创意比特)",
+    imageRegular: "常规平面",
+    imageSpecial: "特殊平面 (创意比特)",
   },
   en: {
     projectInit: "PROJECT INITIALIZATION",
@@ -300,6 +304,10 @@ const t = {
     settingsSavedDesc: "All configurations have been saved to local storage.",
     cacheCleared: "Cache cleared",
     logExported: "Logs exported",
+    videoRegular: "Regular Video",
+    videoSpecial: "Special Video",
+    imageRegular: "Regular Image",
+    imageSpecial: "Special Image",
   },
   ja: {
     projectInit: "プロジェクト初期化",
@@ -426,6 +434,10 @@ const t = {
     settingsSavedDesc: "すべての設定がローカルに正常に保存されました。",
     cacheCleared: "キャッシュをクリアしました",
     logExported: "ログをエクスポートしました",
+    videoRegular: "通常ビデオ",
+    videoSpecial: "特殊ビデオ",
+    imageRegular: "通常画像",
+    imageSpecial: "特殊画像",
   }
 };
 
@@ -537,7 +549,45 @@ function getDirFromFilePath(filePath: string): string {
 }
 
 const DEFAULT_USER_INFO = { name: '', department: '', email: '' };
-const DEFAULT_WORKFLOW = { defaultOutputDir: '', renameTemplate: '[Project]-[Name]-[Size]' };
+const DEFAULT_WORKFLOW = {
+  defaultOutputDir: '',
+  renameTemplates: {
+    videoRegular: [
+      { type: 'CustomText', value: 'RS' },
+      { type: 'Date' },
+      { type: 'ProjectName' },
+      { type: 'Producer' },
+      { type: 'CustomText', value: '奇觅' },
+      { type: 'AspectRatio' },
+      { type: 'Sequence' }
+    ],
+    videoSpecial: [
+      { type: 'CleanProjectName' },
+      { type: 'CustomText', value: '激励时间' },
+      { type: 'Date' },
+      { type: 'AspectRatio' },
+      { type: 'Producer' },
+      { type: 'CustomText', value: 'RSQM' },
+      { type: 'Sequence' }
+    ],
+    imageRegular: [
+      { type: 'CustomText', value: 'RSQ' },
+      { type: 'Date' },
+      { type: 'ProjectName' },
+      { type: 'Resolution' },
+      { type: 'Producer' },
+      { type: 'Sequence' }
+    ],
+    imageSpecial: [
+      { type: 'CustomText', value: 'RSQ' },
+      { type: 'Date' },
+      { type: 'ProjectName' },
+      { type: 'Resolution' },
+      { type: 'Producer' },
+      { type: 'Sequence' }
+    ]
+  }
+};
 const DEFAULT_API_KEYS = { geminiKey: '', sdPath: '' };
 
 export default function App() {
@@ -595,6 +645,10 @@ export default function App() {
 
   // 应用启动时从本地 Store 加载全部配置，避免渲染时数据闪烁
   useEffect(() => {
+    if (!window.electronAPI) {
+      setIsAppReady(true);
+      return;
+    }
     window.electronAPI.store.getAll().then((config) => {
       if (!config) return;
       if (config.userInfo && typeof config.userInfo === 'object') {
@@ -606,16 +660,16 @@ export default function App() {
         });
       }
       if (config.workflow && typeof config.workflow === 'object') {
-        const w = config.workflow as Record<string, string>;
+        const w = config.workflow as Record<string, any>;
         setWorkflowSettings({
           defaultOutputDir: w.defaultOutputDir ?? w.defaultOutputPath ?? DEFAULT_WORKFLOW.defaultOutputDir,
-          renameTemplate: w.renameTemplate ?? DEFAULT_WORKFLOW.renameTemplate,
+          renameTemplates: w.renameTemplates ?? DEFAULT_WORKFLOW.renameTemplates,
         });
       }
-      // 兼容扁平 key：renameTemplate、defaultOutputDir 可能单独存储
-      const rt = config.renameTemplate as string | undefined;
+      // 兼容扁平 key：renameTemplates、defaultOutputDir 可能单独存储
+      const rts = config.renameTemplates as any;
       const dod = config.defaultOutputDir as string | undefined;
-      if (rt) setWorkflowSettings((p) => ({ ...p, renameTemplate: rt }));
+      if (rts) setWorkflowSettings((p) => ({ ...p, renameTemplates: rts }));
       if (dod) setWorkflowSettings((p) => ({ ...p, defaultOutputDir: dod }));
 
       if (config.apiKeys && typeof config.apiKeys === 'object') {
@@ -786,17 +840,15 @@ export default function App() {
 
     try {
       // 从 Store 读取用户配置的重命名模板，兜底默认值
-      const storedTemplate = await window.electronAPI.store.get<string>('renameTemplate');
-      const currentTemplate = (typeof storedTemplate === 'string' && storedTemplate)
-        ? storedTemplate
-        : '[Project]-[Name]-[Size]';
+      const storedTemplates = await window.electronAPI.store.get<any>('renameTemplates');
+      const currentTemplates = storedTemplates || DEFAULT_WORKFLOW.renameTemplates;
 
       // 仅传 valid 状态的文件给主进程
       const validFiles = validationResults.filter((r) => r.status === 'valid');
 
       const results = await window.electronAPI.fs.executeRename(
         validFiles,
-        currentTemplate,
+        currentTemplates,
         projectName,
         producerName
       ) as Array<{ oldFileName: string; newFileName: string; success: boolean; error?: string }>;
@@ -857,7 +909,7 @@ export default function App() {
   const handleSaveSettings = async () => {
     try {
       await window.electronAPI.store.set('userInfo', userInfo);
-      await window.electronAPI.store.set('renameTemplate', workflowSettings.renameTemplate);
+      await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
       await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
       await window.electronAPI.store.set('apiKeys', apiKeys);
       await window.electronAPI.store.set('language', language);
@@ -1779,17 +1831,88 @@ export default function App() {
                         </div>
                         <div>
                           <label className="block text-sm font-bold text-slate-800 mb-2">{t[language].nameTemplate}</label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <FileText className="h-5 w-5 text-slate-400" />
-                            </div>
-                            <input
-                              type="text"
-                              value={workflowSettings.renameTemplate}
-                              onChange={(e) => setWorkflowSettings((p) => ({ ...p, renameTemplate: e.target.value }))}
-                              placeholder="[Project]-[Name]-[Size]"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
-                            />
+                          <div className="space-y-4">
+                            {(['videoRegular', 'videoSpecial', 'imageRegular', 'imageSpecial'] as const).map(templateKey => (
+                              <div key={templateKey} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <div className="text-xs font-bold text-slate-600 mb-3 flex items-center justify-between">
+                                  <span>{t[language][templateKey as keyof typeof t[LangKey]] || templateKey}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {workflowSettings.renameTemplates[templateKey].map((token: any, idx: number) => (
+                                    <div key={idx} className="flex items-center gap-1">
+                                      <select
+                                        value={token.type}
+                                        onChange={(e) => {
+                                          const newTemplates = { ...workflowSettings.renameTemplates };
+                                          newTemplates[templateKey][idx].type = e.target.value;
+                                          setWorkflowSettings(p => ({ ...p, renameTemplates: newTemplates }));
+                                        }}
+                                        className="bg-white border border-slate-300 rounded-md text-xs px-2 py-1 focus:ring-1 focus:ring-blue-500"
+                                      >
+                                        <option value="ProjectName">项目名</option>
+                                        <option value="CleanProjectName">清理后项目名</option>
+                                        <option value="Date">日期</option>
+                                        <option value="Producer">制作人</option>
+                                        <option value="Resolution">尺寸</option>
+                                        <option value="AspectRatio">横竖</option>
+                                        <option value="Sequence">序列号</option>
+                                        <option value="OriginalName">原文件名</option>
+                                        <option value="CustomText">自定义</option>
+                                      </select>
+                                      {token.type === 'CustomText' && (
+                                        <input
+                                          type="text"
+                                          value={token.value || ''}
+                                          onChange={(e) => {
+                                            const newTemplates = { ...workflowSettings.renameTemplates };
+                                            newTemplates[templateKey][idx].value = e.target.value;
+                                            setWorkflowSettings(p => ({ ...p, renameTemplates: newTemplates }));
+                                          }}
+                                          className="bg-white border border-slate-300 rounded-md text-xs px-2 py-1 w-20 focus:ring-1 focus:ring-blue-500"
+                                          placeholder="输入文字"
+                                        />
+                                      )}
+                                      <button
+                                        onClick={() => {
+                                          const newTemplates = { ...workflowSettings.renameTemplates };
+                                          newTemplates[templateKey] = newTemplates[templateKey].filter((_: any, i: number) => i !== idx);
+                                          setWorkflowSettings(p => ({ ...p, renameTemplates: newTemplates }));
+                                        }}
+                                        className="text-slate-400 hover:text-red-500"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {workflowSettings.renameTemplates[templateKey].length < 10 && (
+                                    <button
+                                      onClick={() => {
+                                        const newTemplates = { ...workflowSettings.renameTemplates };
+                                        newTemplates[templateKey].push({ type: 'ProjectName' });
+                                        setWorkflowSettings(p => ({ ...p, renameTemplates: newTemplates }));
+                                      }}
+                                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-md border border-blue-200 hover:bg-blue-100"
+                                    >
+                                      + 添加字段
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="mt-3 text-[11px] font-mono text-slate-500 truncate bg-slate-100 px-2 py-1.5 rounded">
+                                  预览: {workflowSettings.renameTemplates[templateKey].map((t: any) => {
+                                    if (t.type === 'CustomText') return t.value || '';
+                                    if (t.type === 'ProjectName') return '示例项目';
+                                    if (t.type === 'CleanProjectName') return '清理示例';
+                                    if (t.type === 'Date') return '20260315';
+                                    if (t.type === 'Producer') return 'MXW';
+                                    if (t.type === 'Resolution') return '1920x1080';
+                                    if (t.type === 'AspectRatio') return '横';
+                                    if (t.type === 'Sequence') return '(1)';
+                                    if (t.type === 'OriginalName') return '原文件';
+                                    return '';
+                                  }).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '')}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                         <div>

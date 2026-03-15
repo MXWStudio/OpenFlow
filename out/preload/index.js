@@ -23,7 +23,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     /** 开始素材校验 */
     startValidation: (folderPath, targetSizes) => electron.ipcRenderer.invoke("fs:startValidation", { folderPath, targetSizes }),
     /** 执行批量重命名 */
-    executeRename: (files, template, projectName, producer) => electron.ipcRenderer.invoke("fs:executeRename", { files, template, projectName, producer })
+    executeRename: (files, templates, projectName, producer) => electron.ipcRenderer.invoke("fs:executeRename", { files, templates, projectName, producer })
   },
   // ────────────────────────────────────────────────
   // 持久化配置 API

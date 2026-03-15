@@ -129,11 +129,22 @@ function getVideoInfo(
 }
 
 /**
- * 应用重命名模板
- * 支持变量：[Project], [Name], [Size], [Producer], [Date]
+ * 应用新的对象数组形式重命名模板
  */
-function applyTemplate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? `[${key}]`)
+function applyNewTemplate(
+  templateTokens: Array<{ type: string; value?: string }>,
+  vars: Record<string, string>
+): string {
+  if (!Array.isArray(templateTokens) || templateTokens.length === 0) {
+    return vars.Name || 'untitled'
+  }
+
+  return templateTokens.map(token => {
+    if (token.type === 'CustomText') {
+      return token.value || ''
+    }
+    return vars[token.type] || ''
+  }).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '')
 }
 
 // ─── 窗口创建 ───────────────────────────────────────────
@@ -576,41 +587,72 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
  * fs:executeRename
  * 批量重命名文件，自动处理同名冲突（追加 _1, _2...）
  */
-ipcMain.handle('fs:executeRename', async (_, { files, template, projectName, producer }) => {
+ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer }) => {
   const results: RenameResult[] = []
-  const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
+
+  // Date in YYYYMMDD format
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const today = `${year}${month}${day}`
+
+  const isSpecial = projectName && (projectName.includes('创意比特') || projectName.includes('（创意比特）') || projectName.includes('(创意比特)'))
+  const cleanProjectName = projectName ? projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '') : ''
+
+  let sequenceCounter = 1
 
   for (const file of files as ValidationResult[]) {
     if (!file.filePath || file.status === 'missing') continue
 
-    // fileName 已是不含扩展名的纯名称，ext 字段即扩展名（含点，如 .mp4）
-    const ext = file.ext || extname(file.filePath)
+    const originalExt = file.ext || extname(file.filePath)
     const originalBaseName = file.fileName
     const sizeStr = `${file.actualWidth}x${file.actualHeight}`
     const dir = dirname(file.filePath)
 
-    const newBaseName = applyTemplate(template || '[Project]-[Name]-[Size]', {
-      Project: projectName || 'Project',
-      Name: originalBaseName,
-      Size: sizeStr,
-      Producer: producer || '',
-      Date: today,
-    })
+    const isImage = IMAGE_EXTS.has(originalExt.toLowerCase())
+    const isVideo = VIDEO_EXTS.has(originalExt.toLowerCase())
 
-    let newFileName = `${newBaseName}${ext}`
+    let targetTemplate = []
+    let finalExt = originalExt
+
+    if (isVideo) {
+      targetTemplate = isSpecial ? templates.videoSpecial : templates.videoRegular
+      finalExt = '.mp4'
+    } else if (isImage) {
+      targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular
+    }
+
+    const aspectRatio = file.actualWidth >= file.actualHeight ? '横' : '竖'
+
+    const vars: Record<string, string> = {
+      ProjectName: projectName || 'Project',
+      CleanProjectName: cleanProjectName || 'Project',
+      Date: today,
+      Producer: producer || '',
+      Resolution: sizeStr,
+      AspectRatio: aspectRatio,
+      Sequence: `(${sequenceCounter})`,
+      OriginalName: originalBaseName
+    }
+
+    const newBaseName = applyNewTemplate(targetTemplate, vars)
+
+    let newFileName = `${newBaseName}${finalExt}`
     let newFilePath = join(dir, newFileName)
 
     // 冲突处理：追加数字后缀
-    let counter = 1
+    let collisionCounter = 1
     while ((await fs.pathExists(newFilePath)) && newFilePath !== file.filePath) {
-      newFileName = `${newBaseName}_${counter}${ext}`
+      newFileName = `${newBaseName}_${collisionCounter}${finalExt}`
       newFilePath = join(dir, newFileName)
-      counter++
+      collisionCounter++
     }
 
     try {
       await fs.rename(file.filePath, newFilePath)
       results.push({ oldFileName: file.fileName, newFileName, success: true })
+      sequenceCounter++ // 仅在成功时累加系列号
     } catch (err) {
       results.push({
         oldFileName: file.fileName,
