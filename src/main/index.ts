@@ -239,7 +239,7 @@ ipcMain.handle('dialog:openJson', async () => {
   let projectName = ''
   let sizes: string[] = []
 
-  const norm = (s: string) => (s || '').replace(/[xX×]/g, '*')
+  const norm = (s: string) => (s || '').replace(/[xX×-]/g, '*')
 
   if (Array.isArray(rawData)) {
     for (const item of rawData) {
@@ -350,7 +350,7 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
 })
 
 /** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
-const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/
+const SIZE_FOLDER_REGEX = /^\d+[xX-]\d+$/
 /** 这些文件夹为原始物料目录，不参与尺寸识别，必须忽略 */
 const SKIP_DIRS_READ_SIZE = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
 
@@ -392,7 +392,7 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
       }
       if (!stat.isDirectory()) continue
       if (!SIZE_FOLDER_REGEX.test(name)) continue
-      sizeSet.add(name.replace(/[xX]/g, '*'))
+      sizeSet.add(name.replace(/[xX-]/g, '*'))
     }
   }
   return [...sizeSet]
@@ -463,7 +463,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
   const results: ValidationResult[] = []
 
   const targetSizeSet = new Set<string>(
-    (targetSizes as string[]).map((s) => s.replace('x', '*'))
+    (targetSizes as string[]).map((s) => s.replace(/[xX-]/g, '*'))
   )
 
   const fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[] = []
@@ -549,7 +549,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
 
   // 补充 missing：目标尺寸在本次文件夹中没有任何匹配文件
   for (const targetSize of targetSizes as string[]) {
-    const normalized = targetSize.replace('x', '*')
+    const normalized = targetSize.replace(/[xX-]/g, '*')
     const hasMatch = results.some(
       (r) => r.status === 'valid' && `${r.actualWidth}*${r.actualHeight}` === normalized
     )
