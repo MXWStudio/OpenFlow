@@ -139,12 +139,39 @@ function applyNewTemplate(
     return vars.Name || 'untitled'
   }
 
-  return templateTokens.map(token => {
+  let result = ''
+  for (let i = 0; i < templateTokens.length; i++) {
+    const token = templateTokens[i]
+    let tokenStr = ''
+
     if (token.type === 'CustomText') {
-      return token.value || ''
+      tokenStr = token.value || ''
+    } else {
+      tokenStr = vars[token.type] || ''
     }
-    return vars[token.type] || ''
-  }).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+
+    if (!tokenStr) continue
+
+    if (result.length === 0) {
+      result = tokenStr
+    } else {
+      // 检查是否需要省略横杠
+      // 规则：当前是 Date，并且上一个是 CustomText 且其值为 RS 或 RSQ
+      const prevToken = templateTokens[i - 1]
+      const omitHyphen = token.type === 'Date' &&
+                         prevToken &&
+                         prevToken.type === 'CustomText' &&
+                         (prevToken.value === 'RS' || prevToken.value === 'RSQ')
+
+      if (omitHyphen) {
+        result += tokenStr
+      } else {
+        result += '-' + tokenStr
+      }
+    }
+  }
+
+  return result.replace(/-+/g, '-').replace(/^-|-$/g, '')
 }
 
 // ─── 窗口创建 ───────────────────────────────────────────

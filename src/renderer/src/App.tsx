@@ -1898,18 +1898,42 @@ export default function App() {
                                   )}
                                 </div>
                                 <div className="mt-3 text-[11px] font-mono text-slate-500 truncate bg-slate-100 px-2 py-1.5 rounded">
-                                  预览: {workflowSettings.renameTemplates[templateKey].map((t: any) => {
-                                    if (t.type === 'CustomText') return t.value || '';
-                                    if (t.type === 'ProjectName') return '示例项目';
-                                    if (t.type === 'CleanProjectName') return '清理示例';
-                                    if (t.type === 'Date') return '20260315';
-                                    if (t.type === 'Producer') return 'MXW';
-                                    if (t.type === 'Resolution') return '1920x1080';
-                                    if (t.type === 'AspectRatio') return '横';
-                                    if (t.type === 'Sequence') return '(1)';
-                                    if (t.type === 'OriginalName') return '原文件';
-                                    return '';
-                                  }).join('-').replace(/-+/g, '-').replace(/^-|-$/g, '')}
+                                  预览: {(() => {
+                                    let result = '';
+                                    const tokens = workflowSettings.renameTemplates[templateKey];
+                                    for (let i = 0; i < tokens.length; i++) {
+                                      const t = tokens[i];
+                                      let val = '';
+                                      if (t.type === 'CustomText') val = t.value || '';
+                                      else if (t.type === 'ProjectName') val = '示例项目';
+                                      else if (t.type === 'CleanProjectName') val = '清理示例';
+                                      else if (t.type === 'Date') val = '20260315';
+                                      else if (t.type === 'Producer') val = 'MXW';
+                                      else if (t.type === 'Resolution') val = '1920x1080';
+                                      else if (t.type === 'AspectRatio') val = '横';
+                                      else if (t.type === 'Sequence') val = '(1)';
+                                      else if (t.type === 'OriginalName') val = '原文件';
+
+                                      if (!val) continue;
+
+                                      if (result.length === 0) {
+                                        result = val;
+                                      } else {
+                                        const prevToken = tokens[i - 1];
+                                        const omitHyphen = t.type === 'Date' &&
+                                                           prevToken &&
+                                                           prevToken.type === 'CustomText' &&
+                                                           (prevToken.value === 'RS' || prevToken.value === 'RSQ');
+
+                                        if (omitHyphen) {
+                                          result += val;
+                                        } else {
+                                          result += '-' + val;
+                                        }
+                                      }
+                                    }
+                                    return result.replace(/-+/g, '-').replace(/^-|-$/g, '');
+                                  })()}
                                 </div>
                               </div>
                             ))}
