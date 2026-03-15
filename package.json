@@ -6,7 +6,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && electron-builder --win",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit"
   },
@@ -34,6 +34,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "electron": "^33.0.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2"
