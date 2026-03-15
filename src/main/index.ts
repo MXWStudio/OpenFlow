@@ -72,9 +72,10 @@ async function storeDeleteKey(key: string): Promise<void> {
 // ─── 类型定义 ───────────────────────────────────────────
 
 interface ValidationResult {
-  fileName: string
-  filePath: string
-  ext: string
+  fileName: string    // 纯文件名（不含扩展名）
+  filePath: string    // 完整路径（用于重命名）
+  folderName: string  // 所在文件夹名（直接父级目录名）
+  ext: string         // 扩展名含点，如 .mp4
   fileSize: number
   actualWidth: number
   actualHeight: number
@@ -195,9 +196,20 @@ ipcMain.on('window:close', () => {
 
 // ─── IPC: 对话框 ─────────────────────────────────────────
 
+/** 单个项目结构，供批量初始化目录使用 */
+interface ProjectItem {
+  projectName: string
+  sizes: string[]
+}
+
 /**
  * dialog:openJson
- * 弹出系统文件选择框（仅限 .json），读取并智能解析内容
+ * 弹出系统文件选择框（仅限 .json），读取并智能解析内容。
+ * 始终返回 projects 数组（多项目用于批量建目录），以及首项 projectName/sizes 兼容左侧单项目展示。
+ *
+ * 支持的 JSON 格式：
+ *   1. 孟祥伟数据表：[{ "项目名称", "尺寸要求明细": [{ "分辨率": "1080*607" }] }] → 每行一个项目
+ *   2. 标准对象：{ projectName, sizes } → 单项目
  */
 ipcMain.handle('dialog:openJson', async () => {
   const result = await dialog.showOpenDialog({
@@ -211,23 +223,56 @@ ipcMain.handle('dialog:openJson', async () => {
   const filePath = result.filePaths[0]
   const rawData = JSON.parse(await fs.readFile(filePath, 'utf-8'))
 
-  // 智能解析：兼容多种常见 JSON 格式
-  const projectName =
-    rawData.projectName || rawData.project_name || rawData.name || ''
-
+  const projects: ProjectItem[] = []
+  let projectName = ''
   let sizes: string[] = []
-  if (Array.isArray(rawData.sizes)) {
-    sizes = rawData.sizes
-  } else if (Array.isArray(rawData.dimensions)) {
-    sizes = rawData.dimensions
-  } else if (Array.isArray(rawData.requirements)) {
-    sizes = rawData.requirements.map(
-      (r: { width: number; height: number; size?: string }) =>
-        r.size || `${r.width}*${r.height}`
-    )
+
+  const norm = (s: string) => (s || '').replace(/[xX×]/g, '*')
+
+  if (Array.isArray(rawData)) {
+    for (const item of rawData) {
+      const name =
+        (item['其他信息'] && item['其他信息']['项目名称']) ||
+        item['项目名称'] ||
+        item['projectName'] ||
+        item['project_name'] ||
+        item['name'] ||
+        ''
+      const sizeSet = new Set<string>()
+      const details = item['尺寸要求明细'] || item['sizes'] || []
+      if (Array.isArray(details)) {
+        for (const d of details) {
+          const res = d['分辨率'] || d['resolution'] || d['size'] || ''
+          if (res) sizeSet.add(norm(res))
+        }
+      }
+      if (name) projects.push({ projectName: name, sizes: [...sizeSet] })
+    }
+    if (projects.length > 0) {
+      projectName = projects[0].projectName
+      const firstSizes = new Set<string>()
+      for (const p of projects) p.sizes.forEach((s) => firstSizes.add(s))
+      sizes = [...firstSizes]
+    }
+  } else {
+    projectName =
+      rawData.projectName || rawData.project_name || rawData.name || ''
+    if (Array.isArray(rawData.sizes)) {
+      sizes = rawData.sizes.map((s: string) => norm(s))
+    } else if (Array.isArray(rawData.dimensions)) {
+      sizes = rawData.dimensions.map((s: string) => norm(s))
+    } else if (Array.isArray(rawData.requirements)) {
+      sizes = rawData.requirements.map(
+        (r: { width?: number; height?: number; size?: string }) =>
+          r.size ? norm(r.size) : `${r.width}*${r.height}`
+      )
+    }
+    if (projectName || sizes.length) {
+      projects.push({ projectName: projectName || '未命名项目', sizes })
+    }
   }
 
-  return { projectName, sizes, rawData }
+  return { projectName, sizes, projects, rawData }
 })
 
 /**
@@ -248,67 +293,145 @@ ipcMain.handle('dialog:selectFolder', async () => {
 
 /**
  * fs:initFolders
- * 在目标目录下创建项目文件夹结构：
- *   outputPath/ProjectName/1920x1080_横版/_Assets/
+ * 批量生成项目文件夹结构。接收 projectsData: Array<{ projectName, sizes }>，
+ * 弹窗选择目标总目录后，为每个项目创建主文件夹，内部按尺寸建子文件夹（纯数字如 1080x1920）及 _Assets。
  */
-ipcMain.handle('fs:initFolders', async (_, { projectName, sizes, outputPath }) => {
+ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
+  const list = Array.isArray(projectsData) ? projectsData : []
+  if (list.length === 0) {
+    return { success: false, destPath: '', error: '项目列表为空' }
+  }
+
+  const result = await dialog.showOpenDialog({
+    title: '选择目标总目录',
+    properties: ['openDirectory'],
+  })
+  if (result.canceled || !result.filePaths[0]) {
+    return { success: false, destPath: '', error: '用户取消选择' }
+  }
+  const rootPath = result.filePaths[0]
+
   try {
-    const projectRoot = join(outputPath, projectName)
-    await fs.ensureDir(projectRoot)
+    for (const project of list) {
+      const projectRoot = join(rootPath, project.projectName)
+      await fs.ensureDir(projectRoot)
 
-    for (const size of sizes as string[]) {
-      const normalized = size.replace('x', '*')
-      const [w, h] = normalized.split('*').map(Number)
-      const orientation = w > h ? '横版' : w < h ? '竖版' : '方形'
-      const folderName = `${w}x${h}_${orientation}`
-
-      const sizeDir = join(projectRoot, folderName)
-      await fs.ensureDir(sizeDir)
-      await fs.ensureDir(join(sizeDir, '_Assets'))
+      const sizes = project.sizes || []
+      for (const size of sizes) {
+        // 仅用数字命名：将 * 替换为小写 x，如 1080*1920 → 1080x1920，不添加任何中文后缀
+        const folderName = size.replace(/\*/g, 'x')
+        const sizeDir = join(projectRoot, folderName)
+        await fs.ensureDir(sizeDir)
+        await fs.ensureDir(join(sizeDir, '_Assets'))
+      }
     }
-
-    return { success: true, rootPath: projectRoot }
+    return { success: true, destPath: rootPath }
   } catch (error) {
-    return { success: false, rootPath: '', error: String(error) }
+    return { success: false, destPath: '', error: String(error) }
   }
 })
 
 /**
- * fs:startValidation
- * 扫描文件夹，读取每个媒体文件的真实尺寸，对比目标尺寸
+ * fs:readProjectSizes
+ * 接收一个或多个文件夹路径，读取各自的一级子目录名称；
+ * 若子目录名符合尺寸格式（纯数字+小写x，如 720x1280、1080x1920），则提取并去重，
+ * 返回规范化后的尺寸数组（* 分隔，与左侧胶囊一致）。
  */
-ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
-  const results: ValidationResult[] = []
+const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/
+ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
+  const paths = Array.isArray(folderPaths) ? folderPaths : []
+  const sizeSet = new Set<string>()
+  for (const dir of paths) {
+    let names: string[]
+    try {
+      names = await fs.readdir(dir)
+    } catch {
+      continue
+    }
+    for (const name of names) {
+      const full = join(dir, name)
+      let stat: fs.Stats
+      try {
+        stat = await fs.stat(full)
+      } catch {
+        continue
+      }
+      if (!stat.isDirectory()) continue
+      if (SIZE_FOLDER_REGEX.test(name)) {
+        sizeSet.add(name.replace(/[xX]/g, '*'))
+      }
+    }
+  }
+  return [...sizeSet]
+})
 
-  // 标准化目标尺寸为 "W*H" 格式的 Set
-  const targetSizeSet = new Set<string>(
-    (targetSizes as string[]).map((s) => s.replace('x', '*'))
-  )
-
-  let files: string[]
+/**
+ * 深度递归收集目录下所有媒体文件。
+ * 不使用 { withFileTypes: true }，改用 fs.stat 以获得最大的跨平台兼容性
+ * （尤其是含中文名的目录在部分 Windows 环境下 Dirent.isDirectory() 会失效）。
+ */
+async function collectMediaFiles(
+  dirPath: string,
+  fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[]
+): Promise<void> {
+  let names: string[]
   try {
-    files = await fs.readdir(folderPath)
+    names = await fs.readdir(dirPath)
   } catch {
-    return []
+    // 无权访问或路径无效时跳过该层，不影响其他层
+    return
   }
 
-  for (const fileName of files) {
-    const filePath = join(folderPath, fileName)
-
+  for (const name of names) {
+    const fullPath = join(dirPath, name)
     let stat: fs.Stats
     try {
-      stat = await fs.stat(filePath)
+      stat = await fs.stat(fullPath)
     } catch {
+      continue // 无法 stat 的项（如临时文件、系统占用）跳过
+    }
+
+    if (stat.isDirectory()) {
+      // 无条件递归进入，不过滤任何目录名
+      await collectMediaFiles(fullPath, fileList)
       continue
     }
 
     if (!stat.isFile()) continue
 
-    const ext = extname(fileName).toLowerCase()
+    const ext = extname(name).toLowerCase()
+    if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) continue
+
+    // folderName: 该文件直接所在的父级目录名（不含路径，用于表格"文件夹"列展示）
+    const folderName = basename(dirPath)
+
+    fileList.push({
+      filePath: fullPath,
+      fileName: basename(name, ext), // 纯文件名，不含扩展名
+      folderName,
+      ext,
+      size: stat.size,
+    })
+  }
+}
+
+/**
+ * fs:startValidation
+ * 递归扫描文件夹内媒体文件，读取真实宽高，与目标尺寸对比并打标
+ */
+ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
+  const results: ValidationResult[] = []
+
+  const targetSizeSet = new Set<string>(
+    (targetSizes as string[]).map((s) => s.replace('x', '*'))
+  )
+
+  const fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[] = []
+  await collectMediaFiles(folderPath, fileList)
+
+  for (const { filePath, fileName, folderName, ext, size: fileSize } of fileList) {
     const isImage = IMAGE_EXTS.has(ext)
     const isVideo = VIDEO_EXTS.has(ext)
-    if (!isImage && !isVideo) continue
-
     let actualWidth = 0
     let actualHeight = 0
     let duration: number | undefined
@@ -318,7 +441,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
         const dim = sizeOf(filePath)
         actualWidth = dim.width || 0
         actualHeight = dim.height || 0
-      } else {
+      } else if (isVideo) {
         const info = await getVideoInfo(filePath)
         actualWidth = info.width
         actualHeight = info.height
@@ -329,8 +452,9 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
       results.push({
         fileName,
         filePath,
+        folderName,
         ext,
-        fileSize: stat.size,
+        fileSize,
         actualWidth,
         actualHeight,
         duration,
@@ -340,8 +464,9 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
       results.push({
         fileName,
         filePath,
+        folderName,
         ext,
-        fileSize: stat.size,
+        fileSize,
         actualWidth: 0,
         actualHeight: 0,
         status: 'error',
@@ -350,7 +475,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
     }
   }
 
-  // 补充 missing 记录：目标尺寸中没有找到对应文件
+  // 补充 missing：目标尺寸在本次文件夹中没有任何匹配文件
   for (const targetSize of targetSizes as string[]) {
     const normalized = targetSize.replace('x', '*')
     const hasMatch = results.some(
@@ -360,6 +485,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
       results.push({
         fileName: `[缺失] ${targetSize}`,
         filePath: '',
+        folderName: '-',
         ext: '',
         fileSize: 0,
         actualWidth: 0,
@@ -384,8 +510,9 @@ ipcMain.handle('fs:executeRename', async (_, { files, template, projectName, pro
   for (const file of files as ValidationResult[]) {
     if (!file.filePath || file.status === 'missing') continue
 
-    const ext = extname(file.fileName)
-    const originalBaseName = basename(file.fileName, ext)
+    // fileName 已是不含扩展名的纯名称，ext 字段即扩展名（含点，如 .mp4）
+    const ext = file.ext || extname(file.filePath)
+    const originalBaseName = file.fileName
     const sizeStr = `${file.actualWidth}x${file.actualHeight}`
     const dir = dirname(file.filePath)
 

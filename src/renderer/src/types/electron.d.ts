@@ -31,7 +31,7 @@ export interface RenameResult {
 /** 初始化文件夹的结果 */
 export interface InitFoldersResult {
   success: boolean
-  rootPath: string
+  destPath: string
   error?: string
 }
 
@@ -98,16 +98,17 @@ export interface ElectronAPI {
   /** 文件系统相关 */
   fs: {
     /**
-     * 在选定目录下创建项目主文件夹及对应尺寸子文件夹
-     * @param projectName 项目名称
-     * @param sizes 勾选的尺寸数组，如 ["1920*1080", "720*1280"]
-     * @param outputPath 目标输出根目录（用户选择的盘符/路径）
+     * 批量在选定目录下创建多项目文件夹结构（主进程内弹窗选择目标总目录）
+     * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）
      */
     initFolders: (
-      projectName: string,
-      sizes: string[],
-      outputPath: string
+      projectsData: Array<{ projectName: string; sizes: string[] }>
     ) => Promise<InitFoldersResult>
+
+    /**
+     * 读取若干文件夹下的一级子目录名，识别尺寸格式（如 720x1280）并返回规范化尺寸数组
+     */
+    readProjectSizes: (folderPaths: string[]) => Promise<string[]>
 
     /**
      * 扫描指定目录，对比目标尺寸，返回校验结果数组

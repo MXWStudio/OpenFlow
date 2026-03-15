@@ -25,9 +25,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件系统 API
   // ────────────────────────────────────────────────
   fs: {
-    /** 初始化项目目录结构 */
-    initFolders: (projectName: string, sizes: string[], outputPath: string) =>
-      ipcRenderer.invoke('fs:initFolders', { projectName, sizes, outputPath }),
+    /** 批量初始化项目目录结构（主进程内弹窗选择目标总目录） */
+    initFolders: (projectsData: Array<{ projectName: string; sizes: string[] }>) =>
+      ipcRenderer.invoke('fs:initFolders', projectsData),
+
+    /** 读取若干文件夹下的一级子目录名，识别尺寸格式（如 720x1280）并返回规范化尺寸数组 */
+    readProjectSizes: (folderPaths: string[]) =>
+      ipcRenderer.invoke('fs:readProjectSizes', folderPaths),
 
     /** 开始素材校验 */
     startValidation: (folderPath: string, targetSizes: string[]) =>

@@ -84,6 +84,10 @@ const t = {
     jsonError: "加载失败",
     jsonErrorDesc: "JSON 文件格式不正确，请检查后重试。",
     jsonImporting: "正在读取...",
+    initFolderIncomplete: "信息不完整",
+    initFolderIncompleteDesc: "请先导入需求 JSON 或确认已勾选尺寸。",
+    initFolderSuccess: "目录初始化成功！",
+    initFolderFail: "初始化失败",
     systemReady: "系统就绪",
     validatingWorkspace: "正在校验工作区...",
     allFilesValid: "所有文件校验通过！",
@@ -198,6 +202,10 @@ const t = {
     jsonError: "Load Failed",
     jsonErrorDesc: "Invalid JSON format. Please check the file and try again.",
     jsonImporting: "Reading...",
+    initFolderIncomplete: "Incomplete info",
+    initFolderIncompleteDesc: "Please import requirement JSON or confirm selected sizes.",
+    initFolderSuccess: "Folders initialized successfully!",
+    initFolderFail: "Initialization failed",
     systemReady: "System Ready",
     validatingWorkspace: "Validating your workspace...",
     allFilesValid: "All files are valid!",
@@ -312,6 +320,10 @@ const t = {
     jsonError: "読み込み失敗",
     jsonErrorDesc: "JSONファイルの形式が正しくありません。確認してから再試行してください。",
     jsonImporting: "読み込み中...",
+    initFolderIncomplete: "情報が不足しています",
+    initFolderIncompleteDesc: "要件 JSON をインポートするか、サイズを選択してください。",
+    initFolderSuccess: "フォルダの初期化に成功しました！",
+    initFolderFail: "初期化に失敗しました",
     systemReady: "システム準備完了",
     validatingWorkspace: "ワークスペースを検証中...",
     allFilesValid: "すべてのファイルが有効です！",
@@ -451,9 +463,10 @@ interface HistoryEntry {
 
 /** 本地复用类型：与主进程 ValidationResult 对齐 */
 interface ValidationResult {
-  fileName: string;
-  filePath: string;
-  ext: string;
+  fileName: string;    // 纯文件名（不含扩展名）
+  filePath: string;    // 完整路径
+  folderName: string;  // 直接父级文件夹名
+  ext: string;         // 扩展名含点，如 .mp4
   fileSize: number;
   actualWidth: number;
   actualHeight: number;
@@ -469,6 +482,13 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/** 从文件路径提取其所在文件夹路径（Renderer 无 Node path，纯 JS 实现） */
+function getDirFromFilePath(filePath: string): string {
+  const sep = filePath.includes('\\') ? '\\' : '/';
+  const lastIdx = filePath.lastIndexOf(sep);
+  return lastIdx > 0 ? filePath.slice(0, lastIdx) : filePath;
 }
 
 const DEFAULT_USER_INFO = { name: '', department: '', email: '' };
@@ -514,6 +534,8 @@ export default function App() {
   const [projectName, setProjectName] = useState('');
   const [producerName, setProducerName] = useState('MXW');
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
+  /** 从 JSON 解析出的多项目列表，用于批量初始化目录 */
+  const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
 
   // 历史记录（从 Store 加载）
   const [showHistory, setShowHistory] = useState(false);
@@ -584,17 +606,17 @@ export default function App() {
       // 用户在系统弹窗中点了"取消"，静默返回
       if (!result) return;
 
-      // 更新项目名
-      if (result.projectName) {
-        setProjectName(result.projectName);
+      // 保存完整项目列表，供【一键初始化目录】使用；不修改左侧尺寸勾选（尺寸勾选仅用于校验/重命名）
+      const projects = (result as { projects?: Array<{ projectName: string; sizes: string[] }> }).projects;
+      if (Array.isArray(projects) && projects.length > 0) {
+        setProjectsList(projects);
+      } else {
+        setProjectsList([]);
       }
 
-      // 规范化尺寸格式（统一为 "W*H" 分隔），再更新勾选列表
-      if (result.sizes && result.sizes.length > 0) {
-        const normalizedSizes = result.sizes.map((s: string) =>
-          s.replace(/(\d+)[xX×](\d+)/, '$1*$2')
-        );
-        setSelectedSizes(normalizedSizes);
+      // 仅更新项目名输入框展示（可选）；绝不自动修改 selectedSizes
+      if (result.projectName) {
+        setProjectName(result.projectName);
       }
 
       toast.success(t[language].jsonSuccess, { description: t[language].jsonDesc });
@@ -666,17 +688,53 @@ export default function App() {
     const folderPath = await window.electronAPI.dialog.selectFolder();
     if (!folderPath) return;
     setFolderPaths((prev) => (prev.includes(folderPath) ? prev : [...prev, folderPath]));
+    try {
+      const detectedSizes = await window.electronAPI.fs.readProjectSizes([folderPath]) as string[] | undefined;
+      if (Array.isArray(detectedSizes) && detectedSizes.length > 0) {
+        setSelectedSizes(detectedSizes);
+      }
+    } catch {
+      // 读取失败不影响添加文件夹，仅不自动勾选尺寸
+    }
     toast.success(t[language].folderAdded, { description: folderPath });
   };
 
   /**
-   * 清空工作区（文件夹列表 + 校验结果）
+   * 清空工作区：文件夹列表、校验结果、尺寸勾选、项目名一并重置，
+   * 让软件彻底回到"刚打开"的初始状态
    */
   const handleClearAll = () => {
     setFolderPaths([]);
     setValidationResults([]);
     setHasValidated(false);
+    setSelectedSizes([]);
+    setProjectName('');
+    setProjectsList([]);
     toast.info(t[language].workspaceCleared);
+  };
+
+  /**
+   * 一键初始化目录：使用 JSON 解析出的 projectsList 批量生成多项目文件夹结构。
+   * 项目列表为空时拦截并提示。
+   */
+  const handleInitFolders = async () => {
+    if (!projectsList.length) {
+      toast.warning(t[language].initFolderIncomplete, {
+        description: t[language].initFolderIncompleteDesc,
+      });
+      return;
+    }
+
+    try {
+      const res = await window.electronAPI.fs.initFolders(projectsList) as { success: boolean; destPath?: string; error?: string };
+      if (res?.success && res.destPath) {
+        toast.success(t[language].initFolderSuccess, { description: res.destPath });
+      } else {
+        toast.error(t[language].initFolderFail, { description: res?.error });
+      }
+    } catch {
+      toast.error(t[language].initFolderFail);
+    }
   };
 
   /**
@@ -795,15 +853,21 @@ export default function App() {
     }
   };
 
-  const horizontalSizes = useMemo(() => PRESET_SIZES.filter(size => {
+  // 将 PRESET_SIZES 与当前 selectedSizes 合并（去重），确保 JSON 导入的非预设尺寸也能显示胶囊
+  const allDisplaySizes = useMemo(() => {
+    const merged = [...new Set([...PRESET_SIZES, ...selectedSizes])];
+    return merged;
+  }, [selectedSizes]);
+
+  const horizontalSizes = useMemo(() => allDisplaySizes.filter(size => {
     const [w, h] = size.split('*').map(Number);
     return w >= h;
-  }), []);
+  }), [allDisplaySizes]);
 
-  const verticalSizes = useMemo(() => PRESET_SIZES.filter(size => {
+  const verticalSizes = useMemo(() => allDisplaySizes.filter(size => {
     const [w, h] = size.split('*').map(Number);
     return w < h;
-  }), []);
+  }), [allDisplaySizes]);
 
   const avatarSrc = useMemo(() => {
     return createAvatar(dylan, {
@@ -840,13 +904,24 @@ export default function App() {
     e.stopPropagation();
     dragCounter.current = 0;
     setIsDraggingGlobally(false);
-    // Electron 为 File 对象注入了 .path 属性（真实文件系统路径）
-    const paths = Array.from(e.dataTransfer.files)
-      .map((f) => (f as File & { path: string }).path)
-      .filter(Boolean);
-    if (paths.length > 0) {
-      setFolderPaths((prev) => [...new Set([...prev, ...paths])]);
-      toast.success(`${paths.length} ${t[language].foldersAddedDesc}`);
+    // Electron 为 File 对象注入 .path 属性；拖入文件夹时会得到其内所有文件的路径，需提取父目录
+    const filePaths = Array.from(e.dataTransfer.files)
+      .map((f) => (f as File & { path?: string }).path)
+      .filter((p): p is string => Boolean(p));
+    const folderPathsToAdd = [...new Set(filePaths.map(getDirFromFilePath))];
+    if (folderPathsToAdd.length > 0) {
+      setFolderPaths((prev) => [...new Set([...prev, ...folderPathsToAdd])]);
+      (async () => {
+        try {
+          const detectedSizes = await window.electronAPI.fs.readProjectSizes(folderPathsToAdd) as string[] | undefined;
+          if (Array.isArray(detectedSizes) && detectedSizes.length > 0) {
+            setSelectedSizes(detectedSizes);
+          }
+        } catch {
+          // 读取失败仅不自动勾选尺寸
+        }
+      })();
+      toast.success(`${folderPathsToAdd.length} ${t[language].foldersAddedDesc}`);
     }
   };
 
@@ -951,7 +1026,11 @@ export default function App() {
                   )}
                   {isImportingJson ? t[language].jsonImporting : t[language].importJson}
                 </button>
-                <button className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                <button
+                  type="button"
+                  onClick={handleInitFolders}
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                >
                   <FolderTree size={16} />
                   {t[language].initFolder}
                 </button>
@@ -1191,19 +1270,35 @@ export default function App() {
               {/* Top Drag Area */}
               <section className="w-full max-w-5xl flex-shrink-0">
             <div 
+              role="button"
+              tabIndex={0}
               className={`w-full py-10 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group shadow-sm ${isDragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-300 bg-white'}`}
               onDragEnter={() => setIsDragActive(true)}
               onDragLeave={() => setIsDragActive(false)}
               onDragOver={(e) => e.preventDefault()}
+              onClick={() => handleAddFolder()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
               onDrop={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setIsDragActive(false);
-                const paths = Array.from(e.dataTransfer.files)
-                  .map((f) => (f as File & { path: string }).path)
-                  .filter(Boolean);
-                if (paths.length > 0) {
-                  setFolderPaths((prev) => [...new Set([...prev, ...paths])]);
-                  toast.success(`${paths.length} ${t[language].foldersAddedDesc}`);
+                const filePaths = Array.from(e.dataTransfer.files)
+                  .map((f) => (f as File & { path?: string }).path)
+                  .filter((p): p is string => Boolean(p));
+                const folderPathsToAdd = [...new Set(filePaths.map(getDirFromFilePath))];
+                if (folderPathsToAdd.length > 0) {
+                  setFolderPaths((prev) => [...new Set([...prev, ...folderPathsToAdd])]);
+                  (async () => {
+                    try {
+                      const detectedSizes = await window.electronAPI.fs.readProjectSizes(folderPathsToAdd) as string[] | undefined;
+                      if (Array.isArray(detectedSizes) && detectedSizes.length > 0) {
+                        setSelectedSizes(detectedSizes);
+                      }
+                    } catch {
+                      // 读取失败仅不自动勾选尺寸
+                    }
+                  })();
+                  toast.success(`${folderPathsToAdd.length} ${t[language].foldersAddedDesc}`);
                 }
               }}
             >
@@ -1382,24 +1477,32 @@ export default function App() {
                           >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <FileText size={16} className="text-slate-400 flex-shrink-0" />
-                                <span className="truncate max-w-[200px]" title={item.fileName}>
-                                  {item.fileName}
+                                <FileText size={16} className="text-slate-400 shrink-0" />
+                                {/* 显示"纯文件名 + 扩展名"，与磁盘文件名一一对应 */}
+                                <span className="truncate max-w-[200px] font-mono text-xs" title={`${item.fileName}${item.ext}`}>
+                                  {item.status === 'missing'
+                                    ? item.fileName
+                                    : `${item.fileName}${item.ext}`}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">
-                              <span className="truncate block max-w-[140px]" title={item.filePath}>
-                                {item.filePath
-                                  ? item.filePath.replace(/\\/g, '/').split('/').slice(-2).join('/')
-                                  : '-'}
+                            <td className="px-6 py-4 text-slate-500 text-xs">
+                              {/* 直接使用主进程返回的 folderName，无需在前端解析路径 */}
+                              <span
+                                className="truncate block max-w-[140px]"
+                                title={item.folderName}
+                              >
+                                {item.folderName || '-'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-slate-400 uppercase text-xs font-bold">
-                              {item.ext || '-'}
+                            <td className="px-6 py-4 text-slate-400 uppercase text-xs font-bold tracking-wider">
+                              {/* 去掉扩展名前缀的点，大写展示，如 MP4 */}
+                              {item.ext ? item.ext.replace('.', '').toUpperCase() : '-'}
                             </td>
                             <td className="px-6 py-4 text-slate-500 font-mono text-xs">
-                              {item.actualWidth && item.actualHeight
+                              {item.status === 'missing' && item.targetSize
+                                ? item.targetSize.replace('*', '×')
+                                : item.actualWidth && item.actualHeight
                                 ? `${item.actualWidth}×${item.actualHeight}`
                                 : item.fileSize
                                 ? formatBytes(item.fileSize)
