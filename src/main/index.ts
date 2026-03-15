@@ -9,12 +9,23 @@ import fs from 'fs-extra'
 import sizeOf from 'image-size'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
+// @ts-expect-error 无类型包
+import ffprobeStatic from 'ffprobe-static'
 
 // ─── 初始化 ────────────────────────────────────────────
 
 // 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic as string)
+}
+
+// 设置 ffprobe 路径，确保视频尺寸可读；打包后需从 app.asar.unpacked 加载
+if (ffprobeStatic?.path) {
+  let ffprobePath = ffprobeStatic.path as string
+  if (ffprobePath.includes('app.asar')) {
+    ffprobePath = ffprobePath.replace('app.asar', 'app.asar.unpacked')
+  }
+  ffmpeg.setFfprobePath(ffprobePath)
 }
 
 // ─── 轻量级 JSON 配置存储 ────────────────────────────────
@@ -72,16 +83,17 @@ async function storeDeleteKey(key: string): Promise<void> {
 // ─── 类型定义 ───────────────────────────────────────────
 
 interface ValidationResult {
-  fileName: string    // 纯文件名（不含扩展名）
-  filePath: string    // 完整路径（用于重命名）
-  folderName: string  // 所在文件夹名（直接父级目录名）
-  ext: string         // 扩展名含点，如 .mp4
+  fileName: string
+  filePath: string
+  folderName: string
+  ext: string
   fileSize: number
   actualWidth: number
   actualHeight: number
   duration?: number
-  status: 'valid' | 'mismatch' | 'missing' | 'error'
+  status: 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
   targetSize?: string
+  /** 底层错误或说明，供前端展示 */
   error?: string
 }
 
@@ -311,6 +323,9 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
   }
   const rootPath = result.filePaths[0]
 
+  // 每个项目下除尺寸文件夹外，固定创建的 4 个素材分类文件夹（与尺寸文件夹同级）
+  const FIXED_FOLDERS = ['截屏素材', '录屏素材', '奇觅生成', '模糊处理']
+
   try {
     for (const project of list) {
       const projectRoot = join(rootPath, project.projectName)
@@ -318,11 +333,14 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
 
       const sizes = project.sizes || []
       for (const size of sizes) {
-        // 仅用数字命名：将 * 替换为小写 x，如 1080*1920 → 1080x1920，不添加任何中文后缀
         const folderName = size.replace(/\*/g, 'x')
         const sizeDir = join(projectRoot, folderName)
         await fs.ensureDir(sizeDir)
         await fs.ensureDir(join(sizeDir, '_Assets'))
+      }
+
+      for (const name of FIXED_FOLDERS) {
+        await fs.ensureDir(join(projectRoot, name))
       }
     }
     return { success: true, destPath: rootPath }
@@ -331,17 +349,32 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
   }
 })
 
+/** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
+const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/
+/** 这些文件夹为原始物料目录，不参与尺寸识别，必须忽略 */
+const SKIP_DIRS_READ_SIZE = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
+
 /**
  * fs:readProjectSizes
- * 接收一个或多个文件夹路径，读取各自的一级子目录名称；
- * 若子目录名符合尺寸格式（纯数字+小写x，如 720x1280、1080x1920），则提取并去重，
- * 返回规范化后的尺寸数组（* 分隔，与左侧胶囊一致）。
+ * 根据传入的路径推断「项目根」并读取其一级子目录，仅提取名称符合「数字+x+数字」的文件夹，返回规范化尺寸数组供前端自动勾选。
+ * - 若传入的是项目根（如 D:\\Project）：直接读该目录下 720x1280、1080x1920 等。
+ * - 若传入的是尺寸子文件夹（如 D:\\Project\\720x1280，拖入时常会变成这种）：用其父目录作为项目根再读，否则会读不到任何尺寸。
  */
-const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/
 ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
   const paths = Array.isArray(folderPaths) ? folderPaths : []
   const sizeSet = new Set<string>()
-  for (const dir of paths) {
+  const roots = new Set<string>()
+
+  for (const p of paths) {
+    const base = basename(p)
+    if (SIZE_FOLDER_REGEX.test(base)) {
+      roots.add(dirname(p))
+    } else {
+      roots.add(p)
+    }
+  }
+
+  for (const dir of roots) {
     let names: string[]
     try {
       names = await fs.readdir(dir)
@@ -349,6 +382,7 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
       continue
     }
     for (const name of names) {
+      if (SKIP_DIRS_READ_SIZE.has(name)) continue
       const full = join(dir, name)
       let stat: fs.Stats
       try {
@@ -357,28 +391,30 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
         continue
       }
       if (!stat.isDirectory()) continue
-      if (SIZE_FOLDER_REGEX.test(name)) {
-        sizeSet.add(name.replace(/[xX]/g, '*'))
-      }
+      if (!SIZE_FOLDER_REGEX.test(name)) continue
+      sizeSet.add(name.replace(/[xX]/g, '*'))
     }
   }
   return [...sizeSet]
 })
 
+/** 校验时必须跳过的目录：仅对「纯数字尺寸」文件夹内的媒体做校验，不读取物料目录 */
+const SKIP_DIRS_VALIDATION = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
+
 /**
- * 深度递归收集目录下所有媒体文件。
- * 不使用 { withFileTypes: true }，改用 fs.stat 以获得最大的跨平台兼容性
- * （尤其是含中文名的目录在部分 Windows 环境下 Dirent.isDirectory() 会失效）。
+ * 收集可参与校验的媒体文件：仅从「纯数字尺寸」文件夹及其子目录（且排除物料目录）内读取。
+ * - 在项目根（isRoot=true）：只进入匹配 SIZE_FOLDER_REGEX 的一级子目录。
+ * - 进入后：不再进入 SKIP_DIRS_VALIDATION 中的目录（如 _Assets、截屏素材 等）。
  */
 async function collectMediaFiles(
   dirPath: string,
-  fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[]
+  fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[],
+  isRoot: boolean
 ): Promise<void> {
   let names: string[]
   try {
     names = await fs.readdir(dirPath)
   } catch {
-    // 无权访问或路径无效时跳过该层，不影响其他层
     return
   }
 
@@ -388,12 +424,17 @@ async function collectMediaFiles(
     try {
       stat = await fs.stat(fullPath)
     } catch {
-      continue // 无法 stat 的项（如临时文件、系统占用）跳过
+      continue
     }
 
     if (stat.isDirectory()) {
-      // 无条件递归进入，不过滤任何目录名
-      await collectMediaFiles(fullPath, fileList)
+      if (isRoot) {
+        if (SKIP_DIRS_VALIDATION.has(name) || !SIZE_FOLDER_REGEX.test(name)) continue
+        await collectMediaFiles(fullPath, fileList, false)
+      } else {
+        if (SKIP_DIRS_VALIDATION.has(name)) continue
+        await collectMediaFiles(fullPath, fileList, false)
+      }
       continue
     }
 
@@ -402,12 +443,11 @@ async function collectMediaFiles(
     const ext = extname(name).toLowerCase()
     if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) continue
 
-    // folderName: 该文件直接所在的父级目录名（不含路径，用于表格"文件夹"列展示）
     const folderName = basename(dirPath)
 
     fileList.push({
       filePath: fullPath,
-      fileName: basename(name, ext), // 纯文件名，不含扩展名
+      fileName: basename(name, ext),
       folderName,
       ext,
       size: stat.size,
@@ -427,7 +467,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
   )
 
   const fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[] = []
-  await collectMediaFiles(folderPath, fileList)
+  await collectMediaFiles(folderPath, fileList, true)
 
   for (const { filePath, fileName, folderName, ext, size: fileSize } of fileList) {
     const isImage = IMAGE_EXTS.has(ext)
@@ -449,18 +489,50 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
       }
 
       const actualSizeKey = `${actualWidth}*${actualHeight}`
-      results.push({
-        fileName,
-        filePath,
-        folderName,
-        ext,
-        fileSize,
-        actualWidth,
-        actualHeight,
-        duration,
-        status: targetSizeSet.has(actualSizeKey) ? 'valid' : 'mismatch',
-      })
+
+      if (actualWidth === 0 && actualHeight === 0) {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth: 0,
+          actualHeight: 0,
+          status: 'error',
+          error: '无法获取尺寸（文件可能损坏或格式不支持）',
+        })
+        continue
+      }
+
+      if (targetSizeSet.has(actualSizeKey)) {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth,
+          actualHeight,
+          duration,
+          status: 'valid',
+        })
+      } else {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth,
+          actualHeight,
+          duration,
+          status: 'mismatch',
+          error: '尺寸不符（当前尺寸未在左侧勾选）',
+        })
+      }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
       results.push({
         fileName,
         filePath,
@@ -470,7 +542,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
         actualWidth: 0,
         actualHeight: 0,
         status: 'error',
-        error: String(err),
+        error: `文件读取失败或损坏: ${message}`,
       })
     }
   }
@@ -492,6 +564,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
         actualHeight: 0,
         status: 'missing',
         targetSize,
+        error: '该尺寸在文件夹中无对应文件',
       })
     }
   }

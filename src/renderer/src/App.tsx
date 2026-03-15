@@ -20,6 +20,7 @@ import {
   Sparkles, 
   FolderTree,
   FileText,
+  FileJson,
   Play,
   Settings,
   Loader2,
@@ -52,7 +53,7 @@ const t = {
     projectInit: "项目需求配置",
     enterProjectName: "输入项目名称...",
     importJson: "导入需求 JSON",
-    initFolder: "一键初始化目录",
+    initFolder: "一键创建目录",
     dimReq: "需求尺寸勾选",
     horizontalSquare: "横版 & 方形",
     vertical: "竖版",
@@ -117,6 +118,11 @@ const t = {
     saveChanges: "保存更改",
     defaultOutputDir: "默认输出目录",
     nameTemplate: "重命名模板公式",
+    jsonDataLabel: "当前 JSON 数据",
+    jsonDataLoadedCount: "已加载 {n} 个项目数据",
+    jsonDataEmpty: "暂未加载",
+    jsonDataChange: "更改",
+    jsonDataUpdated: "JSON 数据已更新",
     apiKeys: "API 密钥配置",
     geminiKey: "Gemini API 密钥",
     sdPath: "Stable Diffusion 本地路径",
@@ -146,6 +152,9 @@ const t = {
     validationErrorDesc: "校验过程发生意外错误，请重试。",
     statusMismatch: "尺寸不符",
     statusMissing: "缺失",
+    statusValidLabel: "尺寸匹配",
+    statusErrorLabel: "读取失败",
+    statusFormatErrorLabel: "格式错误",
     folderAdded: "文件夹已添加",
     foldersAddedDesc: "个项目已加入工作区",
     workspaceCleared: "工作区已清空",
@@ -170,7 +179,7 @@ const t = {
     projectInit: "PROJECT INITIALIZATION",
     enterProjectName: "Enter Project Name...",
     importJson: "Import JSON",
-    initFolder: "Init Folders",
+    initFolder: "Create Folders",
     dimReq: "DIMENSION REQUIREMENTS",
     horizontalSquare: "Horizontal & Square",
     vertical: "Vertical",
@@ -235,6 +244,11 @@ const t = {
     saveChanges: "Save Changes",
     defaultOutputDir: "Default Output Directory",
     nameTemplate: "Naming Convention Template",
+    jsonDataLabel: "Current JSON Data",
+    jsonDataLoadedCount: "{n} project(s) loaded",
+    jsonDataEmpty: "Not loaded",
+    jsonDataChange: "Change",
+    jsonDataUpdated: "JSON data updated",
     apiKeys: "API Keys Configuration",
     geminiKey: "Gemini API Key",
     sdPath: "Stable Diffusion Local Path",
@@ -264,6 +278,9 @@ const t = {
     validationErrorDesc: "An unexpected error occurred during validation. Please retry.",
     statusMismatch: "Mismatch",
     statusMissing: "Missing",
+    statusValidLabel: "Size match",
+    statusErrorLabel: "Read failed",
+    statusFormatErrorLabel: "Format error",
     folderAdded: "Folder Added",
     foldersAddedDesc: "items added to workspace",
     workspaceCleared: "Workspace cleared",
@@ -288,7 +305,7 @@ const t = {
     projectInit: "プロジェクト初期化",
     enterProjectName: "プロジェクト名を入力...",
     importJson: "JSONをインポート",
-    initFolder: "フォルダを初期化",
+    initFolder: "フォルダを作成",
     dimReq: "サイズ要件",
     horizontalSquare: "横長 & 正方形",
     vertical: "縦長",
@@ -353,6 +370,11 @@ const t = {
     saveChanges: "変更を保存",
     defaultOutputDir: "デフォルト出力ディレクトリ",
     nameTemplate: "命名規則テンプレート",
+    jsonDataLabel: "現在の JSON データ",
+    jsonDataLoadedCount: "{n} 件のプロジェクトを読み込み済み",
+    jsonDataEmpty: "未読み込み",
+    jsonDataChange: "変更",
+    jsonDataUpdated: "JSON データを更新しました",
     apiKeys: "API キー設定",
     geminiKey: "Gemini API キー",
     sdPath: "Stable Diffusion ローカルパス",
@@ -382,6 +404,9 @@ const t = {
     validationErrorDesc: "検証中に予期しないエラーが発生しました。再試行してください。",
     statusMismatch: "サイズ不一致",
     statusMissing: "欠損",
+    statusValidLabel: "サイズ一致",
+    statusErrorLabel: "読み込み失敗",
+    statusFormatErrorLabel: "形式エラー",
     folderAdded: "フォルダを追加しました",
     foldersAddedDesc: "個の項目が追加されました",
     workspaceCleared: "ワークスペースをクリアしました",
@@ -404,49 +429,68 @@ const t = {
   }
 };
 
-type StatusType = 'valid' | 'pending' | 'error' | 'warning' | 'mismatch' | 'missing';
+type StatusType = 'valid' | 'pending' | 'error' | 'warning' | 'mismatch' | 'missing' | 'format_error';
 
-const StatusTag = ({ type, language }: { type: StatusType; language: LangKey }) => {
-  switch (type) {
-    case 'valid':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-100 text-green-700 text-xs font-bold">
-          <CheckCircle2 size={12} /> {t[language].valid}
+const StatusTag = ({ type, language, errorMessage }: { type: StatusType; language: LangKey; errorMessage?: string }) => {
+  const tag = (() => {
+    switch (type) {
+      case 'valid':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-100 text-green-700 text-xs font-bold">
+            <CheckCircle2 size={12} /> [✅] {t[language].statusValidLabel}
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-bold">
+            <Hourglass size={12} /> {t[language].pending}
+          </span>
+        );
+      case 'mismatch':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-orange-100 text-orange-700 text-xs font-bold">
+            <AlertTriangle size={12} /> [⚠️] {t[language].statusMismatch}
+          </span>
+        );
+      case 'missing':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-bold">
+            <XCircle size={12} /> {t[language].statusMissing}
+          </span>
+        );
+      case 'error':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-bold">
+            <XCircle size={12} /> [❌] {t[language].statusErrorLabel}
+          </span>
+        );
+      case 'format_error':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-200 text-slate-600 text-xs font-bold">
+            🚫 {t[language].statusFormatErrorLabel}
+          </span>
+        );
+      case 'warning':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-yellow-100 text-yellow-700 text-xs font-bold">
+            <AlertTriangle size={12} /> {t[language].warning}
+          </span>
+        );
+      default:
+        return null;
+    }
+  })();
+  if (!tag) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span title={errorMessage}>{tag}</span>
+      {errorMessage && (
+        <span className="text-[11px] text-slate-500 max-w-[220px] truncate" title={errorMessage}>
+          {errorMessage}
         </span>
-      );
-    case 'pending':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-bold">
-          <Hourglass size={12} /> {t[language].pending}
-        </span>
-      );
-    case 'mismatch':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-orange-100 text-orange-700 text-xs font-bold">
-          <AlertTriangle size={12} /> {t[language].statusMismatch}
-        </span>
-      );
-    case 'missing':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-bold">
-          <XCircle size={12} /> {t[language].statusMissing}
-        </span>
-      );
-    case 'error':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-bold">
-          <XCircle size={12} /> {t[language].error}
-        </span>
-      );
-    case 'warning':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-yellow-100 text-yellow-700 text-xs font-bold">
-          <AlertTriangle size={12} /> {t[language].warning}
-        </span>
-      );
-    default:
-      return null;
-  }
+      )}
+    </div>
+  );
 };
 
 /** 历史记录条目 */
@@ -463,16 +507,17 @@ interface HistoryEntry {
 
 /** 本地复用类型：与主进程 ValidationResult 对齐 */
 interface ValidationResult {
-  fileName: string;    // 纯文件名（不含扩展名）
-  filePath: string;    // 完整路径
-  folderName: string;  // 直接父级文件夹名
-  ext: string;         // 扩展名含点，如 .mp4
+  fileName: string;
+  filePath: string;
+  folderName: string;
+  ext: string;
   fileSize: number;
   actualWidth: number;
   actualHeight: number;
   duration?: number;
-  status: 'valid' | 'mismatch' | 'missing' | 'error';
+  status: 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error';
   targetSize?: string;
+  /** 底层错误说明，在状态列展示 */
   error?: string;
 }
 
@@ -591,39 +636,32 @@ export default function App() {
     });
   }, []);
 
-  // JSON 导入加载状态
-  const [isImportingJson, setIsImportingJson] = useState(false);
+  // JSON 导入加载状态（设置面板 [更改] 按钮用）
+  const [isChangingJson, setIsChangingJson] = useState(false);
 
   /**
-   * 调用 Electron 原生文件选择框读取需求 JSON
-   * 替代原来的 FileReader Web API 方案
+   * 从设置面板更换 JSON 数据源：弹窗选择文件 → 更新 projectsList / projectName
    */
-  const handleImportJson = async () => {
-    setIsImportingJson(true);
+  const handleChangeJsonInSettings = async () => {
+    setIsChangingJson(true);
     try {
       const result = await window.electronAPI.dialog.openJson();
-
-      // 用户在系统弹窗中点了"取消"，静默返回
       if (!result) return;
 
-      // 保存完整项目列表，供【一键初始化目录】使用；不修改左侧尺寸勾选（尺寸勾选仅用于校验/重命名）
       const projects = (result as { projects?: Array<{ projectName: string; sizes: string[] }> }).projects;
       if (Array.isArray(projects) && projects.length > 0) {
         setProjectsList(projects);
       } else {
         setProjectsList([]);
       }
-
-      // 仅更新项目名输入框展示（可选）；绝不自动修改 selectedSizes
       if (result.projectName) {
         setProjectName(result.projectName);
       }
-
-      toast.success(t[language].jsonSuccess, { description: t[language].jsonDesc });
+      toast.success(t[language].jsonDataUpdated);
     } catch {
       toast.error(t[language].jsonError, { description: t[language].jsonErrorDesc });
     } finally {
-      setIsImportingJson(false);
+      setIsChangingJson(false);
     }
   };
 
@@ -700,21 +738,18 @@ export default function App() {
   };
 
   /**
-   * 清空工作区：文件夹列表、校验结果、尺寸勾选、项目名一并重置，
-   * 让软件彻底回到"刚打开"的初始状态
+   * 清空当前工作区：仅清空正在处理的素材与校验状态，不触碰 JSON 数据源（projectsList / projectName）
    */
   const handleClearAll = () => {
     setFolderPaths([]);
     setValidationResults([]);
     setHasValidated(false);
     setSelectedSizes([]);
-    setProjectName('');
-    setProjectsList([]);
     toast.info(t[language].workspaceCleared);
   };
 
   /**
-   * 一键初始化目录：使用 JSON 解析出的 projectsList 批量生成多项目文件夹结构。
+   * 一键创建目录：使用 JSON 解析出的 projectsList 批量生成多项目文件夹结构。
    * 项目列表为空时拦截并提示。
    */
   const handleInitFolders = async () => {
@@ -1002,9 +1037,20 @@ export default function App() {
           
           {/* Project Initialization */}
           <section>
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-              {t[language].projectInit}
-            </h3>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                {t[language].projectInit}
+              </h3>
+              <button
+                type="button"
+                onClick={handleChangeJsonInSettings}
+                disabled={isChangingJson}
+                title="快捷导入 JSON"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isChangingJson ? <Loader2 size={14} className="animate-spin" /> : <FileJson size={16} />}
+              </button>
+            </div>
             <div className="flex flex-col gap-3">
               <input 
                 type="text" 
@@ -1014,18 +1060,7 @@ export default function App() {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all text-sm font-medium placeholder:text-slate-400" 
               />
               <div className="flex flex-col gap-2.5">
-                <button 
-                  onClick={handleImportJson}
-                  disabled={isImportingJson}
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  {isImportingJson ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={16} />
-                  )}
-                  {isImportingJson ? t[language].jsonImporting : t[language].importJson}
-                </button>
+                {/* JSON 数据源入口已迁移至【设置 → 工作流预设 → 当前 JSON 数据】 */}
                 <button
                   type="button"
                   onClick={handleInitFolders}
@@ -1509,7 +1544,7 @@ export default function App() {
                                 : '-'}
                             </td>
                             <td className="px-6 py-4">
-                              <StatusTag type={item.status} language={language} />
+                              <StatusTag type={item.status} language={language} errorMessage={item.error} />
                             </td>
                           </tr>
                         ))
@@ -1755,6 +1790,25 @@ export default function App() {
                               placeholder="[Project]-[Name]-[Size]"
                               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
                             />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-slate-800 mb-2">{t[language].jsonDataLabel}</label>
+                          <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-3 py-3">
+                            <span className="text-sm text-slate-500">
+                              {projectsList.length > 0
+                                ? t[language].jsonDataLoadedCount.replace('{n}', String(projectsList.length))
+                                : t[language].jsonDataEmpty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleChangeJsonInSettings}
+                              disabled={isChangingJson}
+                              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {isChangingJson ? <Loader2 size={14} className="animate-spin" /> : null}
+                              {isChangingJson ? t[language].jsonImporting : t[language].jsonDataChange}
+                            </button>
                           </div>
                         </div>
                       </div>

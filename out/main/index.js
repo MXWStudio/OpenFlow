@@ -5,8 +5,16 @@ const fs = require("fs-extra");
 const sizeOf = require("image-size");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegStatic = require("ffmpeg-static");
+const ffprobeStatic = require("ffprobe-static");
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic);
+}
+if (ffprobeStatic?.path) {
+  let ffprobePath = ffprobeStatic.path;
+  if (ffprobePath.includes("app.asar")) {
+    ffprobePath = ffprobePath.replace("app.asar", "app.asar.unpacked");
+  }
+  ffmpeg.setFfprobePath(ffprobePath);
 }
 function getConfigPath() {
   return path.join(electron.app.getPath("userData"), "openflow-config.json");
@@ -195,6 +203,7 @@ electron.ipcMain.handle("fs:initFolders", async (_, projectsData) => {
     return { success: false, destPath: "", error: "用户取消选择" };
   }
   const rootPath = result.filePaths[0];
+  const FIXED_FOLDERS = ["截屏素材", "录屏素材", "奇觅生成", "模糊处理"];
   try {
     for (const project of list) {
       const projectRoot = path.join(rootPath, project.projectName);
@@ -206,6 +215,9 @@ electron.ipcMain.handle("fs:initFolders", async (_, projectsData) => {
         await fs.ensureDir(sizeDir);
         await fs.ensureDir(path.join(sizeDir, "_Assets"));
       }
+      for (const name of FIXED_FOLDERS) {
+        await fs.ensureDir(path.join(projectRoot, name));
+      }
     }
     return { success: true, destPath: rootPath };
   } catch (error) {
@@ -213,10 +225,20 @@ electron.ipcMain.handle("fs:initFolders", async (_, projectsData) => {
   }
 });
 const SIZE_FOLDER_REGEX = /^\d+[xX]\d+$/;
+const SKIP_DIRS_READ_SIZE = /* @__PURE__ */ new Set(["截屏素材", "录屏素材", "奇觅生成", "模糊处理", "_Assets"]);
 electron.ipcMain.handle("fs:readProjectSizes", async (_, folderPaths) => {
   const paths = Array.isArray(folderPaths) ? folderPaths : [];
   const sizeSet = /* @__PURE__ */ new Set();
-  for (const dir of paths) {
+  const roots = /* @__PURE__ */ new Set();
+  for (const p of paths) {
+    const base = path.basename(p);
+    if (SIZE_FOLDER_REGEX.test(base)) {
+      roots.add(path.dirname(p));
+    } else {
+      roots.add(p);
+    }
+  }
+  for (const dir of roots) {
     let names;
     try {
       names = await fs.readdir(dir);
@@ -224,6 +246,7 @@ electron.ipcMain.handle("fs:readProjectSizes", async (_, folderPaths) => {
       continue;
     }
     for (const name of names) {
+      if (SKIP_DIRS_READ_SIZE.has(name)) continue;
       const full = path.join(dir, name);
       let stat;
       try {
@@ -232,14 +255,14 @@ electron.ipcMain.handle("fs:readProjectSizes", async (_, folderPaths) => {
         continue;
       }
       if (!stat.isDirectory()) continue;
-      if (SIZE_FOLDER_REGEX.test(name)) {
-        sizeSet.add(name.replace(/[xX]/g, "*"));
-      }
+      if (!SIZE_FOLDER_REGEX.test(name)) continue;
+      sizeSet.add(name.replace(/[xX]/g, "*"));
     }
   }
   return [...sizeSet];
 });
-async function collectMediaFiles(dirPath, fileList) {
+const SKIP_DIRS_VALIDATION = /* @__PURE__ */ new Set(["截屏素材", "录屏素材", "奇觅生成", "模糊处理", "_Assets"]);
+async function collectMediaFiles(dirPath, fileList, isRoot) {
   let names;
   try {
     names = await fs.readdir(dirPath);
@@ -255,7 +278,13 @@ async function collectMediaFiles(dirPath, fileList) {
       continue;
     }
     if (stat.isDirectory()) {
-      await collectMediaFiles(fullPath, fileList);
+      if (isRoot) {
+        if (SKIP_DIRS_VALIDATION.has(name) || !SIZE_FOLDER_REGEX.test(name)) continue;
+        await collectMediaFiles(fullPath, fileList, false);
+      } else {
+        if (SKIP_DIRS_VALIDATION.has(name)) continue;
+        await collectMediaFiles(fullPath, fileList, false);
+      }
       continue;
     }
     if (!stat.isFile()) continue;
@@ -265,7 +294,6 @@ async function collectMediaFiles(dirPath, fileList) {
     fileList.push({
       filePath: fullPath,
       fileName: path.basename(name, ext),
-      // 纯文件名，不含扩展名
       folderName,
       ext,
       size: stat.size
@@ -278,7 +306,7 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
     targetSizes.map((s) => s.replace("x", "*"))
   );
   const fileList = [];
-  await collectMediaFiles(folderPath, fileList);
+  await collectMediaFiles(folderPath, fileList, true);
   for (const { filePath, fileName, folderName, ext, size: fileSize } of fileList) {
     const isImage = IMAGE_EXTS.has(ext);
     const isVideo = VIDEO_EXTS.has(ext);
@@ -297,18 +325,48 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
         duration = info.duration;
       }
       const actualSizeKey = `${actualWidth}*${actualHeight}`;
-      results.push({
-        fileName,
-        filePath,
-        folderName,
-        ext,
-        fileSize,
-        actualWidth,
-        actualHeight,
-        duration,
-        status: targetSizeSet.has(actualSizeKey) ? "valid" : "mismatch"
-      });
+      if (actualWidth === 0 && actualHeight === 0) {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth: 0,
+          actualHeight: 0,
+          status: "error",
+          error: "无法获取尺寸（文件可能损坏或格式不支持）"
+        });
+        continue;
+      }
+      if (targetSizeSet.has(actualSizeKey)) {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth,
+          actualHeight,
+          duration,
+          status: "valid"
+        });
+      } else {
+        results.push({
+          fileName,
+          filePath,
+          folderName,
+          ext,
+          fileSize,
+          actualWidth,
+          actualHeight,
+          duration,
+          status: "mismatch",
+          error: "尺寸不符（当前尺寸未在左侧勾选）"
+        });
+      }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       results.push({
         fileName,
         filePath,
@@ -318,7 +376,7 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
         actualWidth: 0,
         actualHeight: 0,
         status: "error",
-        error: String(err)
+        error: `文件读取失败或损坏: ${message}`
       });
     }
   }
@@ -337,7 +395,8 @@ electron.ipcMain.handle("fs:startValidation", async (_, { folderPath, targetSize
         actualWidth: 0,
         actualHeight: 0,
         status: "missing",
-        targetSize
+        targetSize,
+        error: "该尺寸在文件夹中无对应文件"
       });
     }
   }
