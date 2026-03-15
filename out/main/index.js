@@ -78,12 +78,29 @@ function applyNewTemplate(templateTokens, vars) {
   if (!Array.isArray(templateTokens) || templateTokens.length === 0) {
     return vars.Name || "untitled";
   }
-  return templateTokens.map((token) => {
+  let result = "";
+  for (let i = 0; i < templateTokens.length; i++) {
+    const token = templateTokens[i];
+    let tokenStr = "";
     if (token.type === "CustomText") {
-      return token.value || "";
+      tokenStr = token.value || "";
+    } else {
+      tokenStr = vars[token.type] || "";
     }
-    return vars[token.type] || "";
-  }).join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!tokenStr) continue;
+    if (result.length === 0) {
+      result = tokenStr;
+    } else {
+      const prevToken = templateTokens[i - 1];
+      const omitHyphen = token.type === "Date" && prevToken && prevToken.type === "CustomText" && (prevToken.value === "RS" || prevToken.value === "RSQ");
+      if (omitHyphen) {
+        result += tokenStr;
+      } else {
+        result += "-" + tokenStr;
+      }
+    }
+  }
+  return result.replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 function createWindow() {
   const mainWindow = new electron.BrowserWindow({
