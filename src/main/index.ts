@@ -11,6 +11,7 @@ import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
 // @ts-expect-error 无类型包
 import ffprobeStatic from 'ffprobe-static'
+import { pinyin } from 'pinyin-pro'
 
 // ─── 初始化 ────────────────────────────────────────────
 
@@ -671,11 +672,15 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     }
     const currentSequence = sequenceCounters[sequenceKey]
 
+    const producerAbbr = producer
+      ? pinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+      : ''
+
     const vars: Record<string, string> = {
       ProjectName: currentProjectName || 'Project',
       CleanProjectName: cleanProjectName || 'Project',
       Date: today,
-      Producer: producer || '',
+      Producer: producerAbbr,
       Resolution: sizeStr,
       AspectRatio: aspectRatio,
       Sequence: `(${currentSequence})`,

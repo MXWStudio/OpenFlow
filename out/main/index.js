@@ -6,6 +6,7 @@ const sizeOf = require("image-size");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegStatic = require("ffmpeg-static");
 const ffprobeStatic = require("ffprobe-static");
+const pinyinPro = require("pinyin-pro");
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic);
 }
@@ -169,9 +170,14 @@ electron.ipcMain.handle("dialog:openJson", async () => {
   const rawData = JSON.parse(await fs.readFile(filePath, "utf-8"));
   const projects = [];
   let projectName = "";
+  let producerName = "";
   let sizes = [];
   const norm = (s) => (s || "").replace(/[xX×-]/g, "*");
   if (Array.isArray(rawData)) {
+    if (rawData.length > 0) {
+      const firstItem = rawData[0];
+      producerName = firstItem["制作人"] || firstItem["producerName"] || firstItem["producer"] || "";
+    }
     for (const item of rawData) {
       const name = item["其他信息"] && item["其他信息"]["项目名称"] || item["项目名称"] || item["projectName"] || item["project_name"] || item["name"] || "";
       const sizeSet = /* @__PURE__ */ new Set();
@@ -204,8 +210,9 @@ electron.ipcMain.handle("dialog:openJson", async () => {
     if (projectName || sizes.length) {
       projects.push({ projectName: projectName || "未命名项目", sizes });
     }
+    producerName = rawData["制作人"] || rawData["producerName"] || rawData["producer"] || "";
   }
-  return { projectName, sizes, projects, rawData };
+  return { projectName, producerName, sizes, projects, rawData };
 });
 electron.ipcMain.handle("dialog:selectFolder", async () => {
   const result = await electron.dialog.showOpenDialog({
@@ -434,11 +441,12 @@ electron.ipcMain.handle("fs:executeRename", async (_, { files, templates, projec
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   const today = `${year}${month}${day}`;
-  const isSpecial = projectName && (projectName.includes("创意比特") || projectName.includes("（创意比特）") || projectName.includes("(创意比特)"));
-  const cleanProjectName = projectName ? projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, "") : "";
-  let sequenceCounter = 1;
+  const sequenceCounters = {};
   for (const file of files) {
     if (!file.filePath || file.status === "missing") continue;
+    const currentProjectName = file.workspaceProjectName || projectName || "";
+    const isSpecial = currentProjectName.includes("创意比特") || currentProjectName.includes("（创意比特）") || currentProjectName.includes("(创意比特)");
+    const cleanProjectName = currentProjectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, "");
     const originalExt = file.ext || path.extname(file.filePath);
     const originalBaseName = file.fileName;
     const sizeStr = `${file.actualWidth}x${file.actualHeight}`;
@@ -454,14 +462,21 @@ electron.ipcMain.handle("fs:executeRename", async (_, { files, templates, projec
       targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular;
     }
     const aspectRatio = file.actualWidth >= file.actualHeight ? "横" : "竖";
+    const mediaType = isImage ? "image" : isVideo ? "video" : "other";
+    const sequenceKey = `${dir}_${mediaType}`;
+    if (!sequenceCounters[sequenceKey]) {
+      sequenceCounters[sequenceKey] = 1;
+    }
+    const currentSequence = sequenceCounters[sequenceKey];
+    const producerAbbr = producer ? pinyinPro.pinyin(producer, { pattern: "first", toneType: "none", type: "array" }).join("").toUpperCase() : "";
     const vars = {
-      ProjectName: projectName || "Project",
+      ProjectName: currentProjectName || "Project",
       CleanProjectName: cleanProjectName || "Project",
       Date: today,
-      Producer: producer || "",
+      Producer: producerAbbr,
       Resolution: sizeStr,
       AspectRatio: aspectRatio,
-      Sequence: `(${sequenceCounter})`,
+      Sequence: `(${currentSequence})`,
       OriginalName: originalBaseName
     };
     const newBaseName = applyNewTemplate(targetTemplate, vars);
@@ -476,7 +491,7 @@ electron.ipcMain.handle("fs:executeRename", async (_, { files, templates, projec
     try {
       await fs.rename(file.filePath, newFilePath);
       results.push({ oldFileName: file.fileName, newFileName, success: true });
-      sequenceCounter++;
+      sequenceCounters[sequenceKey]++;
     } catch (err) {
       results.push({
         oldFileName: file.fileName,
