@@ -79,6 +79,7 @@ export interface AppConfig {
 /** 解析的 JSON 需求文件结果 */
 export interface ParsedRequirementJson {
   projectName: string
+  producerName?: string
   sizes: string[]
   rawData: Record<string, unknown>
 }
