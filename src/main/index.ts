@@ -276,11 +276,17 @@ ipcMain.handle('dialog:openJson', async () => {
 
   const projects: ProjectItem[] = []
   let projectName = ''
+  let producerName = ''
   let sizes: string[] = []
 
   const norm = (s: string) => (s || '').replace(/[xX×-]/g, '*')
 
   if (Array.isArray(rawData)) {
+    if (rawData.length > 0) {
+      const firstItem = rawData[0]
+      producerName = firstItem['制作人'] || firstItem['producerName'] || firstItem['producer'] || ''
+    }
+
     for (const item of rawData) {
       const name =
         (item['其他信息'] && item['其他信息']['项目名称']) ||
@@ -321,9 +327,10 @@ ipcMain.handle('dialog:openJson', async () => {
     if (projectName || sizes.length) {
       projects.push({ projectName: projectName || '未命名项目', sizes })
     }
+    producerName = rawData['制作人'] || rawData['producerName'] || rawData['producer'] || ''
   }
 
-  return { projectName, sizes, projects, rawData }
+  return { projectName, producerName, sizes, projects, rawData }
 })
 
 /**

@@ -628,7 +628,7 @@ export default function App() {
 
   // Form State
   const [projectName, setProjectName] = useState('');
-  const [producerName, setProducerName] = useState('MXW');
+  const [producerName, setProducerName] = useState(DEFAULT_USER_INFO.name || 'MXW');
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
   /** 从 JSON 解析出的多项目列表，用于批量初始化目录 */
   const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
@@ -659,6 +659,7 @@ export default function App() {
           department: u.department ?? DEFAULT_USER_INFO.department,
           email: u.email ?? DEFAULT_USER_INFO.email,
         });
+        if (u.name) setProducerName(u.name);
       }
       if (config.workflow && typeof config.workflow === 'object') {
         const w = config.workflow as Record<string, any>;
@@ -712,6 +713,13 @@ export default function App() {
       if (result.projectName) {
         setProjectName(result.projectName);
       }
+
+      const parsedResult = result as { producerName?: string };
+      if (parsedResult.producerName) {
+        setUserInfo(prev => ({ ...prev, name: parsedResult.producerName as string }));
+        setProducerName(parsedResult.producerName);
+      }
+
       toast.success(t[language].jsonDataUpdated);
     } catch {
       toast.error(t[language].jsonError, { description: t[language].jsonErrorDesc });
@@ -1762,7 +1770,10 @@ export default function App() {
                             <input 
                               type="text" 
                               value={userInfo.name}
-                              onChange={(e) => setUserInfo({...userInfo, name: e.target.value})}
+                              onChange={(e) => {
+                                setUserInfo({...userInfo, name: e.target.value});
+                                setProducerName(e.target.value);
+                              }}
                               className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
                           </div>
