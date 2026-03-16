@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
 import { createAvatar } from '@dicebear/core';
 import * as dylan from '@dicebear/dylan';
+import { pinyin } from 'pinyin-pro';
 import { 
   Rocket, 
   UploadCloud, 
@@ -1919,6 +1920,10 @@ export default function App() {
                                   预览: {(() => {
                                     let result = '';
                                     const tokens = workflowSettings.renameTemplates[templateKey];
+                                    const producerAbbr = producerName
+                                      ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+                                      : 'MXW';
+
                                     for (let i = 0; i < tokens.length; i++) {
                                       const t = tokens[i];
                                       let val = '';
@@ -1926,7 +1931,7 @@ export default function App() {
                                       else if (t.type === 'ProjectName') val = '示例项目';
                                       else if (t.type === 'CleanProjectName') val = '清理示例';
                                       else if (t.type === 'Date') val = '20260315';
-                                      else if (t.type === 'Producer') val = 'MXW';
+                                      else if (t.type === 'Producer') val = producerAbbr;
                                       else if (t.type === 'Resolution') val = '1920x1080';
                                       else if (t.type === 'AspectRatio') val = '横';
                                       else if (t.type === 'Sequence') val = '(1)';
