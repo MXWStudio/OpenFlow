@@ -8,7 +8,9 @@ export default defineConfig({
   main: {
     plugins: [
       // 将所有 node_modules 外部化（不打包进 bundle，运行时从 node_modules 加载）
-      externalizeDepsPlugin(),
+      externalizeDepsPlugin({
+        exclude: ['pinyin-pro']
+      }),
     ],
     resolve: {
       alias: {
