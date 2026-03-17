@@ -273,6 +273,7 @@ ipcMain.handle('dialog:openJson', async () => {
   if (result.canceled || !result.filePaths[0]) return null
 
   const filePath = result.filePaths[0]
+  const fileName = basename(filePath)
   const rawData = JSON.parse(await fs.readFile(filePath, 'utf-8'))
 
   const projects: ProjectItem[] = []
@@ -331,7 +332,7 @@ ipcMain.handle('dialog:openJson', async () => {
     producerName = rawData['制作人'] || rawData['producerName'] || rawData['producer'] || ''
   }
 
-  return { projectName, producerName, sizes, projects, rawData }
+  return { projectName, producerName, sizes, projects, rawData, fileName }
 })
 
 /**

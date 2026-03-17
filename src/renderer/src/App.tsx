@@ -628,11 +628,12 @@ export default function App() {
   };
 
   // Form State
-  const [projectName, setProjectName] = useState('');
   const [producerName, setProducerName] = useState(DEFAULT_USER_INFO.name || 'MXW');
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
   /** 从 JSON 解析出的多项目列表，用于批量初始化目录 */
   const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
+  const [jsonFileName, setJsonFileName] = useState<string>('');
+  const primaryProjectName = projectsList[0]?.projectName ?? '';
 
   // 历史记录（从 Store 加载）
   const [showHistory, setShowHistory] = useState(false);
@@ -697,7 +698,7 @@ export default function App() {
   const [isChangingJson, setIsChangingJson] = useState(false);
 
   /**
-   * 从设置面板更换 JSON 数据源：弹窗选择文件 → 更新 projectsList / projectName
+   * 从设置面板更换 JSON 数据源：弹窗选择文件 → 更新 projectsList / jsonFileName
    */
   const handleChangeJsonInSettings = async () => {
     setIsChangingJson(true);
@@ -711,11 +712,13 @@ export default function App() {
       } else {
         setProjectsList([]);
       }
-      if (result.projectName) {
-        setProjectName(result.projectName);
-      }
 
-      const parsedResult = result as { producerName?: string };
+      const parsedResult = result as { producerName?: string; fileName?: string };
+      if (parsedResult.fileName) {
+        setJsonFileName(parsedResult.fileName.replace(/\.json$/i, ''));
+      } else {
+        setJsonFileName('');
+      }
       if (parsedResult.producerName) {
         setUserInfo(prev => ({ ...prev, name: parsedResult.producerName as string }));
         setProducerName(parsedResult.producerName);
@@ -808,7 +811,7 @@ export default function App() {
   };
 
   /**
-   * 清空当前工作区：仅清空正在处理的素材与校验状态，不触碰 JSON 数据源（projectsList / projectName）
+   * 清空当前工作区：仅清空正在处理的素材与校验状态，不触碰 JSON 数据源（projectsList / jsonFileName）
    */
   const handleClearAll = () => {
     setFolderPaths([]);
@@ -865,7 +868,7 @@ export default function App() {
       const results = await window.electronAPI.fs.executeRename(
         validFiles,
         currentTemplates,
-        projectName,
+        primaryProjectName,
         producerName
       ) as Array<{ oldFileName: string; newFileName: string; success: boolean; error?: string }>;
 
@@ -889,7 +892,7 @@ export default function App() {
         // 构造本次操作的历史记录条目
         const newEntry: HistoryEntry = {
           id: Date.now(),
-          project: projectName || 'Untitled Project',
+          project: primaryProjectName || 'Untitled Project',
           timeValue: null,
           timeUnit: 'timeJustNow',
           action: 'actionRenamed',
@@ -1120,13 +1123,20 @@ export default function App() {
               </button>
             </div>
             <div className="flex flex-col gap-3">
-              <input 
-                type="text" 
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder={t[language].enterProjectName} 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all text-sm font-medium placeholder:text-slate-400" 
-              />
+              <div className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className={`text-sm font-medium truncate ${projectsList.length > 0 ? 'text-slate-800' : 'text-gray-400'}`}
+                  >
+                    {projectsList.length > 0 ? jsonFileName : '暂未导入数据表'}
+                  </span>
+                  {projectsList.length > 0 ? (
+                    <span className="shrink-0 inline-flex items-center px-2 py-1 rounded-full bg-slate-200 text-slate-600 text-[11px] font-semibold">
+                      包含 {projectsList.length} 个项目
+                    </span>
+                  ) : null}
+                </div>
+              </div>
               <div className="flex flex-col gap-2.5">
                 {/* JSON 数据源入口已迁移至【设置 → 工作流预设 → 当前 JSON 数据】 */}
                 <button
