@@ -1382,10 +1382,12 @@ export default function App() {
             >
               {/* Top Drag Area */}
               <section className="w-full max-w-5xl flex-shrink-0">
-            <div 
+            <motion.div 
+              layout
+              transition={{ type: "spring", stiffness: 260, damping: 28 }}
               role="button"
               tabIndex={0}
-              className={`w-full py-10 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group shadow-sm ${isDragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-300 bg-white'}`}
+              className={`w-full border-2 border-dashed rounded-2xl flex items-center justify-center text-slate-500 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group shadow-sm ${folderPaths.length > 0 ? 'py-3 flex-row gap-3' : 'py-10 flex-col'} ${isDragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-300 bg-white'}`}
               onDragEnter={() => setIsDragActive(true)}
               onDragLeave={() => setIsDragActive(false)}
               onDragOver={(e) => e.preventDefault()}
@@ -1415,18 +1417,19 @@ export default function App() {
                 }
               }}
             >
-              <div className="p-4 bg-slate-50 rounded-full mb-4 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all duration-300 group-hover:scale-110">
-                <UploadCloud size={48} strokeWidth={2} />
+              <div className={`bg-slate-50 rounded-full group-hover:bg-blue-100 group-hover:text-blue-600 transition-all duration-300 group-hover:scale-110 ${folderPaths.length > 0 ? 'p-2.5' : 'p-4 mb-4'}`}>
+                <UploadCloud size={folderPaths.length > 0 ? 20 : 48} strokeWidth={2} />
               </div>
-              <span className="text-sm font-medium text-slate-600 group-hover:text-blue-700">
-                {t[language].dragDrop}<span className="text-blue-600 underline decoration-blue-300 underline-offset-2">{t[language].browse}</span>
-              </span>
-              {folderPaths.length > 0 && (
-                <span className="mt-2 text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1 rounded-full">
-                  {folderPaths.length} {t[language].foldersAddedDesc}
+              {folderPaths.length > 0 ? (
+                <span className="text-sm font-medium text-slate-600 group-hover:text-blue-700">
+                  ➕ 继续拖拽，或点击这里添加更多文件夹
+                </span>
+              ) : (
+                <span className="text-sm font-medium text-slate-600 group-hover:text-blue-700">
+                  {t[language].dragDrop}<span className="text-blue-600 underline decoration-blue-300 underline-offset-2">{t[language].browse}</span>
                 </span>
               )}
-            </div>
+            </motion.div>
 
             {/* 已添加的文件夹路径列表 */}
             <AnimatePresence>
