@@ -376,7 +376,8 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
 
   try {
     for (const project of list) {
-      const projectRoot = join(rootPath, project.projectName)
+      const cleanProjectName = project.projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '').trim()
+      const projectRoot = join(rootPath, cleanProjectName)
       await fs.ensureDir(projectRoot)
 
       const sizes = project.sizes || []
