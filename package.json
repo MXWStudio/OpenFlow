@@ -2,6 +2,7 @@
   "name": "openflow-studio",
   "version": "1.0.0",
   "description": "OpenFlow Studio — AIGC 广告生产力工作流工具",
+  "author": "mxw86",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
@@ -9,6 +10,11 @@
     "build": "electron-vite build && electron-builder --win",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit"
+  },
+  "build": {
+    "win": {
+      "icon": "icons/icon.png"
+    }
   },
   "dependencies": {
     "@dicebear/core": "^9.4.0",
