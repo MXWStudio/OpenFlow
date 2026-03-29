@@ -341,12 +341,13 @@ ipcMain.handle('dialog:openJson', async () => {
  */
 ipcMain.handle('dialog:selectFolder', async () => {
   const result = await dialog.showOpenDialog({
-    title: '选择文件夹',
-    properties: ['openDirectory'],
+    title: '选择文件夹（可选择游戏名文件夹）',
+    buttonLabel: '选择此文件夹',
+    properties: ['openDirectory', 'multiSelections'],
   })
 
-  if (result.canceled || !result.filePaths[0]) return null
-  return result.filePaths[0]
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths
 })
 
 // ─── IPC: 文件系统 ───────────────────────────────────────
@@ -402,45 +403,47 @@ const SIZE_FOLDER_REGEX = /^\d+[xX-]\d+$/
 /** 这些文件夹为原始物料目录，不参与尺寸识别，必须忽略 */
 const SKIP_DIRS_READ_SIZE = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
 
+/** 递归查找尺寸目录，最多深入 4 层 */
+async function findSizesDeep(dir: string, depth: number, sizeSet: Set<string>) {
+  if (depth > 4) return
+  let names: string[]
+  try {
+    names = await fs.readdir(dir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (SKIP_DIRS_READ_SIZE.has(name)) continue
+    const full = join(dir, name)
+    try {
+      const stat = await fs.stat(full)
+      if (stat.isDirectory()) {
+        if (SIZE_FOLDER_REGEX.test(name)) {
+          sizeSet.add(name.replace(/[xX-]/g, '*'))
+        } else {
+          await findSizesDeep(full, depth + 1, sizeSet)
+        }
+      }
+    } catch {
+      continue
+    }
+  }
+}
+
 /**
  * fs:readProjectSizes
- * 根据传入的路径推断「项目根」并读取其一级子目录，仅提取名称符合「数字+x+数字」的文件夹，返回规范化尺寸数组供前端自动勾选。
- * - 若传入的是项目根（如 D:\\Project）：直接读该目录下 720x1280、1080x1920 等。
- * - 若传入的是尺寸子文件夹（如 D:\\Project\\720x1280，拖入时常会变成这种）：用其父目录作为项目根再读，否则会读不到任何尺寸。
+ * 根据传入的路径，递归搜索其下的所有文件夹，识别尺寸格式（如 720x1280）并返回规范化尺寸数组。
  */
 ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
   const paths = Array.isArray(folderPaths) ? folderPaths : []
   const sizeSet = new Set<string>()
-  const roots = new Set<string>()
 
   for (const p of paths) {
     const base = basename(p)
     if (SIZE_FOLDER_REGEX.test(base)) {
-      roots.add(dirname(p))
+      sizeSet.add(base.replace(/[xX-]/g, '*'))
     } else {
-      roots.add(p)
-    }
-  }
-
-  for (const dir of roots) {
-    let names: string[]
-    try {
-      names = await fs.readdir(dir)
-    } catch {
-      continue
-    }
-    for (const name of names) {
-      if (SKIP_DIRS_READ_SIZE.has(name)) continue
-      const full = join(dir, name)
-      let stat: fs.Stats
-      try {
-        stat = await fs.stat(full)
-      } catch {
-        continue
-      }
-      if (!stat.isDirectory()) continue
-      if (!SIZE_FOLDER_REGEX.test(name)) continue
-      sizeSet.add(name.replace(/[xX-]/g, '*'))
+      await findSizesDeep(p, 0, sizeSet)
     }
   }
   return [...sizeSet]
@@ -457,8 +460,10 @@ const SKIP_DIRS_VALIDATION = new Set(['截屏素材', '录屏素材', '奇觅生
 async function collectMediaFiles(
   dirPath: string,
   fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[],
-  isRoot: boolean
+  isRoot: boolean,
+  depth: number = 0
 ): Promise<void> {
+  if (depth > 5) return // 防止无限递归
   let names: string[]
   try {
     names = await fs.readdir(dirPath)
@@ -476,33 +481,39 @@ async function collectMediaFiles(
     }
 
     if (stat.isDirectory()) {
+      if (SKIP_DIRS_VALIDATION.has(name)) continue
+
       if (isRoot) {
-        if (SKIP_DIRS_VALIDATION.has(name) || !SIZE_FOLDER_REGEX.test(name)) continue
-        await collectMediaFiles(fullPath, fileList, false)
+        if (SIZE_FOLDER_REGEX.test(name)) {
+          // 找到了尺寸文件夹，进入读取其内容，接下来就是只收集文件
+          await collectMediaFiles(fullPath, fileList, false, depth + 1)
+        } else {
+          // 不是尺寸文件夹，继续向内层寻找
+          await collectMediaFiles(fullPath, fileList, true, depth + 1)
+        }
       } else {
-        if (SKIP_DIRS_VALIDATION.has(name)) continue
-        await collectMediaFiles(fullPath, fileList, false)
+        // 已经在尺寸文件夹内，继续递归读取内部更深层的文件
+        await collectMediaFiles(fullPath, fileList, false, depth + 1)
       }
       continue
     }
 
-    if (!stat.isFile()) continue
+    if (!isRoot && stat.isFile()) {
+      const ext = extname(name).toLowerCase()
+      if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) continue
 
-    const ext = extname(name).toLowerCase()
-    if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) continue
+      const folderName = basename(dirPath)
 
-    const folderName = basename(dirPath)
-
-    fileList.push({
-      filePath: fullPath,
-      fileName: basename(name, ext),
-      folderName,
-      ext,
-      size: stat.size,
-    })
+      fileList.push({
+        filePath: fullPath,
+        fileName: basename(name, ext),
+        folderName,
+        ext,
+        size: stat.size,
+      })
+    }
   }
 }
-
 /**
  * fs:startValidation
  * 递归扫描文件夹内媒体文件，读取真实宽高，与目标尺寸对比并打标

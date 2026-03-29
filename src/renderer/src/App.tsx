@@ -796,19 +796,24 @@ export default function App() {
    * 通过系统对话框选择并添加文件夹到工作区
    */
   const handleAddFolder = async () => {
-    const folderPath = await window.electronAPI.dialog.selectFolder();
-    if (!folderPath) return;
-    setFolderPaths((prev) => (prev.includes(folderPath) ? prev : [...prev, folderPath]));
+    const paths = await window.electronAPI.dialog.selectFolder() as string[] | string | null;
+    if (!paths) return;
+    const folderPathsToAdd = Array.isArray(paths) ? paths : [paths];
+    if (folderPathsToAdd.length === 0) return;
+
+    setFolderPaths((prev) => [...new Set([...prev, ...folderPathsToAdd])]);
     try {
-      const detectedSizes = await window.electronAPI.fs.readProjectSizes([folderPath]) as string[] | undefined;
+      const detectedSizes = await window.electronAPI.fs.readProjectSizes(folderPathsToAdd) as string[] | undefined;
       if (Array.isArray(detectedSizes) && detectedSizes.length > 0) {
-        setSelectedSizes(detectedSizes);
+        setSelectedSizes(prev => [...new Set([...prev, ...detectedSizes])]);
       }
     } catch {
       // 读取失败不影响添加文件夹，仅不自动勾选尺寸
     }
-    toast.success(t[language].folderAdded, { description: folderPath });
+    toast.success(folderPathsToAdd.length > 1 ? `${folderPathsToAdd.length} ${t[language].foldersAddedDesc}` : t[language].folderAdded, { description: folderPathsToAdd[0] });
   };
+
+
 
   /**
    * 清空当前工作区：仅清空正在处理的素材与校验状态，不触碰 JSON 数据源（projectsList / jsonFileName）
@@ -1011,10 +1016,37 @@ export default function App() {
     dragCounter.current = 0;
     setIsDraggingGlobally(false);
     // Electron 为 File 对象注入 .path 属性；拖入文件夹时会得到其内所有文件的路径，需提取父目录
-    const filePaths = Array.from(e.dataTransfer.files)
-      .map((f) => (f as File & { path?: string }).path)
-      .filter((p): p is string => Boolean(p));
-    const folderPathsToAdd = [...new Set(filePaths.map(getDirFromFilePath))];
+    const newFolderPaths: string[] = [];
+
+    for (let i = 0; i < e.dataTransfer.items.length; i++) {
+
+      const item = e.dataTransfer.items[i];
+
+      if (item.kind === 'file') {
+
+        const entry = item.webkitGetAsEntry();
+
+        const file = item.getAsFile() as File & { path?: string };
+
+        if (entry && file && file.path) {
+
+          if (entry.isDirectory) {
+
+            newFolderPaths.push(file.path);
+
+          } else {
+
+            newFolderPaths.push(getDirFromFilePath(file.path));
+
+          }
+
+        }
+
+      }
+
+    }
+
+    const folderPathsToAdd = [...new Set(newFolderPaths)];
     if (folderPathsToAdd.length > 0) {
       setFolderPaths((prev) => [...new Set([...prev, ...folderPathsToAdd])]);
       (async () => {
@@ -1397,10 +1429,37 @@ export default function App() {
                 e.preventDefault();
                 e.stopPropagation();
                 setIsDragActive(false);
-                const filePaths = Array.from(e.dataTransfer.files)
-                  .map((f) => (f as File & { path?: string }).path)
-                  .filter((p): p is string => Boolean(p));
-                const folderPathsToAdd = [...new Set(filePaths.map(getDirFromFilePath))];
+                const newFolderPaths: string[] = [];
+
+                for (let i = 0; i < e.dataTransfer.items.length; i++) {
+
+                  const item = e.dataTransfer.items[i];
+
+                  if (item.kind === 'file') {
+
+                    const entry = item.webkitGetAsEntry();
+
+                    const file = item.getAsFile() as File & { path?: string };
+
+                    if (entry && file && file.path) {
+
+                      if (entry.isDirectory) {
+
+                        newFolderPaths.push(file.path);
+
+                      } else {
+
+                        newFolderPaths.push(getDirFromFilePath(file.path));
+
+                      }
+
+                    }
+
+                  }
+
+                }
+
+                const folderPathsToAdd = [...new Set(newFolderPaths)];
                 if (folderPathsToAdd.length > 0) {
                   setFolderPaths((prev) => [...new Set([...prev, ...folderPathsToAdd])]);
                   (async () => {
