@@ -64,7 +64,7 @@ interface DailyWorkspaceProps {
   onRename: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
-  onDropFiles: (files: Array<File & { path?: string }>) => void;
+  onDropPaths: (paths: string[]) => void;
 }
 
 const cardStyle = {
@@ -153,7 +153,7 @@ export function DailyWorkspace({
   onRename,
   onOpenSettings,
   onOpenHistory,
-  onDropFiles,
+  onDropPaths,
 }: DailyWorkspaceProps) {
   const previewRows =
     validationResults.length > 0
@@ -370,14 +370,46 @@ export function DailyWorkspace({
               <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
                 <SectionTitle>上传素材</SectionTitle>
                 <Dropzone
-                  onDrop={(files) => onDropFiles(files as Array<File & { path?: string }>)}
-                  activateOnClick
+                  onDrop={() => {}} // Handle in onDropCapture
+                  onDropCapture={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const paths: string[] = [];
+                    const items = e.dataTransfer.items;
+                    if (items) {
+                      for (let i = 0; i < items.length; i++) {
+                        const item = items[i];
+                        if (item.kind === 'file') {
+                          const entry = item.webkitGetAsEntry();
+                          const file = item.getAsFile() as File & { path?: string };
+                          if (entry?.isDirectory && file?.path) {
+                            paths.push(file.path);
+                          } else if (file?.path) {
+                            // If it's a file, we want its parent directory
+                            const sep = file.path.includes('\\') ? '\\' : '/';
+                            const lastIdx = file.path.lastIndexOf(sep);
+                            if (lastIdx > 0) {
+                              paths.push(file.path.slice(0, lastIdx));
+                            } else {
+                              paths.push(file.path);
+                            }
+                          }
+                        }
+                      }
+                    }
+                    if (paths.length > 0) {
+                      onDropPaths(paths);
+                    }
+                  }}
+                  activateOnClick={false}
+                  onClick={onAddFolder}
                   radius={24}
                   styles={{
                     root: {
                       border: '2px dashed #cad7e8',
                       background: '#f9fbff',
                       minHeight: 154,
+                      cursor: 'pointer',
                     },
                     inner: {
                       pointerEvents: 'none',
@@ -389,9 +421,9 @@ export function DailyWorkspace({
                       <UploadCloud size={28} color="#98a8bf" />
                     </ThemeIcon>
                     <Text size="lg" c="#7185a3">
-                      拖拽文件到这里，或{' '}
+                      拖拽文件夹到这里，或{' '}
                       <Text span c="#2563eb" fw={800}>
-                        点击浏览
+                        点击选择文件夹
                       </Text>
                     </Text>
                   </Flex>
