@@ -1,60 +1,36 @@
-@import "tailwindcss";
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%) skewX(12deg);
-  }
-  100% {
-    transform: translateX(200%) skewX(12deg);
-  }
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
 }
 
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  background: #f5f7fb;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-@keyframes check-pop {
-  0% {
-    transform: scale(0.5);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+* {
+  box-sizing: border-box;
 }
 
-@utility animate-gradient {
-  animation: gradient 8s ease infinite;
-}
-
-@utility animate-check-pop {
-  animation: check-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-/* 全局滚动条美化 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1; /* Tailwind slate-300 */
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8; /* Tailwind slate-400 */
+  background: #94a3b8;
 }
