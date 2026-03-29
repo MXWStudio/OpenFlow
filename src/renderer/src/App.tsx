@@ -461,7 +461,7 @@ export default function App() {
             onRename={() => void handleRename()}
             onOpenSettings={() => setSettingsOpened(true)}
             onOpenHistory={() => setHistoryOpened(true)}
-            onDropFiles={(files) => void addFolders(dedupeStrings(files.map((file) => file.path).filter((path): path is string => Boolean(path)).map(getDirFromFilePath)))}
+            onDropPaths={(paths) => void addFolders(dedupeStrings(paths))}
           />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
