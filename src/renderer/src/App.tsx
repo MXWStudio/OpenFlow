@@ -1073,10 +1073,10 @@ export default function App() {
               <UploadCloud size={64} className="text-blue-500" strokeWidth={1.5} />
             </div>
             <h2 className="text-4xl font-extrabold text-slate-800 tracking-tight">
-              Drop files anywhere to add
+              {t[language].dropFilesAnywhere}
             </h2>
             <p className="text-slate-500 mt-4 font-medium text-lg">
-              Release to instantly add them to your workspace
+              {t[language].releaseToAdd}
             </p>
           </motion.div>
         )}
