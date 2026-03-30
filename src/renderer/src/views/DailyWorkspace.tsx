@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   ActionIcon,
   Badge,
@@ -116,9 +117,19 @@ function SizeButton({
           fontSize: 15,
           fontWeight: 800,
           paddingInline: 12,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        inner: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
         },
         label: {
           overflow: 'hidden',
+          textAlign: 'center',
         },
       }}
     >
@@ -371,7 +382,7 @@ export function DailyWorkspace({
                 <SectionTitle>上传素材</SectionTitle>
                 <Dropzone
                   onDrop={() => {}} // Handle in onDropCapture
-                  onDropCapture={(e) => {
+                  onDropCapture={(e: React.DragEvent) => {
                     e.preventDefault();
                     e.stopPropagation();
                     const paths: string[] = [];

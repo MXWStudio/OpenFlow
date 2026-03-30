@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Avatar,
@@ -323,6 +323,9 @@ export default function App() {
                   width: 48,
                   height: 48,
                   color: '#b4c0d4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 },
               }}
             >
@@ -335,6 +338,9 @@ export default function App() {
                   width: 48,
                   height: 48,
                   color: '#b4c0d4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 },
               }}
             >
@@ -349,31 +355,27 @@ export default function App() {
               const active = activeView === item.key;
 
               return (
-                <Button
+                <button
                   key={item.key}
-                  variant="subtle"
-                  color={item.color as never}
-                  radius={20}
                   onClick={() => setActiveView(item.key)}
-                  styles={{
-                    root: {
-                      position: 'relative',
-                      width: 72,
-                      height: 72,
-                      padding: 0,
-                      flexDirection: 'column',
-                      gap: 6,
-                      color: active ? '#e2eeff' : '#a8b5c9',
-                      background: active ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
-                      fontWeight: 900,
-                    },
-                    label: {
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 6,
-                      lineHeight: 1,
-                    },
+                  style={{
+                    position: 'relative',
+                    width: 72,
+                    height: 72,
+                    padding: 0,
+                    border: 'none',
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    background: active ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
+                    color: active ? '#e2eeff' : '#a8b5c9',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    fontFamily: 'inherit',
+                    fontWeight: 900,
+                    outline: 'none',
                   }}
                 >
                   {active && (
@@ -391,10 +393,10 @@ export default function App() {
                     />
                   )}
                   {item.icon}
-                  <Text size="xs" fw={900}>
+                  <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>
                     {item.label}
-                  </Text>
-                </Button>
+                  </span>
+                </button>
               );
             })}
           </Stack>
@@ -410,6 +412,9 @@ export default function App() {
                     width: 46,
                     height: 46,
                     color: '#a8b5c9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   },
                 }}
               >
@@ -424,6 +429,9 @@ export default function App() {
                   width: 46,
                   height: 46,
                   color: '#a8b5c9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 },
               }}
             >
