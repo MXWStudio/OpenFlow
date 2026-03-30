@@ -47,8 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         imageSpecial: any[];
       },
       projectName: string,
-      producer?: string
-    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer }),
+      producer?: string,
+      isSpecialEnabled?: boolean
+    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer, isSpecialEnabled }),
   },
 
   // ────────────────────────────────────────────────

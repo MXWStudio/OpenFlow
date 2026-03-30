@@ -84,9 +84,9 @@ export const TOKEN_OPTIONS: Array<{ value: TokenType; label: string }> = [
 
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   videoRegular: '常规视频',
-  videoSpecial: '创意视频',
+  videoSpecial: '特殊版块',
   imageRegular: '常规图片',
-  imageSpecial: '创意图片',
+  imageSpecial: '特殊版块',
 };
 
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
@@ -104,8 +104,8 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
       { type: 'Sequence' },
     ],
     videoSpecial: [
-      { type: 'CleanProjectName' },
-      { type: 'CustomText', value: '激励时间' },
+      { type: 'ProjectName' },
+      { type: 'CustomText', value: '激励视频' },
       { type: 'Date' },
       { type: 'AspectRatio' },
       { type: 'Producer' },

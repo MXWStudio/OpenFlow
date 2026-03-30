@@ -13,6 +13,7 @@ import {
   SimpleGrid,
   Stack,
   Table,
+  Switch,
   Text,
   TextInput,
   ThemeIcon,
@@ -54,7 +55,9 @@ interface DailyWorkspaceProps {
   hasIssues: boolean;
   canRename: boolean;
   isTableExpanded: boolean;
+  isSpecialEnabled: boolean;
   onToggleTable: () => void;
+  onToggleSpecialEnabled: (enabled: boolean) => void;
   onToggleSize: (size: string) => void;
   onChangeJson: () => void;
   onInitFolders: () => void;
@@ -153,7 +156,9 @@ export function DailyWorkspace({
   hasIssues,
   canRename,
   isTableExpanded,
+  isSpecialEnabled,
   onToggleTable,
+  onToggleSpecialEnabled,
   onToggleSize,
   onChangeJson,
   onInitFolders,
@@ -443,6 +448,17 @@ export function DailyWorkspace({
 
               <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
                 <SectionTitle>快捷操作</SectionTitle>
+                <Group justify="space-between" mb="md">
+                  <Switch
+                    label="启用创意比特 (特殊视频)"
+                    checked={isSpecialEnabled}
+                    onChange={(e) => onToggleSpecialEnabled(e.currentTarget.checked)}
+                    styles={{
+                      track: { cursor: 'pointer' },
+                      label: { fontWeight: 800, color: '#425672' }
+                    }}
+                  />
+                </Group>
                 <Group gap={26}>
                   <Button
                     variant="subtle"
