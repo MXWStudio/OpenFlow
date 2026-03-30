@@ -72,6 +72,7 @@ export default function App() {
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isSpecialEnabled, setIsSpecialEnabled] = useState(false);
   const [isChangingJson, setIsChangingJson] = useState(false);
   const [isDraggingGlobally, setIsDraggingGlobally] = useState(false);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
@@ -248,7 +249,7 @@ export default function App() {
       const storedTemplates = await window.electronAPI.store.get<WorkflowSettings['renameTemplates']>('renameTemplates');
       const templates = storedTemplates || workflowSettings.renameTemplates;
       const validFiles = validationResults.filter((item) => item.status === 'valid');
-      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, producerName);
+      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, producerName, isSpecialEnabled);
       const successCount = results.filter((item) => item.success).length;
       const failed = results.filter((item) => !item.success);
       if (failed.length === 0) notify('green', '重命名完成', `${successCount} 个文件`);
@@ -446,6 +447,8 @@ export default function App() {
             isChangingJson={isChangingJson}
             isValidating={isValidating}
             isRenaming={isRenaming}
+            isSpecialEnabled={isSpecialEnabled}
+            onToggleSpecialEnabled={setIsSpecialEnabled}
             hasValidated={hasValidated}
             hasIssues={hasIssues}
             canRename={canRename}
@@ -520,53 +523,67 @@ export default function App() {
                 <Stack gap="lg">
                   <TextInput label="默认输出目录" value={workflowSettings.defaultOutputDir} onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: event.currentTarget.value }))} />
                   <Code block>{jsonFileName || '未加载 JSON'}</Code>
-                  {(Object.keys(workflowSettings.renameTemplates) as TemplateKey[]).map((templateKey) => (
-                    <Card key={templateKey} withBorder radius="xl">
-                      <Stack gap="md">
-                        <Text fw={700}>{TEMPLATE_LABELS[templateKey]}</Text>
-                        {workflowSettings.renameTemplates[templateKey].map((token, index) => (
-                          <Group key={`${templateKey}-${index}`} align="flex-end" wrap="nowrap">
-                            <Select
-                              data={TOKEN_OPTIONS}
-                              value={token.type}
-                              onChange={(value) => {
-                                if (!value) return;
-                                setWorkflowSettings((prev) => ({
-                                  ...prev,
-                                  renameTemplates: {
-                                    ...prev.renameTemplates,
-                                    [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
-                                      itemIndex === index ? { ...item, type: value as TokenType, value: value === 'CustomText' ? item.value : undefined } : item,
-                                    ),
-                                  },
-                                }));
-                              }}
-                              style={{ flex: 1 }}
-                            />
-                            {token.type === 'CustomText' && (
-                              <TextInput
-                                value={token.value || ''}
-                                onChange={(event) => {
-                                  const value = event.currentTarget.value;
-                                  setWorkflowSettings((prev) => ({
-                                    ...prev,
-                                    renameTemplates: {
-                                      ...prev.renameTemplates,
-                                      [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, value } : item,
-                                      ),
-                                    },
-                                  }));
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                            )}
-                          </Group>
-                        ))}
-                        <Code>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey], producerName)}</Code>
-                      </Stack>
-                    </Card>
-                  ))}
+
+                  {['视频版块', '图片版块'].map((sectionTitle) => {
+                    const keys: TemplateKey[] = sectionTitle === '视频版块'
+                      ? ['videoRegular', 'videoSpecial']
+                      : ['imageRegular', 'imageSpecial'];
+
+                    return (
+                      <Box key={sectionTitle}>
+                        <Title order={4} mb="md" c="#22324c">{sectionTitle}</Title>
+                        <Stack gap="md">
+                          {keys.map((templateKey) => (
+                            <Card key={templateKey} withBorder radius="xl">
+                              <Stack gap="md">
+                                <Text fw={700}>{TEMPLATE_LABELS[templateKey]}</Text>
+                                {workflowSettings.renameTemplates[templateKey].map((token, index) => (
+                                  <Group key={`${templateKey}-${index}`} align="flex-end" wrap="nowrap">
+                                    <Select
+                                      data={TOKEN_OPTIONS}
+                                      value={token.type}
+                                      onChange={(value) => {
+                                        if (!value) return;
+                                        setWorkflowSettings((prev) => ({
+                                          ...prev,
+                                          renameTemplates: {
+                                            ...prev.renameTemplates,
+                                            [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
+                                              itemIndex === index ? { ...item, type: value as TokenType, value: value === 'CustomText' ? item.value : undefined } : item,
+                                            ),
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                    {token.type === 'CustomText' && (
+                                      <TextInput
+                                        placeholder="输入文本"
+                                        value={token.value || ''}
+                                        onChange={(event) => {
+                                          const value = event.currentTarget.value;
+                                          setWorkflowSettings((prev) => ({
+                                            ...prev,
+                                            renameTemplates: {
+                                              ...prev.renameTemplates,
+                                              [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
+                                                itemIndex === index ? { ...item, value } : item,
+                                              ),
+                                            },
+                                          }));
+                                        }}
+                                      />
+                                    )}
+                                  </Group>
+                                ))}
+                                <Code>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey], producerName)}</Code>
+                              </Stack>
+                            </Card>
+                          ))}
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+
                 </Stack>
               </Tabs.Panel>
               <Tabs.Panel value="integrations" pt="lg">

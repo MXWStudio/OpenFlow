@@ -624,7 +624,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
  * fs:executeRename
  * 批量重命名文件，自动处理同名冲突（追加 _1, _2...）
  */
-ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer }) => {
+ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer, isSpecialEnabled }) => {
   const results: RenameResult[] = []
 
   // Date in YYYYMMDD format
@@ -642,7 +642,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
 
     // 优先使用 file.workspaceProjectName (被拖入的工作区文件夹名)，后备使用全局 projectName
     const currentProjectName = file.workspaceProjectName || projectName || ''
-    const isSpecial = currentProjectName.includes('创意比特') || currentProjectName.includes('（创意比特）') || currentProjectName.includes('(创意比特)')
+    const isSpecial = isSpecialEnabled || currentProjectName.includes('创意比特') || currentProjectName.includes('（创意比特）') || currentProjectName.includes('(创意比特)')
     const cleanProjectName = currentProjectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '')
 
     const originalExt = file.ext || extname(file.filePath)
