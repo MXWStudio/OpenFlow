@@ -176,21 +176,21 @@ export function DailyWorkspace({
       ? validationResults
       : [
           {
-            fileName: 'Sample_Banner_01',
+            fileName: '暂无提示词内容，请添加',
             filePath: '',
-            folderName: 'Downloads',
-            ext: '.jpg',
-            fileSize: 2.4 * 1024 * 1024,
+            folderName: 'Prompt',
+            ext: '.txt',
+            fileSize: 0,
             actualWidth: 0,
             actualHeight: 0,
             status: 'missing' as const,
           },
           {
-            fileName: 'Hero_Image_Vertical',
+            fileName: '提示说明配置',
             filePath: '',
-            folderName: 'Desktop',
-            ext: '.png',
-            fileSize: 1.8 * 1024 * 1024,
+            folderName: 'Config',
+            ext: '.json',
+            fileSize: 0,
             actualWidth: 0,
             actualHeight: 0,
             status: 'missing' as const,
@@ -424,7 +424,8 @@ export function DailyWorkspace({
                     root: {
                       border: '2px dashed #cad7e8',
                       background: '#f9fbff',
-                      minHeight: 154,
+                      minHeight: folderPaths.length > 0 ? 80 : 154,
+                      transition: 'min-height 0.2s ease',
                       cursor: 'pointer',
                     },
                     inner: {
@@ -432,11 +433,11 @@ export function DailyWorkspace({
                     },
                   }}
                 >
-                  <Flex direction="column" align="center" justify="center" mih={154} gap="sm">
-                    <ThemeIcon variant="transparent" color="gray" size={48}>
-                      <UploadCloud size={28} color="#98a8bf" />
+                  <Flex direction={folderPaths.length > 0 ? "row" : "column"} align="center" justify="center" mih={folderPaths.length > 0 ? 80 : 154} gap="sm" style={{ transition: 'min-height 0.2s ease' }}>
+                    <ThemeIcon variant="transparent" color="gray" size={folderPaths.length > 0 ? 32 : 48}>
+                      <UploadCloud size={folderPaths.length > 0 ? 24 : 28} color="#98a8bf" />
                     </ThemeIcon>
-                    <Text size="lg" c="#7185a3">
+                    <Text size={folderPaths.length > 0 ? "md" : "lg"} c="#7185a3">
                       拖拽文件夹到这里，或{' '}
                       <Text span c="#2563eb" fw={800}>
                         点击选择文件夹

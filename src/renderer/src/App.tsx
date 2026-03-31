@@ -255,7 +255,11 @@ export default function App() {
       if (failed.length === 0) notify('green', '重命名完成', `${successCount} 个文件`);
       else notify('red', '重命名部分失败', failed[0]?.error || '部分文件可能被占用。');
       if (successCount > 0) {
-        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: primaryProjectName || 'Untitled Project', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
+        const folderNames = folderPaths.map((p) => {
+          const sep = p.includes('\\') ? '\\' : '/';
+          return p.substring(p.lastIndexOf(sep) + 1);
+        }).join(', ');
+        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
         setFolderPaths([]);
@@ -544,7 +548,12 @@ export default function App() {
                           {keys.map((templateKey) => (
                             <Card key={templateKey} withBorder radius="xl">
                               <Stack gap="md">
-                                <Text fw={700}>{TEMPLATE_LABELS[templateKey]}</Text>
+                                <Group align="baseline" gap="xs">
+                                  <Text fw={700}>{TEMPLATE_LABELS[templateKey]}</Text>
+                                  {(templateKey === 'videoSpecial' || templateKey === 'imageSpecial') && (
+                                    <Text size="xs" c="dimmed" fw={500}>• 创意比特</Text>
+                                  )}
+                                </Group>
                                 {workflowSettings.renameTemplates[templateKey].map((token, index) => (
                                   <Group key={`${templateKey}-${index}`} align="flex-end" wrap="nowrap">
                                     <Select
