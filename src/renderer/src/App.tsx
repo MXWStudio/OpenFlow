@@ -76,6 +76,7 @@ export default function App() {
   const [isChangingJson, setIsChangingJson] = useState(false);
   const [isDraggingGlobally, setIsDraggingGlobally] = useState(false);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
+  const [lastRenamedPaths, setLastRenamedPaths] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
   const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
   const [jsonFileName, setJsonFileName] = useState('');
@@ -186,6 +187,7 @@ export default function App() {
     const uniquePaths = dedupeStrings(paths);
     if (!uniquePaths.length) return;
     setFolderPaths((prev) => dedupeStrings([...prev, ...uniquePaths]));
+    setLastRenamedPaths([]);
     resetValidationState();
     try {
       const detectedSizes = await window.electronAPI.fs.readProjectSizes(uniquePaths);
@@ -262,6 +264,7 @@ export default function App() {
         const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
+        setLastRenamedPaths([...folderPaths]);
         setFolderPaths([]);
         resetValidationState();
       }
@@ -460,6 +463,7 @@ export default function App() {
             isValidating={isValidating}
             isRenaming={isRenaming}
             isSpecialEnabled={isSpecialEnabled}
+            lastRenamedPaths={lastRenamedPaths}
             onToggleSpecialEnabled={setIsSpecialEnabled}
             hasValidated={hasValidated}
             hasIssues={hasIssues}
@@ -470,13 +474,18 @@ export default function App() {
             onChangeJson={() => void handleChangeJson()}
             onInitFolders={() => void handleInitFolders()}
             onAddFolder={() => void handleAddFolder()}
-            onClearFolders={() => { setFolderPaths([]); setSelectedSizes([]); resetValidationState(); }}
+            onClearFolders={() => { setFolderPaths([]); setLastRenamedPaths([]); setSelectedSizes([]); resetValidationState(); }}
             onRemoveFolder={(path) => { setFolderPaths((prev) => prev.filter((item) => item !== path)); resetValidationState(); }}
             onValidate={() => void handleValidate()}
             onRename={() => void handleRename()}
             onOpenSettings={() => setSettingsOpened(true)}
             onOpenHistory={() => setHistoryOpened(true)}
             onDropPaths={(paths) => void addFolders(dedupeStrings(paths))}
+            onOpenFolder={(path) => {
+              if (window.electronAPI?.shell?.openPath) {
+                window.electronAPI.shell.openPath(path);
+              }
+            }}
           />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>

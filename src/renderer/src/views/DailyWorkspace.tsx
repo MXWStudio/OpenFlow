@@ -34,6 +34,7 @@ import {
   LayoutGrid,
   Play,
   Settings,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from 'lucide-react';
@@ -56,6 +57,7 @@ interface DailyWorkspaceProps {
   canRename: boolean;
   isTableExpanded: boolean;
   isSpecialEnabled: boolean;
+  lastRenamedPaths: string[];
   onToggleTable: () => void;
   onToggleSpecialEnabled: (enabled: boolean) => void;
   onToggleSize: (size: string) => void;
@@ -69,6 +71,7 @@ interface DailyWorkspaceProps {
   onOpenSettings: () => void;
   onOpenHistory: () => void;
   onDropPaths: (paths: string[]) => void;
+  onOpenFolder: (path: string) => void;
 }
 
 const cardStyle = {
@@ -157,6 +160,7 @@ export function DailyWorkspace({
   canRename,
   isTableExpanded,
   isSpecialEnabled,
+  lastRenamedPaths,
   onToggleTable,
   onToggleSpecialEnabled,
   onToggleSize,
@@ -170,6 +174,7 @@ export function DailyWorkspace({
   onOpenSettings,
   onOpenHistory,
   onDropPaths,
+  onOpenFolder,
 }: DailyWorkspaceProps) {
   const previewRows =
     validationResults.length > 0
@@ -197,13 +202,17 @@ export function DailyWorkspace({
           },
         ];
 
+  const hasFinishedRenaming = lastRenamedPaths.length > 0 && folderPaths.length === 0 && !isValidating && !hasValidated;
+
   const statusLabel = isValidating
     ? '校验进行中'
     : hasIssues
       ? '校验异常'
       : hasValidated
         ? '校验通过'
-        : '系统就绪';
+        : hasFinishedRenaming
+          ? '处理完成'
+          : '系统就绪';
 
   const statusTitle = isValidating
     ? '正在校验。'
@@ -211,13 +220,17 @@ export function DailyWorkspace({
       ? '存在异常。'
       : hasValidated
         ? '校验完成。'
-        : '准备就绪。';
+        : hasFinishedRenaming
+          ? '重命名完成。'
+          : '准备就绪。';
 
   const statusDescription = isValidating
     ? '系统正在分析素材尺寸和文件状态，请稍候。'
     : hasIssues
       ? '请先处理异常素材，再执行重命名流程。'
-      : '工作区已初始化。将素材拖入上方区域以开始自动化流程。';
+      : hasFinishedRenaming
+        ? '所有的素材已成功重命名。'
+        : '工作区已初始化。将素材拖入上方区域以开始自动化流程。';
 
   return (
     <Flex h="100%" style={{ background: 'linear-gradient(180deg, #f6f8fc 0%, #f8fbff 100%)' }}>
@@ -449,28 +462,32 @@ export function DailyWorkspace({
 
               <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
                 <SectionTitle>快捷操作</SectionTitle>
-                <Group justify="space-between" mb="md">
-                  <Switch
-                    label="启用创意比特 (特殊视频)"
-                    checked={isSpecialEnabled}
-                    onChange={(e) => onToggleSpecialEnabled(e.currentTarget.checked)}
-                    styles={{
-                      track: { cursor: 'pointer' },
-                      label: { fontWeight: 800, color: '#425672' }
-                    }}
-                  />
-                </Group>
-                <Group gap={26}>
+                <SimpleGrid cols={3} spacing="md" mb="md">
                   <Button
-                    variant="subtle"
-                    color="gray"
-                    leftSection={<FolderPlus size={16} />}
-                    onClick={onAddFolder}
+                    variant={isSpecialEnabled ? "filled" : "light"}
+                    color={isSpecialEnabled ? "violet" : "gray"}
+                    leftSection={<Sparkles size={16} />}
+                    onClick={() => onToggleSpecialEnabled(!isSpecialEnabled)}
+                    radius="xl"
+                    size="md"
                     styles={{
                       root: {
-                        paddingInline: 0,
-                        color: '#425672',
-                        fontSize: 16,
+                        fontWeight: 800,
+                        transition: 'all 0.2s ease',
+                      },
+                    }}
+                  >
+                    创意比特
+                  </Button>
+                  <Button
+                    variant="light"
+                    color="blue"
+                    leftSection={<FolderPlus size={16} />}
+                    onClick={onAddFolder}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
                         fontWeight: 800,
                       },
                     }}
@@ -478,22 +495,21 @@ export function DailyWorkspace({
                     添加文件夹
                   </Button>
                   <Button
-                    variant="subtle"
-                    color="gray"
+                    variant="light"
+                    color="red"
                     leftSection={<Trash2 size={16} />}
                     onClick={onClearFolders}
+                    radius="xl"
+                    size="md"
                     styles={{
                       root: {
-                        paddingInline: 0,
-                        color: '#425672',
-                        fontSize: 16,
                         fontWeight: 800,
                       },
                     }}
                   >
                     清空列表
                   </Button>
-                </Group>
+                </SimpleGrid>
 
                 {folderPaths.length > 0 && (
                   <Stack gap="sm" mt="md">
@@ -567,6 +583,29 @@ export function DailyWorkspace({
                       <Text c="#64748b" size="lg" fw={500}>
                         {statusDescription}
                       </Text>
+
+                      {hasFinishedRenaming && (
+                        <Button
+                          mt="xl"
+                          size="md"
+                          radius="xl"
+                          variant="light"
+                          color="blue"
+                          leftSection={<FolderOpen size={18} />}
+                          onClick={() => {
+                            if (lastRenamedPaths.length > 0) {
+                              onOpenFolder(lastRenamedPaths[0]);
+                            }
+                          }}
+                          styles={{
+                            root: {
+                              fontWeight: 800,
+                            }
+                          }}
+                        >
+                          打开对应文件夹
+                        </Button>
+                      )}
                     </Box>
 
                     <Paper

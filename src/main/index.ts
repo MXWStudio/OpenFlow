@@ -718,6 +718,17 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   return results
 })
 
+// ─── IPC: Shell ──────────────────────────────────────────
+
+ipcMain.handle('shell:openPath', async (_, path: string) => {
+  try {
+    const errorMsg = await shell.openPath(path)
+    return errorMsg || 'success'
+  } catch (error) {
+    return String(error)
+  }
+})
+
 // ─── IPC: 持久化配置 ─────────────────────────────────────
 
 ipcMain.handle('store:get', async (_, key: string) => {
