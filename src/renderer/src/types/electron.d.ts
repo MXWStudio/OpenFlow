@@ -159,6 +159,11 @@ export interface ElectronAPI {
     maximize: () => void
     close: () => void
   }
+
+  /** Shell 调用系统能力 */
+  shell: {
+    openPath: (path: string) => Promise<string>
+  }
 }
 
 /** 扩展全局 Window 类型，使 window.electronAPI 有类型提示 */

@@ -77,4 +77,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
   },
+
+  // ────────────────────────────────────────────────
+  // Shell API
+  // ────────────────────────────────────────────────
+  shell: {
+    openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
+  },
 })
