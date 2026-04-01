@@ -13,7 +13,7 @@ import {
   Title,
   Badge,
 } from '@mantine/core';
-import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon } from 'lucide-react';
+import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, CheckCircle2 } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { WorkflowSettings, formatBytes } from '../appState';
 
@@ -39,6 +39,8 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const [lastOrganizedDir, setLastOrganizedDir] = useState<string>('');
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
 
   const { organizerSourceDir, organizerDestDir, organizerFormats } = workflowSettings;
 
@@ -62,6 +64,20 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
         notifications.show({ color: 'blue', title: '扫描完成', message: '未找到符合格式要求的素材文件。' });
       } else {
         notifications.show({ color: 'green', title: '扫描完成', message: `共发现 ${results.length} 个文件待整理。` });
+
+        // Asynchronously load image previews for safety in Electron
+        results.forEach(async (file) => {
+          if (file.ext !== '.mp4') {
+            try {
+              const base64 = await window.electronAPI.fs.readImageBase64(file.filePath);
+              if (base64) {
+                setImagePreviews((prev) => ({ ...prev, [file.id]: base64 }));
+              }
+            } catch (err) {
+              console.error('Failed to read image for preview:', err);
+            }
+          }
+        });
       }
     } catch (err) {
       notifications.show({ color: 'red', title: '扫描失败', message: String(err) });
@@ -112,6 +128,9 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
       // Remove successful files from the list
       const successfulIds = new Set(response.results?.filter(r => r.success).map(r => r.id));
       setFiles(prev => prev.filter(f => !successfulIds.has(f.id)));
+      if (successCount > 0) {
+        setLastOrganizedDir(organizerDestDir);
+      }
     } catch (err) {
       notifications.show({ color: 'red', title: '整理过程发生错误', message: String(err) });
     } finally {
@@ -165,19 +184,53 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
         </Flex>
       </Box>
 
-      <ScrollArea className="app-scroll" style={{ flex: 1, backgroundColor: '#f7f9fc' }} p="xl">
-        {files.length === 0 ? (
-          <Flex h={400} align="center" justify="center" direction="column" gap="md" c="dimmed">
-            <FolderSearch size={64} opacity={0.3} />
-            <Text>点击上方“一键扫描”开始读取下载目录</Text>
-            {(!organizerSourceDir || !organizerDestDir) && (
-              <Button variant="light" size="xs" onClick={onOpenSettings}>去设置目录</Button>
-            )}
-          </Flex>
-        ) : (
-          <Stack gap="md">
-            <Card withBorder radius="md" p="sm" bg="white">
-              <Group justify="space-between">
+      <ScrollArea className="app-scroll" style={{ flex: 1, backgroundColor: '#f7f9fc' }} p="xl" pb={160}>
+        <Stack gap="xl">
+          <Card radius="md" p="xl" withBorder shadow="sm" bg="white">
+            <Group justify="space-between" align="center">
+              <Box>
+                <Group gap={8} mb="sm">
+                  <Box w={8} h={8} style={{ borderRadius: 999, background: isOrganizing || isScanning ? '#3b82f6' : '#10b981' }} />
+                  <Text fw={600} size="sm" c={isOrganizing || isScanning ? 'blue' : 'teal'}>
+                    {isScanning ? '正在扫描...' : isOrganizing ? '正在转移...' : files.length > 0 ? '待确认转移' : lastOrganizedDir ? '转移完成' : '系统就绪'}
+                  </Text>
+                </Group>
+                <Title order={3} c="#1e293b" mb="xs">
+                  {isScanning ? '读取文件中' : isOrganizing ? '文件移动中' : files.length > 0 ? `已发现 ${files.length} 个文件` : lastOrganizedDir ? '所有文件已转移' : '等待扫描'}
+                </Title>
+                <Text c="dimmed" size="sm">
+                  源目录: {organizerSourceDir || '未设置'}<br />
+                  目标目录: {organizerDestDir || '未设置'}
+                </Text>
+              </Box>
+
+              {lastOrganizedDir && files.length === 0 && !isScanning && !isOrganizing && (
+                <Button
+                  size="md"
+                  radius="xl"
+                  variant="light"
+                  color="blue"
+                  leftSection={<FolderOpen size={18} />}
+                  onClick={() => window.electronAPI.shell.openPath(lastOrganizedDir)}
+                >
+                  打开目标文件夹
+                </Button>
+              )}
+            </Group>
+          </Card>
+
+          {files.length === 0 && !lastOrganizedDir ? (
+            <Flex h={300} align="center" justify="center" direction="column" gap="md" c="dimmed">
+              <FolderSearch size={64} opacity={0.3} />
+              <Text>点击右上方“一键扫描”开始读取下载目录</Text>
+              {(!organizerSourceDir || !organizerDestDir) && (
+                <Button variant="light" size="xs" onClick={onOpenSettings}>去设置目录</Button>
+              )}
+            </Flex>
+          ) : files.length > 0 ? (
+            <Stack gap="md">
+              <Card withBorder radius="md" p="sm" bg="white">
+                <Group justify="space-between">
                 <Checkbox
                   label="全选"
                   checked={allSelected}
@@ -204,8 +257,10 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
                     <Box w={64} h={64} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {isVideo ? (
                         <PlayCircle size={32} color="#94a3b8" />
+                      ) : imagePreviews[file.id] ? (
+                        <Image src={imagePreviews[file.id]} width="100%" height="100%" fit="cover" fallbackSrc={<ImageIcon size={32} color="#94a3b8" />} />
                       ) : (
-                         <Image src={`file://${file.filePath}`} width="100%" height="100%" fit="cover" fallbackSrc={<ImageIcon size={32} color="#94a3b8" />} />
+                         <ImageIcon size={32} color="#94a3b8" />
                       )}
                     </Box>
 
@@ -226,8 +281,9 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
                 </Card>
               )
             })}
-          </Stack>
-        )}
+            </Stack>
+          ) : null}
+        </Stack>
       </ScrollArea>
     </Flex>
   );

@@ -760,8 +760,9 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
       const gameName = parts.join('-') // 剩余部分都是游戏名
 
       if (rawRes && gameName) {
-        // 转换分辨率 (如 1080x607 -> 1080-607)
-        const parsedRes = rawRes.replace(/[xX*]/g, '-')
+        // 转换分辨率 (如 1080-607 或 1080X607 -> 1080x607)
+        // 这是为了统一匹配用户已经创建的 1080x607 这种文件夹，防止重复创建 1080-607
+        const parsedRes = rawRes.replace(/[X*\-]/g, 'x')
         results.push({
           id: fullPath, // 使用全路径作为唯一标识
           fileName: name,
@@ -840,6 +841,21 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
 
   return { success: true, results, missingFolders: Array.from(missingFolders) }
 })
+
+/**
+ * fs:readImageBase64
+ * 用于 renderer 中安全显示本地缩略图
+ */
+ipcMain.handle('fs:readImageBase64', async (_, filePath: string) => {
+  try {
+    const data = await fs.readFile(filePath)
+    const ext = extname(filePath).toLowerCase().replace('.', '') || 'jpeg'
+    return `data:image/${ext};base64,${data.toString('base64')}`
+  } catch {
+    return ''
+  }
+})
+
 
 // ─── IPC: Shell ──────────────────────────────────────────
 

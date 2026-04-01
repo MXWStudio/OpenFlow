@@ -146,6 +146,9 @@ export interface ElectronAPI {
 
     /** 执行素材转移 */
     executeOrganize: (files: any[], destDir: string) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
+
+    /** 读取本地图片并返回 Base64，用于缩略图预览 */
+    readImageBase64: (filePath: string) => Promise<string>
   }
 
   /** 本地持久化配置相关（基于 electron-store） */

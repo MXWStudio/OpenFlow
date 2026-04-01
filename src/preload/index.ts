@@ -58,6 +58,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 执行素材转移 */
     executeOrganize: (files: unknown[], destDir: string) =>
       ipcRenderer.invoke('fs:executeOrganize', { files, destDir }),
+
+    /** 读取本地图片并返回 Base64，用于缩略图预览 */
+    readImageBase64: (filePath: string) =>
+      ipcRenderer.invoke('fs:readImageBase64', filePath),
   },
 
   // ────────────────────────────────────────────────
