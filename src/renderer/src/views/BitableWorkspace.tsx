@@ -409,7 +409,7 @@ export function BitableWorkspace() {
                                             dataKey="value"
                                         >
                                             {pieData.map((entry, index) => (
-                                                <Cell key={\`cell-\${index}\`} fill={COLORS[index % COLORS.length]} />
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <RechartsTooltip />
