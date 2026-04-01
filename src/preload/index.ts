@@ -50,6 +50,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       producer?: string,
       isSpecialEnabled?: boolean
     ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer, isSpecialEnabled }),
+
+    /** 扫描素材整理目录 */
+    scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) =>
+      ipcRenderer.invoke('fs:scanOrganizerFolder', { sourceDir, allowedFormats }),
+
+    /** 执行素材转移 */
+    executeOrganize: (files: unknown[], destDir: string) =>
+      ipcRenderer.invoke('fs:executeOrganize', { files, destDir }),
   },
 
   // ────────────────────────────────────────────────

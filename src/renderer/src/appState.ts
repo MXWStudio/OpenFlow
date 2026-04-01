@@ -20,6 +20,9 @@ export interface TemplateToken {
 export interface WorkflowSettings {
   defaultOutputDir: string;
   renameTemplates: Record<TemplateKey, TemplateToken[]>;
+  organizerSourceDir: string;
+  organizerDestDir: string;
+  organizerFormats: string[];
 }
 
 export interface UserInfo {
@@ -93,6 +96,9 @@ export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: ''
 export const DEFAULT_API_KEYS: ApiKeys = { geminiKey: '', sdPath: '' };
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
   defaultOutputDir: '',
+  organizerSourceDir: '',
+  organizerDestDir: '',
+  organizerFormats: ['jpg', 'mp4'],
   renameTemplates: {
     videoRegular: [
       { type: 'CustomText', value: 'RS' },

@@ -720,6 +720,127 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   return results
 })
 
+/**
+ * fs:scanOrganizerFolder
+ * 扫描下载目录，匹配 游戏名-分辨率-时间-序号.后缀，并返回预览列表
+ */
+ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }) => {
+  const results = []
+  if (!sourceDir || !(await fs.pathExists(sourceDir))) return results
+
+  let names = []
+  try {
+    names = await fs.readdir(sourceDir)
+  } catch (err) {
+    return results
+  }
+
+  const allowedExts = new Set((allowedFormats || []).map((f: string) => f.toLowerCase()))
+
+  for (const name of names) {
+    const ext = extname(name).toLowerCase()
+    // 检查是否在允许的后缀中 (去掉点的名称比较，比如 .jpg -> jpg)
+    if (!allowedExts.has(ext.replace('.', ''))) continue
+
+    const fullPath = join(sourceDir, name)
+    const stat = await fs.stat(fullPath)
+    if (!stat.isFile()) continue
+
+    const baseName = basename(name, ext)
+    // 解析规则: 游戏名-分辨率-时间-序号
+    // 分辨率支持 x 或 * (1080x607 -> 1080-607)
+    // 但实际要求转换成分辨率用 '-' 作为分隔符
+    const parts = baseName.split('-')
+    if (parts.length >= 4) {
+      // 假设格式为：GameName-1080x607-20260401-19
+      // 注意：游戏名本身可能包含 '-'
+      const sequence = parts.pop()
+      const date = parts.pop()
+      const rawRes = parts.pop()
+      const gameName = parts.join('-') // 剩余部分都是游戏名
+
+      if (rawRes && gameName) {
+        // 转换分辨率 (如 1080x607 -> 1080-607)
+        const parsedRes = rawRes.replace(/[xX*]/g, '-')
+        results.push({
+          id: fullPath, // 使用全路径作为唯一标识
+          fileName: name,
+          filePath: fullPath,
+          gameName,
+          resolution: parsedRes,
+          date,
+          sequence,
+          ext,
+          size: stat.size,
+          selected: true // 默认选中
+        })
+      }
+    }
+  }
+
+  return results
+})
+
+/**
+ * fs:executeOrganize
+ * 执行整理移动：从扫描结果列表中，移动到目标目录/游戏名/分辨率/
+ */
+ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
+  if (!files || files.length === 0) return { success: false, error: '没有需要移动的文件' }
+  const results = []
+  if (!destDir || !(await fs.pathExists(destDir))) {
+    return { success: false, error: '目标转移目录不存在' }
+  }
+
+  // YYYYMMDD 用于冲突时追加日期
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const today = `${year}${month}${day}`
+
+  let missingFolders = new Set<string>()
+
+  for (const file of files) {
+    if (!file.selected || !file.filePath || !file.gameName || !file.resolution) continue
+
+    const targetFolder = join(destDir, file.gameName, file.resolution)
+
+    // 如果目标文件夹不存在，记录并创建
+    if (!(await fs.pathExists(targetFolder))) {
+      missingFolders.add(`${file.gameName}/${file.resolution}`)
+      await fs.ensureDir(targetFolder)
+    }
+
+    let targetFileName = file.fileName
+    let targetFilePath = join(targetFolder, targetFileName)
+
+    // 冲突处理：如果同名，自动加今日时间：yyyymmdd
+    // 如果加了时间还冲突，就再加序号
+    if (await fs.pathExists(targetFilePath)) {
+      const baseName = basename(file.fileName, file.ext)
+      targetFileName = `${baseName}-${today}${file.ext}`
+      targetFilePath = join(targetFolder, targetFileName)
+
+      let counter = 1
+      while (await fs.pathExists(targetFilePath)) {
+        targetFileName = `${baseName}-${today}-${counter}${file.ext}`
+        targetFilePath = join(targetFolder, targetFileName)
+        counter++
+      }
+    }
+
+    try {
+      await fs.move(file.filePath, targetFilePath)
+      results.push({ id: file.id, success: true, targetPath: targetFilePath })
+    } catch (err) {
+      results.push({ id: file.id, success: false, error: String(err) })
+    }
+  }
+
+  return { success: true, results, missingFolders: Array.from(missingFolders) }
+})
+
 // ─── IPC: Shell ──────────────────────────────────────────
 
 ipcMain.handle('shell:openPath', async (_, path: string) => {

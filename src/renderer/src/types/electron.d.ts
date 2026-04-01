@@ -137,8 +137,15 @@ export interface ElectronAPI {
         imageSpecial: any[];
       },
       projectName: string,
-      producer?: string
+      producer?: string,
+      isSpecialEnabled?: boolean
     ) => Promise<RenameResult[]>
+
+    /** 扫描素材整理目录 */
+    scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) => Promise<any[]>
+
+    /** 执行素材转移 */
+    executeOrganize: (files: any[], destDir: string) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
   }
 
   /** 本地持久化配置相关（基于 electron-store） */
