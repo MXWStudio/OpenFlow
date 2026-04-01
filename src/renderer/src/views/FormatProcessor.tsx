@@ -297,7 +297,10 @@ export function FormatProcessor() {
                 <Checkbox
                   label="调整分辨率"
                   checked={config.resize.enabled}
-                  onChange={(e) => setConfig(prev => ({ ...prev, resize: { ...prev.resize, enabled: e.currentTarget.checked } }))}
+                  onChange={(e) => {
+                    const checked = e.currentTarget.checked;
+                    setConfig(prev => ({ ...prev, resize: { ...prev.resize, enabled: checked } }));
+                  }}
                   mb="sm"
                   fw={500}
                 />
@@ -374,7 +377,10 @@ export function FormatProcessor() {
                        label="使用动作拼接文件夹名"
                        description={config.useDynamicFolderName ? `例如: openflow(${buildDynamicFolderName()})处理` : "关闭时默认使用 'openflow处理'"}
                        checked={config.useDynamicFolderName}
-                       onChange={(e) => setConfig(prev => ({ ...prev, useDynamicFolderName: e.currentTarget.checked }))}
+                       onChange={(e) => {
+                         const checked = e.currentTarget.checked;
+                         setConfig(prev => ({ ...prev, useDynamicFolderName: checked }));
+                       }}
                     />
                     <Box>
                        <Text size="sm" fw={500} mb={4}>自定义导出目录</Text>
