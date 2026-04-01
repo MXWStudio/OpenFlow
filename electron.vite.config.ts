@@ -7,14 +7,7 @@ export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
     plugins: [
-      // 将所有 node_modules 外部化（不打包进 bundle，运行时从 node_modules 加载）
-      externalizeDepsPlugin({
-feat/format-processor-5597621160542139660
-        exclude: ['pinyin-pro', 'xlsx', 'sharp', 'fluent-ffmpeg', '@ffmpeg-installer/ffmpeg']
-
-        exclude: ['pinyin-pro', 'xlsx']
-    main
-      }),
+      externalizeDepsPlugin(),
     ],
     resolve: {
       alias: {
