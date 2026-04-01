@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Code,
   Drawer,
   Flex,
@@ -41,6 +42,7 @@ import {
   Trash2,
   User,
   Workflow,
+  FolderSearch,
 } from 'lucide-react';
 import {
   buildTemplatePreview,
@@ -62,8 +64,9 @@ import {
   type WorkflowSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
+import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 
-type ViewKey = 'daily' | 'ai' | 'bitable';
+type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable';
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('daily');
@@ -132,6 +135,9 @@ export default function App() {
         setWorkflowSettings({
           defaultOutputDir: stored.defaultOutputDir ?? '',
           renameTemplates: stored.renameTemplates ?? DEFAULT_WORKFLOW.renameTemplates,
+          organizerSourceDir: stored.organizerSourceDir ?? DEFAULT_WORKFLOW.organizerSourceDir,
+          organizerDestDir: stored.organizerDestDir ?? DEFAULT_WORKFLOW.organizerDestDir,
+          organizerFormats: stored.organizerFormats ?? DEFAULT_WORKFLOW.organizerFormats,
         });
       }
       if (config.renameTemplates) {
@@ -287,6 +293,7 @@ export default function App() {
 
   const navItems: Array<{ key: ViewKey; label: string; icon: React.ReactNode; color: string }> = [
     { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
+    { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
     { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
     { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
   ];
@@ -487,6 +494,14 @@ export default function App() {
               }
             }}
           />
+        ) : activeView === 'organizer' ? (
+          <OrganizerWorkspace
+            workflowSettings={workflowSettings}
+            onOpenSettings={() => {
+              setSettingsTab('workflow');
+              setSettingsOpened(true);
+            }}
+          />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
             <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>
@@ -543,6 +558,61 @@ export default function App() {
               <Tabs.Panel value="workflow" pt="lg">
                 <Stack gap="lg">
                   <TextInput label="默认输出目录" value={workflowSettings.defaultOutputDir} onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: event.currentTarget.value }))} />
+
+                  <Box>
+                    <Title order={4} mb="sm" c="#22324c">素材整理配置</Title>
+                    <Stack gap="md">
+                      <TextInput
+                        label="默认扫描目录 (Source)"
+                        placeholder="例如: C:\Users\xxx\Downloads"
+                        value={workflowSettings.organizerSourceDir}
+                        onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, organizerSourceDir: event.currentTarget.value }))}
+                        rightSection={
+                          <ActionIcon onClick={async () => {
+                            const folderPath = await window.electronAPI.dialog.selectFolder();
+                            if (folderPath) setWorkflowSettings(prev => ({ ...prev, organizerSourceDir: folderPath }));
+                          }}>
+                            <FolderSearch size={16} />
+                          </ActionIcon>
+                        }
+                      />
+                      <TextInput
+                        label="素材转移目录 (Destination)"
+                        placeholder="例如: D:\Assets\Games"
+                        value={workflowSettings.organizerDestDir}
+                        onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, organizerDestDir: event.currentTarget.value }))}
+                        rightSection={
+                          <ActionIcon onClick={async () => {
+                            const folderPath = await window.electronAPI.dialog.selectFolder();
+                            if (folderPath) setWorkflowSettings(prev => ({ ...prev, organizerDestDir: folderPath }));
+                          }}>
+                            <FolderSearch size={16} />
+                          </ActionIcon>
+                        }
+                      />
+                      <Group gap="md">
+                        <Text size="sm" fw={500}>支持格式:</Text>
+                        {['jpg', 'mp4', 'png'].map(fmt => (
+                          <Checkbox
+                            key={fmt}
+                            label={fmt}
+                            checked={workflowSettings.organizerFormats?.includes(fmt)}
+                            onChange={(e) => {
+                              const checked = e.currentTarget.checked;
+                              setWorkflowSettings(prev => {
+                                const current = prev.organizerFormats || [];
+                                return {
+                                  ...prev,
+                                  organizerFormats: checked ? [...current, fmt] : current.filter(f => f !== fmt)
+                                };
+                              });
+                            }}
+                          />
+                        ))}
+                      </Group>
+                    </Stack>
+                  </Box>
+
                   <Code block>{jsonFileName || '未加载 JSON'}</Code>
 
                   {['视频版块', '图片版块'].map((sectionTitle) => {
