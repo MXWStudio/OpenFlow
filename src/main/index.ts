@@ -12,8 +12,10 @@ import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
 // @ts-expect-error 无类型包
 import ffprobeStatic from 'ffprobe-static'
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { pinyin } from 'pinyin-pro'
 import * as xlsx from 'xlsx'
+import sharp from 'sharp'
 import {
   clearAllImportedData,
   deleteBatch,
@@ -28,8 +30,12 @@ import {
 app.disableHardwareAcceleration()
 
 // 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
-if (ffmpegStatic) {
-  ffmpeg.setFfmpegPath(ffmpegStatic as string)
+let ffmpegPath = ffmpegInstaller.path || (ffmpegStatic as string)
+if (ffmpegPath) {
+  if (ffmpegPath.includes('app.asar')) {
+    ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked')
+  }
+  ffmpeg.setFfmpegPath(ffmpegPath)
 }
 
 // 设置 ffprobe 路径，确保视频尺寸可读；打包后需从 app.asar.unpacked 加载
@@ -475,6 +481,112 @@ ipcMain.handle('dialog:selectFolder', async () => {
 
   if (result.canceled || !result.filePaths[0]) return null
   return result.filePaths[0]
+})
+
+// ─── IPC: 媒体批量处理 ──────────────────────────────────
+ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
+  const results = []
+
+  for (const file of files) {
+    try {
+      if (!file.filePath || !await fs.pathExists(file.filePath)) {
+        throw new Error('文件路径不存在')
+      }
+
+      const dir = dirname(file.filePath)
+      const originalName = basename(file.fileName, file.ext)
+
+      // Determine output directory
+      let outDir = ''
+      if (config.customExportPath) {
+        outDir = config.customExportPath
+      } else {
+        let subFolderName = 'openflow处理'
+        if (config.useDynamicFolderName && config.dynamicFolderName) {
+          subFolderName = `openflow(${config.dynamicFolderName})处理`
+        }
+        outDir = join(dir, subFolderName)
+      }
+
+      await fs.ensureDir(outDir)
+
+      const isImage = IMAGE_EXTS.has(file.ext.toLowerCase())
+      const isVideo = VIDEO_EXTS.has(file.ext.toLowerCase())
+
+      // targetExt 可能是原后缀，也可能被动作流修改
+      let targetExt = file.ext.toLowerCase()
+      if (config.format) {
+         targetExt = config.format.startsWith('.') ? config.format : `.${config.format}`
+      }
+
+      let outFilePath = join(outDir, `${originalName}${targetExt}`)
+
+      // 冲突处理
+      let counter = 1
+      while (await fs.pathExists(outFilePath)) {
+        outFilePath = join(outDir, `${originalName}_${counter}${targetExt}`)
+        counter++
+      }
+
+      if (isImage) {
+        let pipeline = sharp(file.filePath)
+
+        // 1. Resize
+        if (config.resize && config.resize.enabled) {
+          if (config.resize.mode === 'percentage') {
+             const meta = await pipeline.metadata()
+             const p = config.resize.percentage / 100
+             pipeline = pipeline.resize(Math.round((meta.width || 0) * p), Math.round((meta.height || 0) * p), { fit: 'inside' })
+          } else if (config.resize.mode === 'resolution') {
+             pipeline = pipeline.resize(config.resize.width, config.resize.height, { fit: 'inside' })
+          }
+        }
+
+        // 2. Format & Quality
+        const formatName = targetExt.replace('.', '')
+        if (formatName === 'jpg' || formatName === 'jpeg') {
+          pipeline = pipeline.jpeg({ quality: config.quality || 80 })
+        } else if (formatName === 'png') {
+          pipeline = pipeline.png({ quality: config.quality || 80 })
+        } else if (formatName === 'webp') {
+          pipeline = pipeline.webp({ quality: config.quality || 80 })
+        }
+
+        await pipeline.toFile(outFilePath)
+        results.push({ id: file.id, success: true, targetPath: outFilePath })
+      } else if (isVideo) {
+        await new Promise((resolve, reject) => {
+          let cmd = ffmpeg(file.filePath)
+
+          if (config.resize && config.resize.enabled) {
+            if (config.resize.mode === 'percentage') {
+               cmd = cmd.size(`${config.resize.percentage}%`)
+            } else if (config.resize.mode === 'resolution') {
+               cmd = cmd.size(`${config.resize.width}x${config.resize.height}`)
+            }
+          }
+
+          if (config.quality) {
+            // ffmpeg video quality can be tricky. Using CRF (Constant Rate Factor) for typical formats
+            // mapping 1-100 to crf 51-0 (approximate). Lower CRF is better quality.
+            const crf = Math.floor(51 - (config.quality / 100) * 51)
+            cmd = cmd.outputOptions([`-crf ${crf}`])
+          }
+
+          cmd.on('end', () => resolve(true))
+             .on('error', (err) => reject(err))
+             .save(outFilePath)
+        })
+        results.push({ id: file.id, success: true, targetPath: outFilePath })
+      } else {
+        throw new Error('不支持的媒体格式')
+      }
+    } catch (err: any) {
+      results.push({ id: file.id, success: false, error: err.message || String(err) })
+    }
+  }
+
+  return { success: true, results }
 })
 
 // ─── IPC: 文件系统 ───────────────────────────────────────
