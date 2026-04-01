@@ -90,10 +90,22 @@ export interface ElectronAPI {
   dialog: {
     /** 打开系统文件选择框，仅限 .json 文件 */
     openJson: () => Promise<ParsedRequirementJson | null>
+    /** 打开系统文件选择框，导入 Excel 数据 */
+    importExcel: () => Promise<{ fileName: string; data: any[] } | null>
     /** 打开文件夹选择框 */
     selectFolder: () => Promise<string | null>
     /** 导出错误日志到用户指定的文件路径 */
     exportLogs: () => Promise<{ success: boolean; path?: string }>
+  }
+
+  /** 数据库相关 (SQLite) */
+  db: {
+    getImportedData: (batchId?: string) => Promise<any[]>
+    insertImportedData: (batchId: string, rowData: any) => Promise<number>
+    updateImportedData: (id: number, rowData: any) => Promise<boolean>
+    deleteImportedData: (id: number) => Promise<boolean>
+    deleteBatch: (batchId: string) => Promise<boolean>
+    clearAllImportedData: () => Promise<boolean>
   }
 
   /** 文件系统相关 */

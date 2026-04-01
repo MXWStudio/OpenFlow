@@ -65,6 +65,7 @@ import {
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
+import { BitableWorkspace } from './views/BitableWorkspace';
 
 type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable';
 
@@ -502,6 +503,8 @@ export default function App() {
               setSettingsOpened(true);
             }}
           />
+        ) : activeView === 'bitable' ? (
+          <BitableWorkspace />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
             <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>

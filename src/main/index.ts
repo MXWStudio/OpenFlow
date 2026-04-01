@@ -12,6 +12,15 @@ import ffmpegStatic from 'ffmpeg-static'
 // @ts-expect-error 无类型包
 import ffprobeStatic from 'ffprobe-static'
 import { pinyin } from 'pinyin-pro'
+import * as xlsx from 'xlsx'
+import {
+  clearAllImportedData,
+  deleteBatch,
+  deleteImportedData,
+  getImportedData,
+  insertImportedData,
+  updateImportedData,
+} from './utils/db'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
@@ -232,6 +241,66 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+// ─── IPC: 数据库 (SQLite) ───────────────────────────────
+
+ipcMain.handle('db:getImportedData', async (_, batchId?: string) => {
+  try {
+    return await getImportedData(batchId)
+  } catch (error: any) {
+    console.error('db:getImportedData Error:', error)
+    return []
+  }
+})
+
+ipcMain.handle('db:insertImportedData', async (_, batchId: string, rowData: any) => {
+  try {
+    return await insertImportedData(batchId, rowData)
+  } catch (error: any) {
+    console.error('db:insertImportedData Error:', error)
+    return -1
+  }
+})
+
+ipcMain.handle('db:updateImportedData', async (_, id: number, rowData: any) => {
+  try {
+    await updateImportedData(id, rowData)
+    return true
+  } catch (error: any) {
+    console.error('db:updateImportedData Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:deleteImportedData', async (_, id: number) => {
+  try {
+    await deleteImportedData(id)
+    return true
+  } catch (error: any) {
+    console.error('db:deleteImportedData Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:deleteBatch', async (_, batchId: string) => {
+  try {
+    await deleteBatch(batchId)
+    return true
+  } catch (error: any) {
+    console.error('db:deleteBatch Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:clearAllImportedData', async () => {
+  try {
+    await clearAllImportedData()
+    return true
+  } catch (error: any) {
+    console.error('db:clearAllImportedData Error:', error)
+    return false
+  }
+})
+
 // ─── IPC: 窗口控制 ──────────────────────────────────────
 
 ipcMain.on('window:minimize', () => {
@@ -246,6 +315,39 @@ ipcMain.on('window:maximize', () => {
 
 ipcMain.on('window:close', () => {
   BrowserWindow.getFocusedWindow()?.close()
+})
+
+// ─── IPC: Excel 解析 ────────────────────────────────────
+
+ipcMain.handle('dialog:importExcel', async () => {
+  const result = await dialog.showOpenDialog({
+    title: '导入 Excel 表格',
+    filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls', 'csv'] }],
+    properties: ['openFile'],
+  })
+
+  if (result.canceled || !result.filePaths[0]) return null
+
+  try {
+    const filePath = result.filePaths[0]
+    const fileName = basename(filePath)
+
+    // Read the file
+    const fileBuffer = await fs.readFile(filePath)
+    const workbook = xlsx.read(fileBuffer, { type: 'buffer' })
+
+    // Get first sheet
+    const firstSheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[firstSheetName]
+
+    // Convert to JSON (array of objects)
+    const data = xlsx.utils.sheet_to_json(worksheet)
+
+    return { fileName, data }
+  } catch (error: any) {
+    console.error('Error parsing Excel:', error)
+    throw new Error(`无法解析 Excel 文件: ${error.message}`)
+  }
 })
 
 // ─── IPC: 对话框 ─────────────────────────────────────────

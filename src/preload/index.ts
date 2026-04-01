@@ -14,11 +14,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 打开系统文件选择框，返回解析后的 JSON 数据 */
     openJson: () => ipcRenderer.invoke('dialog:openJson'),
 
+    /** 打开系统文件选择框，返回解析后的 Excel 数据 */
+    importExcel: () => ipcRenderer.invoke('dialog:importExcel'),
+
     /** 打开文件夹选择框，返回选中的目录路径 */
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
 
     /** 导出错误日志到用户指定的文件路径 */
     exportLogs: () => ipcRenderer.invoke('dialog:exportLogs'),
+  },
+
+  // ────────────────────────────────────────────────
+  // 数据库 API (SQLite)
+  // ────────────────────────────────────────────────
+  db: {
+    getImportedData: (batchId?: string) => ipcRenderer.invoke('db:getImportedData', batchId),
+    insertImportedData: (batchId: string, rowData: any) => ipcRenderer.invoke('db:insertImportedData', batchId, rowData),
+    updateImportedData: (id: number, rowData: any) => ipcRenderer.invoke('db:updateImportedData', id, rowData),
+    deleteImportedData: (id: number) => ipcRenderer.invoke('db:deleteImportedData', id),
+    deleteBatch: (batchId: string) => ipcRenderer.invoke('db:deleteBatch', batchId),
+    clearAllImportedData: () => ipcRenderer.invoke('db:clearAllImportedData'),
   },
 
   // ────────────────────────────────────────────────
