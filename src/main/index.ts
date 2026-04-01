@@ -3,8 +3,9 @@
  * 负责：窗口管理、所有 IPC 通道处理、底层 Node.js 能力
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from 'electron'
 import { join, extname, basename, dirname } from 'path'
+import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import sizeOf from 'image-size'
 import ffmpeg from 'fluent-ffmpeg'
@@ -221,6 +222,29 @@ function createWindow(): void {
 // ─── 应用生命周期 ────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // 注册自定义协议以允许安全加载本地文件
+  protocol.handle('asset', (request) => {
+    // request.url 将形如 "asset://<URL 编码后的本地路径>"
+    let urlStr = request.url.slice('asset://'.length)
+    // 还原被编码的路径，例如将 %20 还原为空格
+    try {
+      urlStr = decodeURIComponent(urlStr)
+    } catch (e) {
+      console.error('URI Decode Error', e)
+    }
+
+    // 将绝对路径转换为 file:// 协议 URL 以适配 net.fetch
+    let fileUrl = ''
+    try {
+      fileUrl = pathToFileURL(urlStr).toString()
+    } catch (e) {
+      console.error('Invalid file path', urlStr)
+      return new Response('Not Found', { status: 404 })
+    }
+
+    return net.fetch(fileUrl)
+  })
+
   createWindow()
 
   app.on('activate', () => {
@@ -804,11 +828,37 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
   for (const file of files) {
     if (!file.selected || !file.filePath || !file.gameName || !file.resolution) continue
 
-    const targetFolder = join(destDir, file.gameName, file.resolution)
+    const gameFolder = join(destDir, file.gameName)
+    let finalResolution = file.resolution
+
+    // Check if the game folder exists and look for an existing resolution folder
+    if (await fs.pathExists(gameFolder)) {
+      try {
+        const gameSubDirs = await fs.readdir(gameFolder)
+        // Normalize the target resolution to just numbers, e.g. "1080-607" -> "1080_607"
+        const normalizedTarget = file.resolution.replace(/[xX*\-]/g, '_')
+
+        for (const subDir of gameSubDirs) {
+          const fullSubDirPath = join(gameFolder, subDir)
+          const stat = await fs.stat(fullSubDirPath)
+          if (stat.isDirectory()) {
+            const normalizedSubDir = subDir.replace(/[xX*\-]/g, '_')
+            if (normalizedSubDir === normalizedTarget) {
+              finalResolution = subDir
+              break
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore read errors, will just use the default resolution name
+      }
+    }
+
+    const targetFolder = join(gameFolder, finalResolution)
 
     // 如果目标文件夹不存在，记录并创建
     if (!(await fs.pathExists(targetFolder))) {
-      missingFolders.add(`${file.gameName}/${file.resolution}`)
+      missingFolders.add(`【${file.gameName}】缺少文件夹，已为您创建【${finalResolution}】文件夹。`)
       await fs.ensureDir(targetFolder)
     }
 
