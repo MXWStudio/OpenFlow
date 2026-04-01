@@ -158,6 +158,9 @@ export interface ElectronAPI {
 
     /** 执行素材转移 */
     executeOrganize: (files: any[], destDir: string) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
+
+    /** 批量格式处理 */
+    processFormat: (files: any[], config: any) => Promise<{ success: boolean; results: any[]; error?: string }>
   }
 
   /** 本地持久化配置相关（基于 electron-store） */

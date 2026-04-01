@@ -66,8 +66,9 @@ import {
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 import { BitableWorkspace } from './views/BitableWorkspace';
+import { FormatProcessor } from './views/FormatProcessor';
 
-type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable';
+type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format';
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('daily');
@@ -295,6 +296,7 @@ export default function App() {
   const navItems: Array<{ key: ViewKey; label: string; icon: React.ReactNode; color: string }> = [
     { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
     { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
+    { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
     { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
     { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
   ];
@@ -505,6 +507,8 @@ export default function App() {
           />
         ) : activeView === 'bitable' ? (
           <BitableWorkspace />
+        ) : activeView === 'format' ? (
+          <FormatProcessor />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
             <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>

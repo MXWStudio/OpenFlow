@@ -73,6 +73,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 执行素材转移 */
     executeOrganize: (files: unknown[], destDir: string) =>
       ipcRenderer.invoke('fs:executeOrganize', { files, destDir }),
+
+    /** 批量格式处理 */
+    processFormat: (files: any[], config: any) =>
+      ipcRenderer.invoke('fs:processFormat', { files, config }),
   },
 
   // ────────────────────────────────────────────────
