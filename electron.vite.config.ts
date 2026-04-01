@@ -27,6 +27,9 @@ export default defineConfig({
   // ── 渲染进程配置（React + Tailwind v4） ─────────────────
   renderer: {
     root: 'src/renderer',
+    server: {
+      host: '127.0.0.1'
+    },
     build: {
       rollupOptions: {
         input: {

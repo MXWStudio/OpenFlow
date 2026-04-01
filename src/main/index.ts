@@ -14,6 +14,8 @@ import ffprobeStatic from 'ffprobe-static'
 import { pinyin } from 'pinyin-pro'
 
 // ─── 初始化 ────────────────────────────────────────────
+// 禁用硬件加速，解决部分环境下的黑屏问题
+app.disableHardwareAcceleration()
 
 // 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
 if (ffmpegStatic) {
