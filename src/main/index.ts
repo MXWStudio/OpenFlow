@@ -224,6 +224,10 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
   // 开发模式：加载 Vite dev server；生产模式：加载本地 HTML
   const isDev = !app.isPackaged
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
@@ -244,8 +248,11 @@ function createWindow(): void {
 
 async function startScreenshot() {
   if (screenshotWindow) {
-    screenshotWindow.focus()
-    return
+    if (!screenshotWindow.isDestroyed()) {
+      screenshotWindow.focus()
+      return
+    }
+    screenshotWindow = null
   }
 
   // Get total bounds of all displays
@@ -295,8 +302,10 @@ async function startScreenshot() {
     const source = sources[0]
 
     screenshotWindow.once('ready-to-show', () => {
-      screenshotWindow?.show()
-      screenshotWindow?.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
+      if (screenshotWindow && !screenshotWindow.isDestroyed()) {
+        screenshotWindow.show()
+        screenshotWindow.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
+      }
     })
 
     const isDev = !app.isPackaged
@@ -433,7 +442,7 @@ app.whenReady().then(async () => {
   tray = new Tray(iconPath)
   const contextMenu = Menu.buildFromTemplate([
     { label: '打开主面板', click: () => {
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
           if (mainWindow.isMinimized()) mainWindow.restore()
           mainWindow.focus()
         } else {
