@@ -140,6 +140,7 @@ export default function App() {
           organizerSourceDir: stored.organizerSourceDir ?? DEFAULT_WORKFLOW.organizerSourceDir,
           organizerDestDir: stored.organizerDestDir ?? DEFAULT_WORKFLOW.organizerDestDir,
           organizerFormats: stored.organizerFormats ?? DEFAULT_WORKFLOW.organizerFormats,
+          screenshotShortcut: stored.screenshotShortcut ?? DEFAULT_WORKFLOW.screenshotShortcut,
         });
       }
       if (config.renameTemplates) {
@@ -286,6 +287,10 @@ export default function App() {
   async function handleSaveSettings() {
     await window.electronAPI.store.set('userInfo', userInfo);
     await window.electronAPI.store.set('workflow', workflowSettings);
+    await window.electronAPI.store.set('screenshotShortcut', workflowSettings.screenshotShortcut);
+    if (window.electronAPI.ipcRenderer) {
+      window.electronAPI.ipcRenderer.invoke('shortcut:update', workflowSettings.screenshotShortcut);
+    }
     await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
     await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
     await window.electronAPI.store.set('apiKeys', apiKeys);
@@ -697,6 +702,15 @@ export default function App() {
               </Tabs.Panel>
               <Tabs.Panel value="advanced" pt="lg">
                 <Stack gap="md">
+                  <Box>
+                    <Title order={4} mb="sm" c="#22324c">快捷键设置</Title>
+                    <TextInput
+                      label="全局截屏快捷键"
+                      description="支持组合键，例如: CommandOrControl+Shift+A"
+                      value={workflowSettings.screenshotShortcut}
+                      onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, screenshotShortcut: event.currentTarget.value }))}
+                    />
+                  </Box>
                   <Button color="red" variant="light" leftSection={<Trash2 size={16} />} onClick={async () => { await window.electronAPI.store.delete('history'); setHistoryData([]); }}>
                     清理历史缓存
                   </Button>
