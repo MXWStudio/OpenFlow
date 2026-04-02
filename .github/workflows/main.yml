@@ -20,7 +20,12 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '16' # Adjust to your project's Node.js version
+        node-version: '22'
+
+    - name: Clean dependencies
+      run: |
+        rm -Force package-lock.json -ErrorAction SilentlyContinue
+        rm -Recurse -Force node_modules -ErrorAction SilentlyContinue
 
     - name: Install dependencies
       run: npm install
