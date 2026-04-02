@@ -1,0 +1,41 @@
+name: Build and Release Windows Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22'
+
+    - name: Clean dependencies
+      run: |
+        rm -Force package-lock.json -ErrorAction SilentlyContinue
+        rm -Recurse -Force node_modules -ErrorAction SilentlyContinue
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build and Publish the application
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: npx electron-builder --win -p always
+
+    - name: Archive Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: build-dist/

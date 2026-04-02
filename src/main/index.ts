@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, desktopCapturer, screen, clipboard, nativeImage } from 'electron'
 import { join, extname, basename, dirname } from 'path'
+import { autoUpdater } from 'electron-updater'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import sizeOf from 'image-size'
@@ -409,9 +410,34 @@ ipcMain.on('pin:close', (event) => {
   if (win) win.close()
 })
 
+// ─── 自动更新 ────────────────────────────────────────────
+
+function setupAutoUpdater() {
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify()
+
+  autoUpdater.on('update-downloaded', async () => {
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: '更新准备就绪',
+      message: '新版本已下载，是否立即重启安装？',
+      buttons: ['立即重启', '稍后重启']
+    })
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall()
+    }
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto Updater Error:', err)
+  })
+}
+
 // ─── 应用生命周期 ────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  setupAutoUpdater()
   // 注册自定义协议以允许安全加载本地文件
   protocol.handle('asset', (request) => {
     // request.url 将形如 "asset://<URL 编码后的本地路径>"

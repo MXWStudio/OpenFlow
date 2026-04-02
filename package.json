@@ -4,6 +4,10 @@
   "description": "OpenFlow Studio — AIGC 广告生产力工作流工具",
   "author": "mxw86",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MXWStudio/OpenFlow.git"
+  },
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -13,6 +17,13 @@
   },
   "build": {
     "appId": "com.openflow.studio",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MXWStudio",
+        "repo": "OpenFlow"
+      }
+    ],
     "win": {
       "icon": "icons/icon.png",
       "target": [
