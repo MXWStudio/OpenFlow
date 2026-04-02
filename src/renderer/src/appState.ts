@@ -23,6 +23,7 @@ export interface WorkflowSettings {
   organizerSourceDir: string;
   organizerDestDir: string;
   organizerFormats: string[];
+  screenshotShortcut: string;
 }
 
 export interface UserInfo {
@@ -99,6 +100,7 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
   organizerSourceDir: '',
   organizerDestDir: '',
   organizerFormats: ['jpg', 'mp4'],
+  screenshotShortcut: 'CommandOrControl+Shift+A',
   renameTemplates: {
     videoRegular: [
       { type: 'CustomText', value: 'RS' },

@@ -111,4 +111,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
   },
+
+  ipcRenderer: {
+    invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+    send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+    on: (channel: string, listener: (event: any, ...args: any[]) => void) => ipcRenderer.on(channel, listener),
+    removeListener: (channel: string, listener: (event: any, ...args: any[]) => void) => ipcRenderer.removeListener(channel, listener),
+  },
+
+  // ────────────────────────────────────────────────
+  // Screenshot & Pin API
+  // ────────────────────────────────────────────────
+  screenshot: {
+    onScreenshotCaptured: (callback: (dataUrl: string) => void) => {
+      ipcRenderer.on('screenshot:captured', (_event, dataUrl) => callback(dataUrl))
+    },
+    closeScreenshot: () => ipcRenderer.send('screenshot:close'),
+    copyToClipboard: (dataUrl: string) => ipcRenderer.send('screenshot:copy', dataUrl),
+    saveScreenshot: (dataUrl: string) => ipcRenderer.send('screenshot:save', dataUrl),
+    pinScreenshot: (data: { dataUrl: string, bounds: { x: number, y: number, width: number, height: number } }) => {
+      ipcRenderer.send('screenshot:pin', data)
+    }
+  },
+
+  pin: {
+    onPinData: (callback: (dataUrl: string) => void) => {
+      ipcRenderer.on('pin:data', (_event, dataUrl) => callback(dataUrl))
+    },
+    closePin: () => ipcRenderer.send('pin:close')
+  }
 })

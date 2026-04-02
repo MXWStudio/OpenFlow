@@ -31,6 +31,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
+          screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
+          pin: resolve(__dirname, 'src/renderer/pin.html'),
         },
       },
     },

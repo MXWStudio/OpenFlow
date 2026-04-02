@@ -3,7 +3,7 @@
  * 负责：窗口管理、所有 IPC 通道处理、底层 Node.js 能力
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, desktopCapturer, screen, clipboard, nativeImage } from 'electron'
 import { join, extname, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
@@ -28,6 +28,10 @@ import {
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
 app.disableHardwareAcceleration()
+
+let tray: Tray | null = null
+let screenshotWindow: BrowserWindow | null = null
+const pinWindows: Set<BrowserWindow> = new Set()
 
 // 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
 let ffmpegPath = ffmpegInstaller.path || (ffmpegStatic as string)
@@ -196,8 +200,10 @@ function applyNewTemplate(
 
 // ─── 窗口创建 ───────────────────────────────────────────
 
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1200,
@@ -234,9 +240,169 @@ function createWindow(): void {
   })
 }
 
+// ─── 截屏功能 ───────────────────────────────────────────
+
+async function startScreenshot() {
+  if (screenshotWindow) {
+    screenshotWindow.focus()
+    return
+  }
+
+  // Get total bounds of all displays
+  const displays = screen.getAllDisplays()
+  let minX = 0, minY = 0, maxX = 0, maxY = 0
+  displays.forEach(display => {
+    const bounds = display.bounds
+    minX = Math.min(minX, bounds.x)
+    minY = Math.min(minY, bounds.y)
+    maxX = Math.max(maxX, bounds.x + bounds.width)
+    maxY = Math.max(maxY, bounds.y + bounds.height)
+  })
+
+  const width = maxX - minX
+  const height = maxY - minY
+
+  screenshotWindow = new BrowserWindow({
+    x: minX,
+    y: minY,
+    width,
+    height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    hasShadow: false,
+    enableLargerThanScreen: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  })
+
+  // Capture all screens
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width, height }
+    })
+
+    // We'll pass the first source for now (often spans all if setup right, or we just pass the primary)
+    // For a true multi-monitor setup in Electron, you'd stitch them, but passing primary is standard MVP.
+    // Let's pass the first screen's thumbnail as data URL.
+    const source = sources[0]
+
+    screenshotWindow.once('ready-to-show', () => {
+      screenshotWindow?.show()
+      screenshotWindow?.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
+    })
+
+    const isDev = !app.isPackaged
+    if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+      screenshotWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`)
+      // screenshotWindow.webContents.openDevTools({ mode: 'detach' })
+    } else {
+      screenshotWindow.loadFile(join(__dirname, '../renderer/screenshot.html'))
+    }
+  } catch (err) {
+    console.error('Screenshot capture failed', err)
+    if (screenshotWindow) {
+      screenshotWindow.close()
+      screenshotWindow = null
+    }
+  }
+
+  screenshotWindow.on('closed', () => {
+    screenshotWindow = null
+  })
+}
+
+function closeScreenshot() {
+  if (screenshotWindow) {
+    screenshotWindow.close()
+    screenshotWindow = null
+  }
+}
+
+// ─── 悬浮贴图功能 ────────────────────────────────────────
+
+function createPinWindow(dataUrl: string, bounds: { width: number, height: number, x: number, y: number }) {
+  const pinWin = new BrowserWindow({
+    width: Math.round(bounds.width),
+    height: Math.round(bounds.height),
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: true,
+    hasShadow: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  })
+
+  pinWin.once('ready-to-show', () => {
+    pinWin.show()
+    pinWin.webContents.send('pin:data', dataUrl)
+  })
+
+  const isDev = !app.isPackaged
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    pinWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/pin.html`)
+  } else {
+    pinWin.loadFile(join(__dirname, '../renderer/pin.html'))
+  }
+
+  pinWindows.add(pinWin)
+  pinWin.on('closed', () => {
+    pinWindows.delete(pinWin)
+  })
+}
+
+
+// ─── IPC: 截屏 & 贴图 ───────────────────────────────────
+
+ipcMain.on('screenshot:close', () => {
+  closeScreenshot()
+})
+
+ipcMain.on('screenshot:copy', (_, dataUrl: string) => {
+  const image = nativeImage.createFromDataURL(dataUrl)
+  clipboard.writeImage(image)
+  closeScreenshot()
+})
+
+ipcMain.on('screenshot:save', async (_, dataUrl: string) => {
+  closeScreenshot()
+  const image = nativeImage.createFromDataURL(dataUrl)
+  const result = await dialog.showSaveDialog({
+    title: '保存截图',
+    defaultPath: `screenshot-${Date.now()}.png`,
+    filters: [{ name: 'Images', extensions: ['png'] }]
+  })
+  if (!result.canceled && result.filePath) {
+    await fs.writeFile(result.filePath, image.toPNG())
+  }
+})
+
+ipcMain.on('screenshot:pin', (_, data: { dataUrl: string, bounds: { x: number, y: number, width: number, height: number } }) => {
+  closeScreenshot()
+  createPinWindow(data.dataUrl, data.bounds)
+})
+
+ipcMain.on('pin:close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) win.close()
+})
+
 // ─── 应用生命周期 ────────────────────────────────────────
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 注册自定义协议以允许安全加载本地文件
   protocol.handle('asset', (request) => {
     // request.url 将形如 "asset://<URL 编码后的本地路径>"
@@ -262,14 +428,56 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // Tray
+  const iconPath = join(__dirname, '../../icons/icon.png')
+  tray = new Tray(iconPath)
+  const contextMenu = Menu.buildFromTemplate([
+    { label: '打开主面板', click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      }
+    },
+    { label: '开始截图', click: () => startScreenshot() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ])
+  tray.setToolTip('OpenFlow Studio')
+  tray.setContextMenu(contextMenu)
+
+  // Register shortcut
+  const shortcut = await storeGetValue('screenshotShortcut') as string || 'CommandOrControl+Shift+A'
+  globalShortcut.register(shortcut, () => {
+    startScreenshot()
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+ipcMain.handle('shortcut:update', async (_, newShortcut: string) => {
+  globalShortcut.unregisterAll()
+  const success = globalShortcut.register(newShortcut, () => {
+    startScreenshot()
+  })
+  if (success) {
+    await storeSetValue('screenshotShortcut', newShortcut)
+  }
+  return success
+})
+
 
 // ─── IPC: 数据库 (SQLite) ───────────────────────────────
 
