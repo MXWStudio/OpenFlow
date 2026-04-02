@@ -12,8 +12,20 @@
     "lint": "tsc --noEmit"
   },
   "build": {
+    "appId": "com.openflow.studio",
     "win": {
-      "icon": "icons/icon.png"
+      "icon": "icons/icon.png",
+      "target": ["nsis"]
+    },
+    "directories": {
+      "output": "build-dist"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenFlow Studio"
     }
   },
   "dependencies": {
