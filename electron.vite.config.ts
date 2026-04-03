@@ -7,7 +7,7 @@ export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
     plugins: [
-      externalizeDepsPlugin({ exclude: ['electron-updater', 'xlsx'] }),
+      externalizeDepsPlugin({ exclude: ['xlsx'] }),
     ],
     resolve: {
       alias: {
