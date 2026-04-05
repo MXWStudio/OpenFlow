@@ -141,8 +141,12 @@ export function BitableWorkspace() {
       notifications.show({ color: 'green', title: '导入成功', message: `已导入 ${excelData.length} 条记录。` });
       setSelectedBatch(null); // Load all
       loadData();
-    } catch (error: any) {
-      notifications.show({ color: 'red', title: '导入失败', message: error.message });
+    } catch (error) {
+      notifications.show({
+        color: 'red',
+        title: '导入失败',
+        message: error instanceof Error ? error.message : String(error)
+      });
       setLoading(false);
     }
   }
