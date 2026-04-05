@@ -213,7 +213,7 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
           </Stack>
         </Group>
 
-        <ScrollArea className="app-scroll" style={{ flex: 1, backgroundColor: '#f7f9fc' }}>
+        <ScrollArea className="app-scroll" style={{ flex: 1 }}>
           <Stack gap={22} px={30} py={18} pb={132}>
             <Card
               radius={30}
@@ -221,8 +221,7 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
               withBorder
               shadow="sm"
               style={{
-                borderColor: '#e9eef6',
-                background: '#ffffff',
+                borderColor: 'var(--mantine-color-default-border)',
                 boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
               }}
             >
@@ -331,8 +330,7 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
               withBorder
               shadow="sm"
               style={{
-                borderColor: '#e9eef6',
-                background: '#ffffff',
+                borderColor: 'var(--mantine-color-default-border)',
                 boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
               }}
             >
@@ -358,7 +356,7 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
                 </Flex>
               ) : (
                 <Stack gap="md">
-                  <Card withBorder radius="md" p="sm" bg="#fbfdff" style={{ borderColor: '#e2e8f0' }}>
+                  <Card withBorder radius="md" p="sm" style={{ borderColor: 'var(--mantine-color-default-border)' }}>
                     <Checkbox
                       label="全选"
                       checked={allSelected}
@@ -370,7 +368,7 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
                   {files.map(file => {
                     const isVideo = file.ext === '.mp4';
                     return (
-                      <Card key={file.id} withBorder radius="md" p="md" bg="white" shadow="sm" style={{ borderColor: '#e2e8f0' }}>
+                      <Card key={file.id} withBorder radius="md" p="md" shadow="sm" style={{ borderColor: 'var(--mantine-color-default-border)' }}>
                         <Group wrap="nowrap" align="center">
                           <Checkbox
                             checked={file.selected}
