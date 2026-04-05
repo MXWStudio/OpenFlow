@@ -729,6 +729,19 @@ ipcMain.handle('dialog:selectFolder', async () => {
 // ─── IPC: 媒体批量处理 ──────────────────────────────────
 ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
   const results = []
+  const dirCache = new Map<string, Set<string>>()
+
+  const getDirEntries = async (dir: string) => {
+    if (!dirCache.has(dir)) {
+      try {
+        const names = await fs.readdir(dir)
+        dirCache.set(dir, new Set(names))
+      } catch {
+        dirCache.set(dir, new Set())
+      }
+    }
+    return dirCache.get(dir)!
+  }
 
   for (const file of files) {
     try {
@@ -762,14 +775,16 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
          targetExt = config.format.startsWith('.') ? config.format : `.${config.format}`
       }
 
-      let outFilePath = join(outDir, `${originalName}${targetExt}`)
+      const existingFiles = await getDirEntries(outDir)
+      let outFileName = `${originalName}${targetExt}`
 
       // 冲突处理
       let counter = 1
-      while (await fs.pathExists(outFilePath)) {
-        outFilePath = join(outDir, `${originalName}_${counter}${targetExt}`)
+      while (existingFiles.has(outFileName)) {
+        outFileName = `${originalName}_${counter}${targetExt}`
         counter++
       }
+      let outFilePath = join(outDir, outFileName)
 
       if (isImage) {
         let pipeline = sharp(file.filePath)
@@ -796,6 +811,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
         }
 
         await pipeline.toFile(outFilePath)
+        existingFiles.add(outFileName)
         results.push({ id: file.id, success: true, targetPath: outFilePath })
       } else if (isVideo) {
         await new Promise((resolve, reject) => {
@@ -816,7 +832,10 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
             cmd = cmd.outputOptions([`-crf ${crf}`])
           }
 
-          cmd.on('end', () => resolve(true))
+          cmd.on('end', () => {
+            existingFiles.add(outFileName)
+            resolve(true)
+          })
              .on('error', (err) => reject(err))
              .save(outFilePath)
         })
@@ -1109,6 +1128,19 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
  */
 ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer, isSpecialEnabled }) => {
   const results: RenameResult[] = []
+  const dirCache = new Map<string, Set<string>>()
+
+  const getDirEntries = async (dir: string) => {
+    if (!dirCache.has(dir)) {
+      try {
+        const names = await fs.readdir(dir)
+        dirCache.set(dir, new Set(names))
+      } catch {
+        dirCache.set(dir, new Set())
+      }
+    }
+    return dirCache.get(dir)!
+  }
 
   // Date in YYYYMMDD format
   const now = new Date()
@@ -1173,19 +1205,21 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
 
     const newBaseName = applyNewTemplate(targetTemplate, vars)
 
+    const existingFiles = await getDirEntries(dir)
     let newFileName = `${newBaseName}${finalExt}`
-    let newFilePath = join(dir, newFileName)
 
     // 冲突处理：追加数字后缀
     let collisionCounter = 1
-    while ((await fs.pathExists(newFilePath)) && newFilePath !== file.filePath) {
+    while (existingFiles.has(newFileName) && join(dir, newFileName) !== file.filePath) {
       newFileName = `${newBaseName}_${collisionCounter}${finalExt}`
-      newFilePath = join(dir, newFileName)
       collisionCounter++
     }
+    const newFilePath = join(dir, newFileName)
 
     try {
       await fs.rename(file.filePath, newFilePath)
+      existingFiles.delete(basename(file.filePath))
+      existingFiles.add(newFileName)
       results.push({ oldFileName: file.fileName, newFileName, success: true })
       sequenceCounters[sequenceKey]++ // 仅在成功时累加系列号
     } catch (err) {
@@ -1269,6 +1303,19 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
 ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
   if (!files || files.length === 0) return { success: false, error: '没有需要移动的文件' }
   const results = []
+  const dirCache = new Map<string, Set<string>>()
+
+  const getDirEntries = async (dir: string) => {
+    if (!dirCache.has(dir)) {
+      try {
+        const names = await fs.readdir(dir)
+        dirCache.set(dir, new Set(names))
+      } catch {
+        dirCache.set(dir, new Set())
+      }
+    }
+    return dirCache.get(dir)!
+  }
   if (!destDir || !(await fs.pathExists(destDir))) {
     return { success: false, error: '目标转移目录不存在' }
   }
@@ -1319,26 +1366,26 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
       await fs.ensureDir(targetFolder)
     }
 
+    const existingFiles = await getDirEntries(targetFolder)
     let targetFileName = file.fileName
-    let targetFilePath = join(targetFolder, targetFileName)
 
     // 冲突处理：如果同名，自动加今日时间：yyyymmdd
     // 如果加了时间还冲突，就再加序号
-    if (await fs.pathExists(targetFilePath)) {
+    if (existingFiles.has(targetFileName)) {
       const baseName = basename(file.fileName, file.ext)
       targetFileName = `${baseName}-${today}${file.ext}`
-      targetFilePath = join(targetFolder, targetFileName)
 
       let counter = 1
-      while (await fs.pathExists(targetFilePath)) {
+      while (existingFiles.has(targetFileName)) {
         targetFileName = `${baseName}-${today}-${counter}${file.ext}`
-        targetFilePath = join(targetFolder, targetFileName)
         counter++
       }
     }
+    const targetFilePath = join(targetFolder, targetFileName)
 
     try {
       await fs.move(file.filePath, targetFilePath)
+      existingFiles.add(targetFileName)
       results.push({ id: file.id, success: true, targetPath: targetFilePath })
     } catch (err) {
       results.push({ id: file.id, success: false, error: String(err) })
