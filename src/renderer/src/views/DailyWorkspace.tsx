@@ -58,9 +58,11 @@ interface DailyWorkspaceProps {
   canRename: boolean;
   isTableExpanded: boolean;
   isSpecialEnabled: boolean;
+  isManualEnabled: boolean;
   lastRenamedPaths: string[];
   onToggleTable: () => void;
   onToggleSpecialEnabled: (enabled: boolean) => void;
+  onToggleManualEnabled: (enabled: boolean) => void;
   onToggleSize: (size: string) => void;
   onChangeJson: () => void;
   onInitFolders: () => void;
@@ -164,9 +166,11 @@ export function DailyWorkspace({
   canRename,
   isTableExpanded,
   isSpecialEnabled,
+  isManualEnabled,
   lastRenamedPaths,
   onToggleTable,
   onToggleSpecialEnabled,
+  onToggleManualEnabled,
   onToggleSize,
   onChangeJson,
   onInitFolders,
@@ -515,10 +519,10 @@ export function DailyWorkspace({
     <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
 <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
                 <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>快捷操作</SectionTitle>
-                <SimpleGrid cols={3} spacing="md" mb="md">
+                <SimpleGrid cols={2} spacing="md" mb="md">
                   <Button
                     variant={isSpecialEnabled ? "filled" : "light"}
-                    color={isSpecialEnabled ? "violet" : "gray"}
+                    color={isSpecialEnabled ? "orange" : "gray"}
                     leftSection={<Sparkles size={16} />}
                     onClick={() => onToggleSpecialEnabled(!isSpecialEnabled)}
                     radius="xl"
@@ -531,6 +535,22 @@ export function DailyWorkspace({
                     }}
                   >
                     创意比特
+                  </Button>
+                  <Button
+                    variant={isManualEnabled ? "filled" : "light"}
+                    color={isManualEnabled ? "violet" : "gray"}
+                    leftSection={<Sparkles size={16} />}
+                    onClick={() => onToggleManualEnabled(!isManualEnabled)}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        fontWeight: 800,
+                        transition: 'all 0.2s ease',
+                      },
+                    }}
+                  >
+                    手搓命名
                   </Button>
                   <Button
                     variant="light"

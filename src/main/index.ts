@@ -1227,7 +1227,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
  * fs:executeRename
  * 批量重命名文件，自动处理同名冲突（追加 _1, _2...）
  */
-ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer, isSpecialEnabled }) => {
+ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer, isSpecialEnabled, isManualEnabled }) => {
   const results: RenameResult[] = []
   const dirCache = new Map<string, Set<string>>()
 
@@ -1273,10 +1273,12 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     let finalExt = originalExt
 
     if (isVideo) {
-      targetTemplate = isSpecial ? templates.videoSpecial : templates.videoRegular
+      if (isManualEnabled) targetTemplate = templates.videoManual
+      else targetTemplate = isSpecial ? templates.videoSpecial : templates.videoRegular
       finalExt = '.mp4'
     } else if (isImage) {
-      targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular
+      if (isManualEnabled) targetTemplate = templates.imageManual
+      else targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular
     }
 
     const aspectRatio = file.actualWidth >= file.actualHeight ? '横' : '竖'
