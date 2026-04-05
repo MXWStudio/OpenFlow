@@ -508,7 +508,9 @@ app.whenReady().then(async () => {
 
   // Tray
   const iconPath = join(__dirname, '../../icons/icon.png')
-  tray = new Tray(iconPath)
+  // dynamically resize to 16x16 to fix stretched appearance on macOS menu bar
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '打开主面板', click: () => {
         if (mainWindow && !mainWindow.isDestroyed()) {

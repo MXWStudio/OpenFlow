@@ -166,12 +166,12 @@ export function SettingsWorkspace({
   };
 
   return (
-    <Flex h="100%" direction="column" bg="#f7f9fc">
-      <Box p="md" bg="white" style={{ borderBottom: '1px solid #e2e8f0' }}>
+    <Flex h="100%" direction="column">
+      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
         <Group justify="space-between">
           <Group>
             <Settings size={24} color="#4f8dff" />
-            <Title order={3} c="#1e293b">设置中心</Title>
+            <Title order={3}>设置中心</Title>
           </Group>
           <Button leftSection={<Save size={16} />} onClick={handleSaveSettings}>
             保存设置
@@ -188,7 +188,7 @@ export function SettingsWorkspace({
           p="md"
           styles={{
             root: { width: '100%' },
-            list: { width: 220, borderRight: '1px solid #e2e8f0', paddingRight: 16, gap: 8 },
+            list: { width: 220, borderRight: '1px solid var(--mantine-color-default-border)', paddingRight: 16, gap: 8 },
             tab: { padding: '12px 16px', fontWeight: 500, borderRadius: 8 },
             panel: { paddingLeft: 32, paddingRight: 32, paddingBottom: 32, overflowY: 'auto' }
           }}
@@ -213,7 +213,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="system" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">常规设置</Title>
+                <Title order={4} mb="lg">常规设置</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="lg">
                     <Group justify="space-between">
@@ -253,7 +253,7 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">系统行为</Title>
+                <Title order={4} mb="lg">系统行为</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="lg">
                     <Group justify="space-between">
@@ -297,7 +297,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="account" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">账户信息</Title>
+                <Title order={4} mb="lg">账户信息</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
@@ -325,7 +325,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="workspace" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">核心路径配置</Title>
+                <Title order={4} mb="lg">核心路径配置</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
@@ -356,7 +356,7 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">文件规则</Title>
+                <Title order={4} mb="lg">文件规则</Title>
                 <Card withBorder radius="md" p="lg">
                   <Radio.Group
                     name="duplicateAction"
@@ -378,7 +378,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="templates" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">重命名模板配置</Title>
+                <Title order={4} mb="lg">重命名模板配置</Title>
                 <Stack gap="lg">
                   {['视频版块', '图片版块'].map((sectionTitle) => {
                     const keys: TemplateKey[] = sectionTitle === '视频版块'
@@ -455,7 +455,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="shortcuts" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">全局快捷键</Title>
+                <Title order={4} mb="lg">全局快捷键</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="lg">
                     <TextInput
@@ -485,7 +485,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="processing" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">图片引擎</Title>
+                <Title order={4} mb="lg">图片引擎</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <Select
@@ -516,7 +516,7 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">视频引擎</Title>
+                <Title order={4} mb="lg">视频引擎</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <Select
@@ -540,7 +540,7 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">截图工具</Title>
+                <Title order={4} mb="lg">截图工具</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
@@ -574,7 +574,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="ai" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">AI API 配置</Title>
+                <Title order={4} mb="lg">AI API 配置</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <PasswordInput
@@ -597,7 +597,7 @@ export function SettingsWorkspace({
           <Tabs.Panel value="data" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">存储管理</Title>
+                <Title order={4} mb="lg">存储管理</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
@@ -620,7 +620,7 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">统计偏好</Title>
+                <Title order={4} mb="lg">统计偏好</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <Switch
@@ -647,12 +647,12 @@ export function SettingsWorkspace({
           <Tabs.Panel value="about" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg" c="#1e293b">关于 OpenFlow Studio</Title>
+                <Title order={4} mb="lg">关于 OpenFlow Studio</Title>
                 <Card withBorder radius="md" p="xl" ta="center">
                   <Stack align="center" gap="md">
-                    <Box w={80} h={80} bg="blue.1" style={{ borderRadius: 20 }}>
+                    <Box w={80} h={80} style={{ borderRadius: 20, backgroundColor: 'var(--mantine-color-blue-light)' }}>
                       <Flex h="100%" align="center" justify="center">
-                        <Wrench size={40} color="#4f8dff" />
+                        <Wrench size={40} color="var(--mantine-color-blue-6)" />
                       </Flex>
                     </Box>
                     <Title order={3}>OpenFlow Studio</Title>
