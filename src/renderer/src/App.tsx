@@ -94,6 +94,8 @@ export default function App() {
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
   const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
+  const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
+  const [layoutRight, setLayoutRight] = useState<string[]>(['uploadMedia', 'quickActions', 'systemStatus', 'mediaDetails']);
   const dragCounter = useRef(0);
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
@@ -154,8 +156,19 @@ export default function App() {
         setApiKeys({ geminiKey: stored.geminiKey ?? '', sdPath: stored.sdPath ?? '' });
       }
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
+      if (Array.isArray(config.dailyLayoutLeft)) setLayoutLeft(config.dailyLayoutLeft as string[]);
+      if (Array.isArray(config.dailyLayoutRight)) setLayoutRight(config.dailyLayoutRight as string[]);
     }).finally(() => setIsAppReady(true));
   }, []);
+
+  async function handleLayoutChange(left: string[], right: string[]) {
+    setLayoutLeft(left);
+    setLayoutRight(right);
+    if (window.electronAPI) {
+      await window.electronAPI.store.set('dailyLayoutLeft', left);
+      await window.electronAPI.store.set('dailyLayoutRight', right);
+    }
+  }
 
   function notify(color: 'green' | 'red' | 'orange' | 'gray', title: string, message?: string) {
     notifications.show({ color, title, message, autoClose: 3000 });
@@ -501,6 +514,9 @@ export default function App() {
                 window.electronAPI.shell.openPath(path);
               }
             }}
+            layoutLeft={layoutLeft}
+            layoutRight={layoutRight}
+            onLayoutChange={handleLayoutChange}
           />
         ) : activeView === 'organizer' ? (
           <OrganizerWorkspace
