@@ -12,6 +12,7 @@ import {
   Title,
   Loader,
   Badge,
+  Paper,
 } from '@mantine/core';
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone';
 import { Sparkles, UploadCloud, CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
@@ -191,7 +192,7 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
   };
 
   return (
-    <Flex h="100%" direction="column" bg="#f7f9fc">
+    <Flex h="100%" direction="column" bg="#f7f9fc" style={{ position: 'relative' }}>
       <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', backgroundColor: '#fff' }}>
         <Group justify="space-between">
           <Group>
@@ -199,20 +200,6 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
               <Sparkles size={20} />
             </ThemeIcon>
             <Title order={3}>AI 识图命名</Title>
-          </Group>
-          <Group>
-            <Button variant="default" onClick={handleClear} disabled={images.length === 0 || isProcessing}>
-              清空列表
-            </Button>
-            <Button
-              color="violet"
-              onClick={processImages}
-              loading={isProcessing}
-              disabled={images.length === 0 || images.every(img => img.status === 'success')}
-              leftSection={<Sparkles size={16} />}
-            >
-              开始识图重命名
-            </Button>
           </Group>
         </Group>
       </Box>
@@ -286,6 +273,61 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
           </Stack>
         )}
       </Box>
+
+      <Paper
+        radius={26}
+        p={10}
+        shadow="md"
+        style={{
+          position: 'absolute',
+          right: 28,
+          bottom: 24,
+          background: 'rgba(255,255,255,0.96)',
+          border: '1px solid #e8eef5',
+          boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
+        }}
+      >
+        <Group gap={14}>
+          <Button
+            radius={18}
+            variant="default"
+            size="lg"
+            onClick={handleClear}
+            disabled={images.length === 0 || isProcessing}
+            styles={{
+              root: {
+                height: 58,
+                paddingInline: 32,
+                fontSize: 18,
+                fontWeight: 900,
+                boxShadow: '0 12px 28px rgba(17, 26, 52, 0.05)',
+              },
+            }}
+          >
+            清空列表
+          </Button>
+          <Button
+            radius={18}
+            color="violet"
+            size="lg"
+            onClick={processImages}
+            loading={isProcessing}
+            disabled={images.length === 0 || images.every(img => img.status === 'success')}
+            leftSection={<Sparkles size={20} />}
+            styles={{
+              root: {
+                height: 58,
+                paddingInline: 32,
+                fontSize: 18,
+                fontWeight: 900,
+                boxShadow: '0 12px 28px rgba(132, 94, 247, 0.22)',
+              },
+            }}
+          >
+            开始识图重命名
+          </Button>
+        </Group>
+      </Paper>
     </Flex>
   );
 }
