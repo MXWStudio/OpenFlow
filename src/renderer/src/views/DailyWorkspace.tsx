@@ -1,4 +1,5 @@
 import React from 'react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   ActionIcon,
   Badge,
@@ -72,6 +73,9 @@ interface DailyWorkspaceProps {
   onOpenHistory: () => void;
   onDropPaths: (paths: string[]) => void;
   onOpenFolder: (path: string) => void;
+  layoutLeft: string[];
+  layoutRight: string[];
+  onLayoutChange: (left: string[], right: string[]) => void;
 }
 
 const cardStyle = {
@@ -88,9 +92,9 @@ const iconButtonStyle = {
   },
 } as const;
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children, dragHandleProps }: { children: React.ReactNode, dragHandleProps?: any }) {
   return (
-    <Group gap={8} mb="md">
+    <Group gap={8} mb="md" {...dragHandleProps} style={{ cursor: dragHandleProps ? 'grab' : 'default' }}>
       <GripVertical size={14} color="#d7e0eb" />
       <Text fw={800} size="lg" c="#8ea2c1">
         {children}
@@ -175,6 +179,9 @@ export function DailyWorkspace({
   onOpenHistory,
   onDropPaths,
   onOpenFolder,
+  layoutLeft,
+  layoutRight,
+  onLayoutChange,
 }: DailyWorkspaceProps) {
   const previewRows =
     validationResults.length > 0
@@ -232,7 +239,27 @@ export function DailyWorkspace({
         ? '所有的素材已成功重命名。'
         : '工作区已初始化。将素材拖入上方区域以开始自动化流程。';
 
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const sourceId = result.source.droppableId;
+    const destId = result.destination.droppableId;
+    if (sourceId === destId) {
+      if (sourceId === 'leftCol') {
+        const newLeft = Array.from(layoutLeft);
+        const [reorderedItem] = newLeft.splice(result.source.index, 1);
+        newLeft.splice(result.destination.index, 0, reorderedItem);
+        onLayoutChange(newLeft, layoutRight);
+      } else if (sourceId === 'rightCol') {
+        const newRight = Array.from(layoutRight);
+        const [reorderedItem] = newRight.splice(result.source.index, 1);
+        newRight.splice(result.destination.index, 0, reorderedItem);
+        onLayoutChange(layoutLeft, newRight);
+      }
+    }
+  };
+
   return (
+    <DragDropContext onDragEnd={handleDragEnd}>
     <Flex h="100%" style={{ background: 'linear-gradient(180deg, #f6f8fc 0%, #f8fbff 100%)' }}>
       <Box
         w={362}
@@ -260,8 +287,12 @@ export function DailyWorkspace({
 
           <ScrollArea className="app-scroll" style={{ flex: 1 }}>
             <Stack gap={22} p={22} pr={18}>
-              <Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
-                <SectionTitle>今日数据</SectionTitle>
+              <Droppable droppableId="leftCol">{(provided) => (<div ref={provided.innerRef} {...provided.droppableProps} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
+{layoutLeft.map((id, index) => {
+  if (id === 'todayData') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>今日数据</SectionTitle>
                 <Stack gap="md">
                   <TextInput
                     value={projectsCount > 0 ? jsonFileName : '暂未导入数据表'}
@@ -301,8 +332,12 @@ export function DailyWorkspace({
                 </Stack>
               </Card>
 
-              <Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
-                <SectionTitle>创建目录</SectionTitle>
+              </div>)}</Draggable>
+  );
+  if (id === 'createDir') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>创建目录</SectionTitle>
                 <Button
                   radius={16}
                   size="lg"
@@ -323,8 +358,12 @@ export function DailyWorkspace({
                 </Button>
               </Card>
 
-              <Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
-                <SectionTitle>尺寸预览</SectionTitle>
+              </div>)}</Draggable>
+  );
+  if (id === 'sizePreview') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={28} p={22} shadow="sm" withBorder style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>尺寸预览</SectionTitle>
                 <Stack gap="lg">
                   <Box>
                     <Text size="sm" fw={800} c="#8ea2c1" mb={12}>
@@ -359,6 +398,12 @@ export function DailyWorkspace({
                   </Box>
                 </Stack>
               </Card>
+</div>)}</Draggable>
+  );
+  return null;
+})}
+{provided.placeholder}
+</div>)}</Droppable>
             </Stack>
           </ScrollArea>
         </Flex>
@@ -396,8 +441,12 @@ export function DailyWorkspace({
 
           <ScrollArea className="app-scroll" style={{ flex: 1 }}>
             <Stack gap={22} px={30} py={18} pb={132}>
-              <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle>上传素材</SectionTitle>
+              <Droppable droppableId="rightCol">{(provided) => (<div ref={provided.innerRef} {...provided.droppableProps} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
+{layoutRight.map((id, index) => {
+  if (id === 'uploadMedia') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>上传素材</SectionTitle>
                 <Dropzone
                   onDrop={() => {}} // Handle in onDropCapture
                   onDropCapture={(e: React.DragEvent) => {
@@ -460,8 +509,12 @@ export function DailyWorkspace({
                 </Dropzone>
               </Card>
 
-              <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle>快捷操作</SectionTitle>
+              </div>)}</Draggable>
+  );
+  if (id === 'quickActions') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>快捷操作</SectionTitle>
                 <SimpleGrid cols={3} spacing="md" mb="md">
                   <Button
                     variant={isSpecialEnabled ? "filled" : "light"}
@@ -543,8 +596,12 @@ export function DailyWorkspace({
                 )}
               </Card>
 
-              <Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle>系统状态</SectionTitle>
+              </div>)}</Draggable>
+  );
+  if (id === 'systemStatus') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>系统状态</SectionTitle>
                 <Paper
                   radius={26}
                   p={30}
@@ -627,7 +684,11 @@ export function DailyWorkspace({
                 </Paper>
               </Card>
 
-              <Card
+              </div>)}</Draggable>
+  );
+  if (id === 'mediaDetails') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Card
                 radius={30}
                 p={0}
                 withBorder
@@ -638,7 +699,7 @@ export function DailyWorkspace({
                 }}
               >
                 <Box p={22} pb={10}>
-                  <SectionTitle>素材详情</SectionTitle>
+                  <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>素材详情</SectionTitle>
                 </Box>
 
                 <Box
@@ -732,6 +793,12 @@ export function DailyWorkspace({
                   </Table>
                 </Collapse>
               </Card>
+</div>)}</Draggable>
+  );
+  return null;
+})}
+{provided.placeholder}
+</div>)}</Droppable>
             </Stack>
           </ScrollArea>
         </Flex>
@@ -795,5 +862,6 @@ export function DailyWorkspace({
         </Paper>
       </Box>
     </Flex>
+    </DragDropContext>
   );
 }
