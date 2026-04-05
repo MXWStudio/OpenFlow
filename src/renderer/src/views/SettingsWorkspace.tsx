@@ -38,6 +38,7 @@ import {
   MonitorPlay,
   Moon,
   Palette,
+  Plus,
   Power,
   RefreshCw,
   Save,
@@ -46,6 +47,7 @@ import {
   User,
   Workflow,
   Wrench,
+  X,
 } from 'lucide-react';
 import {
   buildTemplatePreview,
@@ -173,13 +175,10 @@ export function SettingsWorkspace({
             <Settings size={24} color="#4f8dff" />
             <Title order={3}>设置中心</Title>
           </Group>
-          <Button leftSection={<Save size={16} />} onClick={handleSaveSettings}>
-            保存设置
-          </Button>
         </Group>
       </Box>
 
-      <Flex flex={1} style={{ overflow: 'hidden' }}>
+      <Flex flex={1} style={{ overflow: 'hidden', position: 'relative' }}>
         <Tabs
           value={activeTab}
           onChange={(val) => setActiveTab(val || 'system')}
@@ -401,8 +400,8 @@ export function SettingsWorkspace({
                                 )}
                               </Group>
                               <Group gap="xs" wrap="wrap">
-                                {workflowSettings.renameTemplates[templateKey]?.map((token, index) => (
-                                  <Group key={`${templateKey}-${index}`} gap="xs" wrap="nowrap" style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px' }}>
+                                {(workflowSettings.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey])?.map((token, index) => (
+                                  <Group key={`${templateKey}-${index}`} gap="xs" wrap="nowrap" style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: '4px', padding: '4px', backgroundColor: 'var(--mantine-color-body)' }}>
                                     <Select
                                       w={120}
                                       variant="unstyled"
@@ -415,7 +414,7 @@ export function SettingsWorkspace({
                                           ...prev,
                                           renameTemplates: {
                                             ...prev.renameTemplates,
-                                            [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
+                                            [templateKey]: (prev.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey]).map((item, itemIndex) =>
                                               itemIndex === index ? { ...item, type: value as TokenType, value: value === 'CustomText' ? item.value : undefined } : item,
                                             ),
                                           },
@@ -426,7 +425,7 @@ export function SettingsWorkspace({
                                       <TextInput
                                         w={100}
                                         variant="unstyled"
-                                        styles={{ input: { borderLeft: '1px solid #e2e8f0', paddingLeft: 8, height: 32, minHeight: 32, borderRadius: 0 } }}
+                                        styles={{ input: { borderLeft: '1px solid var(--mantine-color-default-border)', paddingLeft: 8, height: 32, minHeight: 32, borderRadius: 0 } }}
                                         placeholder="输入文本"
                                         value={token.value || ''}
                                         onChange={(event) => {
@@ -435,7 +434,7 @@ export function SettingsWorkspace({
                                             ...prev,
                                             renameTemplates: {
                                               ...prev.renameTemplates,
-                                              [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
+                                              [templateKey]: (prev.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey]).map((item, itemIndex) =>
                                                 itemIndex === index ? { ...item, value } : item,
                                               ),
                                             },
@@ -443,12 +442,47 @@ export function SettingsWorkspace({
                                         }}
                                       />
                                     )}
+                                    <ActionIcon
+                                      size="sm"
+                                      color="red"
+                                      variant="subtle"
+                                      onClick={() => {
+                                        setWorkflowSettings((prev) => ({
+                                          ...prev,
+                                          renameTemplates: {
+                                            ...prev.renameTemplates,
+                                            [templateKey]: (prev.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey]).filter((_, itemIndex) => itemIndex !== index),
+                                          },
+                                        }));
+                                      }}
+                                    >
+                                      <X size={14} />
+                                    </ActionIcon>
                                   </Group>
                                 ))}
+                                <ActionIcon
+                                  variant="light"
+                                  color="blue"
+                                  size="lg"
+                                  onClick={() => {
+                                    setWorkflowSettings((prev) => ({
+                                      ...prev,
+                                      renameTemplates: {
+                                        ...prev.renameTemplates,
+                                        [templateKey]: [
+                                          ...(prev.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey]),
+                                          { type: 'ProjectName' },
+                                        ],
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  <Plus size={18} />
+                                </ActionIcon>
                               </Group>
                               <Box mt="sm">
                                 <Text size="xs" c="dimmed" mb={4}>预览:</Text>
-                                <Code block>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey] || [], producerName)}</Code>
+                                <Code block>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey] || DEFAULT_WORKFLOW.renameTemplates[templateKey] || [], producerName)}</Code>
                               </Box>
                             </Box>
                           ))}
@@ -678,6 +712,20 @@ export function SettingsWorkspace({
 
         </Tabs>
       </Flex>
+
+      <Box
+        p="md"
+        style={{
+          borderTop: '1px solid var(--mantine-color-default-border)',
+          backgroundColor: 'var(--mantine-color-body)',
+        }}
+      >
+        <Group justify="flex-end">
+          <Button leftSection={<Save size={16} />} onClick={handleSaveSettings}>
+            保存设置
+          </Button>
+        </Group>
+      </Box>
     </Flex>
   );
 }
