@@ -78,6 +78,7 @@ import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
+import { AiWorkspace } from './views/AiWorkspace';
 
 type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format';
 
@@ -572,14 +573,16 @@ export default function App() {
           <BitableWorkspace />
         ) : activeView === 'format' ? (
           <FormatProcessor />
+        ) : activeView === 'ai' ? (
+          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={producerName} />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
             <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>
               <Stack gap="sm">
-                <Badge color={activeView === 'ai' ? 'violet' : 'teal'} variant="light" w="fit-content">
-                  {activeView === 'ai' ? 'AI 识图' : '多维表格'}
+                <Badge color="teal" variant="light" w="fit-content">
+                  多维表格
                 </Badge>
-                <Title order={2}>{activeView === 'ai' ? 'AI识图版块' : '表格版块'}</Title>
+                <Title order={2}>表格版块</Title>
                 <Text c="dimmed">
                   原来的后端功能已经全部放到“日常”版块。这里先保留为新界面占位区，后续按你的设计继续细化。
                 </Text>

@@ -1339,6 +1339,63 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
 })
 
 /**
+ * fs:renameAiBatch
+ * 为 AI 识图结果批量重命名文件
+ */
+ipcMain.handle('fs:renameAiBatch', async (_, { filePath, templates, producerName, vars }) => {
+  const dirCache = new Map<string, Set<string>>()
+  const getDirEntries = async (dir: string) => {
+    if (!dirCache.has(dir)) {
+      try {
+        const names = await fs.readdir(dir)
+        dirCache.set(dir, new Set(names))
+      } catch {
+        dirCache.set(dir, new Set())
+      }
+    }
+    return dirCache.get(dir)!
+  }
+
+  const dir = dirname(filePath)
+  const originalExt = extname(filePath)
+
+  // Producer conversion
+  const producerAbbr = producerName
+    ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+    : ''
+
+  const finalVars = { ...vars, Producer: producerAbbr }
+
+  // Filter out any potential illegal path characters in vars to prevent fs errors
+  // AI returns can sometimes contain random symbols
+  for (const key of Object.keys(finalVars)) {
+    if (typeof finalVars[key] === 'string') {
+      finalVars[key] = finalVars[key].replace(/[\\/:*?"<>|]/g, '')
+    }
+  }
+
+  const newBaseName = applyNewTemplate(templates, finalVars)
+  const existingFiles = await getDirEntries(dir)
+  let newFileName = `${newBaseName}${originalExt}`
+
+  let collisionCounter = 1
+  while (existingFiles.has(newFileName) && join(dir, newFileName) !== filePath) {
+    newFileName = `${newBaseName}_${collisionCounter}${originalExt}`
+    collisionCounter++
+  }
+  const newFilePath = join(dir, newFileName)
+
+  try {
+    await fs.rename(filePath, newFilePath)
+    existingFiles.delete(basename(filePath))
+    existingFiles.add(newFileName)
+    return { success: true, newFileName }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+/**
  * fs:scanOrganizerFolder
  * 扫描下载目录，匹配 游戏名-分辨率-时间-序号.后缀，并返回预览列表
  */

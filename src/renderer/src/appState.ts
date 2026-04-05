@@ -3,7 +3,7 @@ import { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime } fro
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
 
-export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial';
+export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial' | 'aiImage';
 export type TokenType =
   | 'ProjectName'
   | 'CleanProjectName'
@@ -13,7 +13,9 @@ export type TokenType =
   | 'AspectRatio'
   | 'Sequence'
   | 'OriginalName'
-  | 'CustomText';
+  | 'CustomText'
+  | 'AiElement'
+  | 'AiCategory';
 
 export interface TemplateToken {
   type: TokenType;
@@ -35,9 +37,17 @@ export interface UserInfo {
   email: string;
 }
 
+export interface AiIntegrationSettings {
+  apiBaseUrl: string;
+  apiKey: string;
+  modelName: string;
+  systemPrompt: string;
+}
+
 export interface ApiKeys {
   geminiKey: string;
   sdPath: string;
+  aiIntegration?: AiIntegrationSettings;
 }
 
 export interface SystemSettings {
@@ -123,6 +133,8 @@ export const TOKEN_OPTIONS: Array<{ value: TokenType; label: string }> = [
   { value: 'Sequence', label: '序号' },
   { value: 'OriginalName', label: '原文件名' },
   { value: 'CustomText', label: '自定义文本' },
+  { value: 'AiElement', label: '画面元素(AI)' },
+  { value: 'AiCategory', label: '游戏品类(AI)' },
 ];
 
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
@@ -130,10 +142,20 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   videoSpecial: '特殊版块',
   imageRegular: '常规图片',
   imageSpecial: '特殊版块',
+  aiImage: 'AI识别命名',
 };
 
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
-export const DEFAULT_API_KEYS: ApiKeys = { geminiKey: '', sdPath: '' };
+export const DEFAULT_API_KEYS: ApiKeys = {
+  geminiKey: '',
+  sdPath: '',
+  aiIntegration: {
+    apiBaseUrl: '',
+    apiKey: '',
+    modelName: '',
+    systemPrompt: '请识别图片，提取“画面元素”和“游戏品类”，并严格按照“画面元素-游戏品类”的格式返回，不要包含其他任何文本。例如：橡皮人-射击',
+  }
+};
 export const DEFAULT_SYSTEM: SystemSettings = {
   theme: 'auto',
   language: 'zh',
@@ -206,6 +228,12 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
       { type: 'Producer' },
       { type: 'Sequence' },
     ],
+    aiImage: [
+      { type: 'AiElement' },
+      { type: 'AiCategory' },
+      { type: 'AspectRatio' },
+      { type: 'Producer' },
+    ],
   },
 };
 
@@ -225,6 +253,8 @@ export function buildTemplatePreview(template: TemplateToken[], producerName: st
     Sequence: '(1)',
     OriginalName: '原文件名',
     CustomText: '',
+    AiElement: '橡皮人',
+    AiCategory: '射击',
   };
 
   return template

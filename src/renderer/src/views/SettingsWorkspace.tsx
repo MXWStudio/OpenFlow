@@ -380,10 +380,12 @@ export function SettingsWorkspace({
               <Box>
                 <Title order={4} mb="lg">重命名模板配置</Title>
                 <Stack gap="lg">
-                  {['视频版块', '图片版块'].map((sectionTitle) => {
+                  {['视频版块', '图片版块', 'AI识别命名'].map((sectionTitle) => {
                     const keys: TemplateKey[] = sectionTitle === '视频版块'
                       ? ['videoRegular', 'videoSpecial']
-                      : ['imageRegular', 'imageSpecial'];
+                      : sectionTitle === '图片版块'
+                      ? ['imageRegular', 'imageSpecial']
+                      : ['aiImage'];
 
                     return (
                       <Card key={sectionTitle} withBorder radius="md" p="lg">
@@ -574,7 +576,52 @@ export function SettingsWorkspace({
           <Tabs.Panel value="ai" pt="md">
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg">AI API 配置</Title>
+                <Title order={4} mb="lg">通用大模型 (AI 识图) API 配置</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Stack gap="md">
+                    <TextInput
+                      label="API 服务地址 (Base URL)"
+                      placeholder="例如：https://api.openai.com/v1"
+                      value={apiKeys.aiIntegration?.apiBaseUrl || ''}
+                      onChange={(e) => setApiKeys((prev) => ({
+                        ...prev,
+                        aiIntegration: { ...prev.aiIntegration, apiBaseUrl: e.currentTarget.value } as any
+                      }))}
+                    />
+                    <PasswordInput
+                      label="API 密钥 (API Key)"
+                      placeholder="输入 API Key"
+                      value={apiKeys.aiIntegration?.apiKey || ''}
+                      onChange={(e) => setApiKeys((prev) => ({
+                        ...prev,
+                        aiIntegration: { ...prev.aiIntegration, apiKey: e.currentTarget.value } as any
+                      }))}
+                    />
+                    <TextInput
+                      label="模型名称 (Model)"
+                      placeholder="例如：gpt-4o"
+                      value={apiKeys.aiIntegration?.modelName || ''}
+                      onChange={(e) => setApiKeys((prev) => ({
+                        ...prev,
+                        aiIntegration: { ...prev.aiIntegration, modelName: e.currentTarget.value } as any
+                      }))}
+                    />
+                    <TextInput
+                      label="系统提示词 (System Prompt)"
+                      description="指导 AI 如何识别图片并返回所需格式"
+                      placeholder="请识别图片，提取“画面元素”和“游戏品类”..."
+                      value={apiKeys.aiIntegration?.systemPrompt || ''}
+                      onChange={(e) => setApiKeys((prev) => ({
+                        ...prev,
+                        aiIntegration: { ...prev.aiIntegration, systemPrompt: e.currentTarget.value } as any
+                      }))}
+                    />
+                  </Stack>
+                </Card>
+              </Box>
+
+              <Box>
+                <Title order={4} mb="lg">其他 AI 引擎 (保留)</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <PasswordInput
