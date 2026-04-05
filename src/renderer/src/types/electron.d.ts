@@ -145,12 +145,15 @@ export interface ElectronAPI {
       templates: {
         videoRegular: any[];
         videoSpecial: any[];
+        videoManual: any[];
         imageRegular: any[];
         imageSpecial: any[];
+        imageManual: any[];
       },
       projectName: string,
       producer?: string,
-      isSpecialEnabled?: boolean
+      isSpecialEnabled?: boolean,
+      isManualEnabled?: boolean
     ) => Promise<RenameResult[]>
 
     /** 扫描素材整理目录 */

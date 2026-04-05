@@ -58,13 +58,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       templates: {
         videoRegular: any[];
         videoSpecial: any[];
+        videoManual: any[];
         imageRegular: any[];
         imageSpecial: any[];
+        imageManual: any[];
       },
       projectName: string,
       producer?: string,
-      isSpecialEnabled?: boolean
-    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer, isSpecialEnabled }),
+      isSpecialEnabled?: boolean,
+      isManualEnabled?: boolean
+    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer, isSpecialEnabled, isManualEnabled }),
 
     /** 扫描素材整理目录 */
     scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) =>

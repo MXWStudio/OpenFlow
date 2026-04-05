@@ -3,7 +3,7 @@ import { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime } fro
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
 
-export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial';
+export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'videoManual' | 'imageRegular' | 'imageSpecial' | 'imageManual';
 export type TokenType =
   | 'ProjectName'
   | 'CleanProjectName'
@@ -128,8 +128,10 @@ export const TOKEN_OPTIONS: Array<{ value: TokenType; label: string }> = [
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   videoRegular: '常规视频',
   videoSpecial: '特殊版块',
+  videoManual: '手搓命名',
   imageRegular: '常规图片',
   imageSpecial: '特殊版块',
+  imageManual: '手搓命名',
 };
 
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
@@ -190,12 +192,28 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
       { type: 'CustomText', value: 'RSQM' },
       { type: 'Sequence' },
     ],
+    videoManual: [
+      { type: 'CustomText', value: 'RS' },
+      { type: 'Date' },
+      { type: 'ProjectName' },
+      { type: 'Producer' },
+      { type: 'AspectRatio' },
+      { type: 'Sequence' },
+    ],
     imageRegular: [
       { type: 'CustomText', value: 'RSQ' },
       { type: 'Date' },
       { type: 'ProjectName' },
       { type: 'Resolution' },
       { type: 'Producer' },
+      { type: 'Sequence' },
+    ],
+    imageManual: [
+      { type: 'CustomText', value: 'RS' },
+      { type: 'Date' },
+      { type: 'ProjectName' },
+      { type: 'Producer' },
+      { type: 'AspectRatio' },
       { type: 'Sequence' },
     ],
     imageSpecial: [

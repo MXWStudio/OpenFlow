@@ -92,6 +92,7 @@ export default function App() {
   const [hasValidated, setHasValidated] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSpecialEnabled, setIsSpecialEnabled] = useState(false);
+  const [isManualEnabled, setIsManualEnabled] = useState(false);
   const [isChangingJson, setIsChangingJson] = useState(false);
   const [isDraggingGlobally, setIsDraggingGlobally] = useState(false);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
@@ -308,7 +309,7 @@ export default function App() {
       const storedTemplates = await window.electronAPI.store.get<WorkflowSettings['renameTemplates']>('renameTemplates');
       const templates = storedTemplates || workflowSettings.renameTemplates;
       const validFiles = validationResults.filter((item) => item.status === 'valid');
-      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, producerName, isSpecialEnabled);
+      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, producerName, isSpecialEnabled, isManualEnabled);
       const successCount = results.filter((item) => item.success).length;
       const failed = results.filter((item) => !item.success);
       if (failed.length === 0) notify('green', '重命名完成', `${successCount} 个文件`);
@@ -514,8 +515,10 @@ export default function App() {
             isValidating={isValidating}
             isRenaming={isRenaming}
             isSpecialEnabled={isSpecialEnabled}
+            isManualEnabled={isManualEnabled}
             lastRenamedPaths={lastRenamedPaths}
-            onToggleSpecialEnabled={setIsSpecialEnabled}
+            onToggleSpecialEnabled={(v) => { setIsSpecialEnabled(v); if (v) setIsManualEnabled(false); }}
+            onToggleManualEnabled={(v) => { setIsManualEnabled(v); if (v) setIsSpecialEnabled(false); }}
             hasValidated={hasValidated}
             hasIssues={hasIssues}
             canRename={canRename}

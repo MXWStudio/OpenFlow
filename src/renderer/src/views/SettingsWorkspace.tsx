@@ -382,8 +382,8 @@ export function SettingsWorkspace({
                 <Stack gap="lg">
                   {['视频版块', '图片版块'].map((sectionTitle) => {
                     const keys: TemplateKey[] = sectionTitle === '视频版块'
-                      ? ['videoRegular', 'videoSpecial']
-                      : ['imageRegular', 'imageSpecial'];
+                      ? ['videoRegular', 'videoSpecial', 'videoManual']
+                      : ['imageRegular', 'imageSpecial', 'imageManual'];
 
                     return (
                       <Card key={sectionTitle} withBorder radius="md" p="lg">
@@ -396,11 +396,17 @@ export function SettingsWorkspace({
                                 {(templateKey === 'videoSpecial' || templateKey === 'imageSpecial') && (
                                   <Badge size="sm" variant="light" color="orange">创意比特</Badge>
                                 )}
+                                {(templateKey === 'videoManual' || templateKey === 'imageManual') && (
+                                  <Badge size="sm" variant="light" color="violet">手搓命名</Badge>
+                                )}
                               </Group>
-                              <Stack gap="xs">
-                                {workflowSettings.renameTemplates[templateKey].map((token, index) => (
-                                  <Group key={`${templateKey}-${index}`} align="flex-end" wrap="nowrap">
+                              <Group gap="xs" wrap="wrap">
+                                {workflowSettings.renameTemplates[templateKey]?.map((token, index) => (
+                                  <Group key={`${templateKey}-${index}`} gap="xs" wrap="nowrap" style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px' }}>
                                     <Select
+                                      w={120}
+                                      variant="unstyled"
+                                      styles={{ input: { paddingLeft: 8, paddingRight: 8, height: 32, minHeight: 32 } }}
                                       data={TOKEN_OPTIONS}
                                       value={token.type}
                                       onChange={(value) => {
@@ -418,6 +424,9 @@ export function SettingsWorkspace({
                                     />
                                     {token.type === 'CustomText' && (
                                       <TextInput
+                                        w={100}
+                                        variant="unstyled"
+                                        styles={{ input: { borderLeft: '1px solid #e2e8f0', paddingLeft: 8, height: 32, minHeight: 32, borderRadius: 0 } }}
                                         placeholder="输入文本"
                                         value={token.value || ''}
                                         onChange={(event) => {
@@ -436,11 +445,11 @@ export function SettingsWorkspace({
                                     )}
                                   </Group>
                                 ))}
-                                <Box mt="sm">
-                                  <Text size="xs" c="dimmed" mb={4}>预览:</Text>
-                                  <Code block>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey], producerName)}</Code>
-                                </Box>
-                              </Stack>
+                              </Group>
+                              <Box mt="sm">
+                                <Text size="xs" c="dimmed" mb={4}>预览:</Text>
+                                <Code block>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey] || [], producerName)}</Code>
+                              </Box>
                             </Box>
                           ))}
                         </Stack>
