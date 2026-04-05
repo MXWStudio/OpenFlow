@@ -70,8 +70,11 @@ import { FormatProcessor } from './views/FormatProcessor';
 
 type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format';
 
+import { useMantineColorScheme } from '@mantine/core';
+
 export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('daily');
+  const { setColorScheme } = useMantineColorScheme();
   const [isAppReady, setIsAppReady] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
@@ -89,11 +92,14 @@ export default function App() {
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([]);
-  const [settingsOpened, setSettingsOpened] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<string>('account');
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
   const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
+  const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
+  const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
+  const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
+  const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
   const [layoutRight, setLayoutRight] = useState<string[]>(['uploadMedia', 'quickActions', 'systemStatus', 'mediaDetails']);
   const dragCounter = useRef(0);
@@ -155,6 +161,24 @@ export default function App() {
         const stored = config.apiKeys as Record<string, string>;
         setApiKeys({ geminiKey: stored.geminiKey ?? '', sdPath: stored.sdPath ?? '' });
       }
+
+      // Load newly added state types
+      if (config.systemSettings) {
+        const sys = config.systemSettings as SystemSettings;
+        setSystemSettings(sys);
+        if (sys.theme) {
+          setColorScheme(sys.theme);
+        }
+      }
+      if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
+      if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
+      else if (config.screenshotShortcut) {
+        // Migration from old single shortcut state
+        setShortcutSettings(prev => ({ ...prev, screenshot: config.screenshotShortcut as string }));
+      }
+      if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
+      if (config.dataStatsSettings) setDataStatsSettings(config.dataStatsSettings as DataStatsSettings);
+
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.dailyLayoutLeft)) setLayoutLeft(config.dailyLayoutLeft as string[]);
       if (Array.isArray(config.dailyLayoutRight)) setLayoutRight(config.dailyLayoutRight as string[]);
@@ -295,20 +319,6 @@ export default function App() {
     } finally {
       setIsRenaming(false);
     }
-  }
-
-  async function handleSaveSettings() {
-    await window.electronAPI.store.set('userInfo', userInfo);
-    await window.electronAPI.store.set('workflow', workflowSettings);
-    await window.electronAPI.store.set('screenshotShortcut', workflowSettings.screenshotShortcut);
-    if (window.electronAPI.ipcRenderer) {
-      window.electronAPI.ipcRenderer.invoke('shortcut:update', workflowSettings.screenshotShortcut);
-    }
-    await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
-    await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
-    await window.electronAPI.store.set('apiKeys', apiKeys);
-    notify('green', '设置已保存');
-    setSettingsOpened(false);
   }
 
   const navItems: Array<{ key: ViewKey; label: string; icon: React.ReactNode; color: string }> = [
@@ -459,15 +469,17 @@ export default function App() {
             </Indicator>
             <ActionIcon
               variant="subtle"
-              onClick={() => setSettingsOpened(true)}
+              onClick={() => setActiveView('settings')}
               styles={{
                 root: {
                   width: 46,
                   height: 46,
-                  color: '#a8b5c9',
+                  color: activeView === 'settings' ? '#e2eeff' : '#a8b5c9',
+                  background: activeView === 'settings' ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  borderRadius: 12,
                 },
               }}
             >
@@ -522,9 +534,28 @@ export default function App() {
           <OrganizerWorkspace
             workflowSettings={workflowSettings}
             onOpenSettings={() => {
-              setSettingsTab('workflow');
-              setSettingsOpened(true);
+              setActiveView('settings');
             }}
+          />
+        ) : activeView === 'settings' ? (
+          <SettingsWorkspace
+            userInfo={userInfo}
+            setUserInfo={setUserInfo}
+            workflowSettings={workflowSettings}
+            setWorkflowSettings={setWorkflowSettings}
+            apiKeys={apiKeys}
+            setApiKeys={setApiKeys}
+            systemSettings={systemSettings}
+            setSystemSettings={setSystemSettings}
+            workspaceSettings={workspaceSettings}
+            setWorkspaceSettings={setWorkspaceSettings}
+            shortcutSettings={shortcutSettings}
+            setShortcutSettings={setShortcutSettings}
+            processingSettings={processingSettings}
+            setProcessingSettings={setProcessingSettings}
+            dataStatsSettings={dataStatsSettings}
+            setDataStatsSettings={setDataStatsSettings}
+            producerName={producerName}
           />
         ) : activeView === 'bitable' ? (
           <BitableWorkspace />
@@ -564,180 +595,6 @@ export default function App() {
             </Card>
           ))}
         </Stack>
-      </Drawer>
-
-      <Drawer opened={settingsOpened} onClose={() => setSettingsOpened(false)} position="right" size="70%" title="系统设置">
-        <Flex h="100%" direction="column" gap="md">
-          <ScrollArea className="app-scroll" style={{ flex: 1 }}>
-            <Tabs value={settingsTab} onChange={(value) => setSettingsTab(value || 'account')}>
-              <Tabs.List>
-                <Tabs.Tab value="account" leftSection={<User size={16} />}>账户配置</Tabs.Tab>
-                <Tabs.Tab value="workflow" leftSection={<Workflow size={16} />}>工作流设置</Tabs.Tab>
-                <Tabs.Tab value="integrations" leftSection={<Cpu size={16} />}>AI 集成</Tabs.Tab>
-                <Tabs.Tab value="advanced" leftSection={<Shield size={16} />}>高级系统</Tabs.Tab>
-              </Tabs.List>
-              <Tabs.Panel value="account" pt="lg">
-                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-                  <TextInput label="姓名" value={userInfo.name} onChange={(event) => { setUserInfo((prev) => ({ ...prev, name: event.currentTarget.value })); setProducerName(event.currentTarget.value); }} />
-                  <TextInput label="部门" value={userInfo.department} onChange={(event) => setUserInfo((prev) => ({ ...prev, department: event.currentTarget.value }))} />
-                  <TextInput label="邮箱" value={userInfo.email} onChange={(event) => setUserInfo((prev) => ({ ...prev, email: event.currentTarget.value }))} style={{ gridColumn: '1 / -1' }} />
-                </SimpleGrid>
-              </Tabs.Panel>
-              <Tabs.Panel value="workflow" pt="lg">
-                <Stack gap="lg">
-                  <TextInput label="默认输出目录" value={workflowSettings.defaultOutputDir} onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: event.currentTarget.value }))} />
-
-                  <Box>
-                    <Title order={4} mb="sm" c="#22324c">素材整理配置</Title>
-                    <Stack gap="md">
-                      <TextInput
-                        label="默认扫描目录 (Source)"
-                        placeholder="例如: C:\Users\xxx\Downloads"
-                        value={workflowSettings.organizerSourceDir}
-                        onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, organizerSourceDir: event.currentTarget.value }))}
-                        rightSection={
-                          <ActionIcon onClick={async () => {
-                            const folderPath = await window.electronAPI.dialog.selectFolder();
-                            if (folderPath) setWorkflowSettings(prev => ({ ...prev, organizerSourceDir: folderPath }));
-                          }}>
-                            <FolderSearch size={16} />
-                          </ActionIcon>
-                        }
-                      />
-                      <TextInput
-                        label="素材转移目录 (Destination)"
-                        placeholder="例如: D:\Assets\Games"
-                        value={workflowSettings.organizerDestDir}
-                        onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, organizerDestDir: event.currentTarget.value }))}
-                        rightSection={
-                          <ActionIcon onClick={async () => {
-                            const folderPath = await window.electronAPI.dialog.selectFolder();
-                            if (folderPath) setWorkflowSettings(prev => ({ ...prev, organizerDestDir: folderPath }));
-                          }}>
-                            <FolderSearch size={16} />
-                          </ActionIcon>
-                        }
-                      />
-                      <Group gap="md">
-                        <Text size="sm" fw={500}>支持格式:</Text>
-                        {['jpg', 'mp4', 'png'].map(fmt => (
-                          <Checkbox
-                            key={fmt}
-                            label={fmt}
-                            checked={workflowSettings.organizerFormats?.includes(fmt)}
-                            onChange={(e) => {
-                              const checked = e.currentTarget.checked;
-                              setWorkflowSettings(prev => {
-                                const current = prev.organizerFormats || [];
-                                return {
-                                  ...prev,
-                                  organizerFormats: checked ? [...current, fmt] : current.filter(f => f !== fmt)
-                                };
-                              });
-                            }}
-                          />
-                        ))}
-                      </Group>
-                    </Stack>
-                  </Box>
-
-                  <Code block>{jsonFileName || '未加载 JSON'}</Code>
-
-                  {['视频版块', '图片版块'].map((sectionTitle) => {
-                    const keys: TemplateKey[] = sectionTitle === '视频版块'
-                      ? ['videoRegular', 'videoSpecial']
-                      : ['imageRegular', 'imageSpecial'];
-
-                    return (
-                      <Box key={sectionTitle}>
-                        <Title order={4} mb="md" c="#22324c">{sectionTitle}</Title>
-                        <Stack gap="md">
-                          {keys.map((templateKey) => (
-                            <Card key={templateKey} withBorder radius="xl">
-                              <Stack gap="md">
-                                <Group align="baseline" gap="xs">
-                                  <Text fw={700}>{TEMPLATE_LABELS[templateKey]}</Text>
-                                  {(templateKey === 'videoSpecial' || templateKey === 'imageSpecial') && (
-                                    <Text size="xs" c="dimmed" fw={500}>• 创意比特</Text>
-                                  )}
-                                </Group>
-                                {workflowSettings.renameTemplates[templateKey].map((token, index) => (
-                                  <Group key={`${templateKey}-${index}`} align="flex-end" wrap="nowrap">
-                                    <Select
-                                      data={TOKEN_OPTIONS}
-                                      value={token.type}
-                                      onChange={(value) => {
-                                        if (!value) return;
-                                        setWorkflowSettings((prev) => ({
-                                          ...prev,
-                                          renameTemplates: {
-                                            ...prev.renameTemplates,
-                                            [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
-                                              itemIndex === index ? { ...item, type: value as TokenType, value: value === 'CustomText' ? item.value : undefined } : item,
-                                            ),
-                                          },
-                                        }));
-                                      }}
-                                    />
-                                    {token.type === 'CustomText' && (
-                                      <TextInput
-                                        placeholder="输入文本"
-                                        value={token.value || ''}
-                                        onChange={(event) => {
-                                          const value = event.currentTarget.value;
-                                          setWorkflowSettings((prev) => ({
-                                            ...prev,
-                                            renameTemplates: {
-                                              ...prev.renameTemplates,
-                                              [templateKey]: prev.renameTemplates[templateKey].map((item, itemIndex) =>
-                                                itemIndex === index ? { ...item, value } : item,
-                                              ),
-                                            },
-                                          }));
-                                        }}
-                                      />
-                                    )}
-                                  </Group>
-                                ))}
-                                <Code>{buildTemplatePreview(workflowSettings.renameTemplates[templateKey], producerName)}</Code>
-                              </Stack>
-                            </Card>
-                          ))}
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-
-                </Stack>
-              </Tabs.Panel>
-              <Tabs.Panel value="integrations" pt="lg">
-                <Stack gap="lg">
-                  <PasswordInput label="Gemini API Key" value={apiKeys.geminiKey} onChange={(event) => setApiKeys((prev) => ({ ...prev, geminiKey: event.currentTarget.value }))} />
-                  <TextInput label="Stable Diffusion 地址" value={apiKeys.sdPath} onChange={(event) => setApiKeys((prev) => ({ ...prev, sdPath: event.currentTarget.value }))} />
-                </Stack>
-              </Tabs.Panel>
-              <Tabs.Panel value="advanced" pt="lg">
-                <Stack gap="md">
-                  <Box>
-                    <Title order={4} mb="sm" c="#22324c">快捷键设置</Title>
-                    <TextInput
-                      label="全局截屏快捷键"
-                      description="支持组合键，例如: CommandOrControl+Shift+A"
-                      value={workflowSettings.screenshotShortcut}
-                      onChange={(event) => setWorkflowSettings((prev) => ({ ...prev, screenshotShortcut: event.currentTarget.value }))}
-                    />
-                  </Box>
-                  <Button color="red" variant="light" leftSection={<Trash2 size={16} />} onClick={async () => { await window.electronAPI.store.delete('history'); setHistoryData([]); }}>
-                    清理历史缓存
-                  </Button>
-                </Stack>
-              </Tabs.Panel>
-            </Tabs>
-          </ScrollArea>
-          <Group justify="flex-end">
-            <Button leftSection={<Save size={16} />} onClick={() => void handleSaveSettings()}>保存设置</Button>
-          </Group>
-        </Flex>
       </Drawer>
     </Flex>
   );

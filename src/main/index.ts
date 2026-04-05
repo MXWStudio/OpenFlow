@@ -203,6 +203,8 @@ function applyNewTemplate(
 
 let mainWindow: BrowserWindow | null = null
 
+let closeToTray = true // 默认为 true
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -223,6 +225,13 @@ function createWindow(): void {
   // 窗口准备好后再显示，优化视觉体验
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  mainWindow.on('close', (e) => {
+    if (closeToTray && !(app as any).isQuitting) {
+      e.preventDefault()
+      mainWindow?.hide()
+    }
   })
 
   mainWindow.on('closed', () => {
@@ -436,8 +445,26 @@ function setupAutoUpdater() {
 
 // ─── 应用生命周期 ────────────────────────────────────────
 
+// 添加一个全局变量标记是否正在退出
+;(app as any).isQuitting = false
+
 app.whenReady().then(async () => {
   setupAutoUpdater()
+
+  // 读取系统设置
+  const systemSettings = await storeGetValue('systemSettings') as { autoStart?: boolean, closeToTray?: boolean } | undefined
+  if (systemSettings) {
+    if (systemSettings.closeToTray !== undefined) {
+      closeToTray = systemSettings.closeToTray
+    }
+    if (systemSettings.autoStart !== undefined) {
+      app.setLoginItemSettings({
+        openAtLogin: systemSettings.autoStart,
+        openAsHidden: true
+      })
+    }
+  }
+
   // 注册自定义协议以允许安全加载本地文件
   protocol.handle('asset', (request) => {
     // request.url 将形如 "asset://<URL 编码后的本地路径>"
@@ -478,7 +505,11 @@ app.whenReady().then(async () => {
     },
     { label: '开始截图', click: () => startScreenshot() },
     { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
+    { label: '退出', click: () => {
+        (app as any).isQuitting = true
+        app.quit()
+      }
+    }
   ])
   tray.setToolTip('OpenFlow Studio')
   tray.setContextMenu(contextMenu)
@@ -502,15 +533,57 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-ipcMain.handle('shortcut:update', async (_, newShortcut: string) => {
+ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: string, togglePanel: string, pinImage: string }) => {
   globalShortcut.unregisterAll()
-  const success = globalShortcut.register(newShortcut, () => {
-    startScreenshot()
-  })
-  if (success) {
-    await storeSetValue('screenshotShortcut', newShortcut)
+
+  if (typeof newShortcut === 'string') {
+    const success = globalShortcut.register(newShortcut, () => {
+      startScreenshot()
+    })
+    if (success) {
+      await storeSetValue('screenshotShortcut', newShortcut)
+    }
+    return success
+  } else {
+    // Handling the new ShortcutSettings object
+    let success = true
+    if (newShortcut.screenshot) {
+      success = globalShortcut.register(newShortcut.screenshot, () => startScreenshot()) && success
+    }
+    if (newShortcut.togglePanel) {
+      success = globalShortcut.register(newShortcut.togglePanel, () => {
+        if (mainWindow) {
+          if (mainWindow.isVisible() && mainWindow.isFocused()) {
+            mainWindow.hide()
+          } else {
+            mainWindow.show()
+            mainWindow.focus()
+          }
+        } else {
+          createWindow()
+        }
+      }) && success
+    }
+    // We ignore pinImage shortcut for now as there's no global handler for it yet in main
+    return success
   }
-  return success
+})
+
+ipcMain.handle('shortcut:check', (_, accelerator: string) => {
+  return globalShortcut.isRegistered(accelerator)
+})
+
+ipcMain.handle('settings:applySystem', async (_, settings: { autoStart?: boolean, closeToTray?: boolean }) => {
+  if (settings.closeToTray !== undefined) {
+    closeToTray = settings.closeToTray
+  }
+  if (settings.autoStart !== undefined) {
+    app.setLoginItemSettings({
+      openAtLogin: settings.autoStart,
+      openAsHidden: true
+    })
+  }
+  return true
 })
 
 

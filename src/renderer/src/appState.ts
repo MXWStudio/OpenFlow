@@ -37,6 +37,42 @@ export interface ApiKeys {
   sdPath: string;
 }
 
+export interface SystemSettings {
+  theme: 'light' | 'dark' | 'auto';
+  language: 'zh' | 'en' | 'ja';
+  autoStart: boolean;
+  closeToTray: boolean;
+  autoUpdate: boolean;
+}
+
+export interface WorkspaceSettings {
+  sourceDir: string;
+  destDir: string;
+  duplicateAction: 'rename' | 'overwrite' | 'skip';
+}
+
+export interface ShortcutSettings {
+  togglePanel: string;
+  screenshot: string;
+  pinImage: string;
+}
+
+export interface ProcessingSettings {
+  imageFormat: 'original' | 'webp';
+  imageQuality: number;
+  videoCompressRate: 'high' | 'medium' | 'low';
+  videoRemoveAudio: boolean;
+  screenshotDir: string;
+  screenshotShadow: boolean;
+  screenshotRounded: boolean;
+}
+
+export interface DataStatsSettings {
+  dataDir: string;
+  includeWeekend: boolean;
+  reportFormat: 'excel' | 'csv' | 'pdf';
+}
+
 export interface HistoryEntry {
   id: number;
   project: string;
@@ -95,6 +131,37 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
 
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
 export const DEFAULT_API_KEYS: ApiKeys = { geminiKey: '', sdPath: '' };
+export const DEFAULT_SYSTEM: SystemSettings = {
+  theme: 'auto',
+  language: 'zh',
+  autoStart: false,
+  closeToTray: true,
+  autoUpdate: true,
+};
+export const DEFAULT_WORKSPACE: WorkspaceSettings = {
+  sourceDir: '',
+  destDir: '',
+  duplicateAction: 'rename',
+};
+export const DEFAULT_SHORTCUTS: ShortcutSettings = {
+  togglePanel: 'CommandOrControl+Shift+Space',
+  screenshot: 'CommandOrControl+Shift+A',
+  pinImage: 'CommandOrControl+Shift+P',
+};
+export const DEFAULT_PROCESSING: ProcessingSettings = {
+  imageFormat: 'original',
+  imageQuality: 80,
+  videoCompressRate: 'medium',
+  videoRemoveAudio: false,
+  screenshotDir: '',
+  screenshotShadow: true,
+  screenshotRounded: true,
+};
+export const DEFAULT_DATA_STATS: DataStatsSettings = {
+  dataDir: '',
+  includeWeekend: false,
+  reportFormat: 'excel',
+};
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
   defaultOutputDir: '',
   organizerSourceDir: '',
