@@ -971,22 +971,29 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
   const FIXED_FOLDERS = ['截屏素材', '录屏素材', '奇觅生成', '模糊处理']
 
   try {
-    for (const project of list) {
-      const projectRoot = join(rootPath, project.projectName)
-      await fs.ensureDir(projectRoot)
+    await Promise.all(
+      list.map(async (project) => {
+        const projectRoot = join(rootPath, project.projectName)
+        await fs.ensureDir(projectRoot)
 
-      const sizes = project.sizes || []
-      for (const size of sizes) {
-        const folderName = size.replace(/\*/g, 'x')
-        const sizeDir = join(projectRoot, folderName)
-        await fs.ensureDir(sizeDir)
-        await fs.ensureDir(join(sizeDir, '_Assets'))
-      }
+        const dirPromises: Promise<void>[] = []
+        const sizes = project.sizes || []
 
-      for (const name of FIXED_FOLDERS) {
-        await fs.ensureDir(join(projectRoot, name))
-      }
-    }
+        for (const size of sizes) {
+          const folderName = size.replace(/\*/g, 'x')
+          const sizeDir = join(projectRoot, folderName)
+          dirPromises.push(
+            fs.ensureDir(sizeDir).then(() => fs.ensureDir(join(sizeDir, '_Assets')))
+          )
+        }
+
+        for (const name of FIXED_FOLDERS) {
+          dirPromises.push(fs.ensureDir(join(projectRoot, name)))
+        }
+
+        await Promise.all(dirPromises)
+      })
+    )
     return { success: true, destPath: rootPath }
   } catch (error) {
     return { success: false, destPath: '', error: String(error) }
