@@ -70,13 +70,25 @@ async function storeRead(): Promise<Record<string, unknown>> {
 
 async function storeGetValue(key: string): Promise<unknown> {
   const data = await storeRead()
+  const keys = key.split('.')
+  // 安全检查：防止原型污染
+  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
+    return undefined
+  }
   // 支持点号路径，如 "userInfo.name"
-  return key.split('.').reduce((obj: Record<string, unknown>, k) => obj?.[k] as Record<string, unknown>, data)
+  return keys.reduce(
+    (obj: Record<string, unknown>, k) => obj?.[k] as Record<string, unknown>,
+    data
+  )
 }
 
 async function storeSetValue(key: string, value: unknown): Promise<void> {
   const data = await storeRead()
   const keys = key.split('.')
+  // 安全检查：防止原型污染
+  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
+    return
+  }
   let current: Record<string, unknown> = data
   for (let i = 0; i < keys.length - 1; i++) {
     if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
@@ -91,6 +103,10 @@ async function storeSetValue(key: string, value: unknown): Promise<void> {
 async function storeDeleteKey(key: string): Promise<void> {
   const data = await storeRead()
   const keys = key.split('.')
+  // 安全检查：防止原型污染
+  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
+    return
+  }
   if (keys.length === 1) {
     delete data[key]
   } else {
