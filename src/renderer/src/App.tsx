@@ -55,6 +55,11 @@ import {
   PRESET_SIZES,
   TEMPLATE_LABELS,
   TOKEN_OPTIONS,
+  DEFAULT_SYSTEM,
+  DEFAULT_WORKSPACE,
+  DEFAULT_SHORTCUTS,
+  DEFAULT_PROCESSING,
+  DEFAULT_DATA_STATS,
   type ApiKeys,
   type HistoryEntry,
   type TemplateKey,
@@ -62,11 +67,17 @@ import {
   type UserInfo,
   type ValidationResult,
   type WorkflowSettings,
+  type SystemSettings,
+  type WorkspaceSettings,
+  type ShortcutSettings,
+  type ProcessingSettings,
+  type DataStatsSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
+import { SettingsWorkspace } from './views/SettingsWorkspace';
 
 type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format';
 
@@ -518,7 +529,7 @@ export default function App() {
             onRemoveFolder={(path) => { setFolderPaths((prev) => prev.filter((item) => item !== path)); resetValidationState(); }}
             onValidate={() => void handleValidate()}
             onRename={() => void handleRename()}
-            onOpenSettings={() => setSettingsOpened(true)}
+            onOpenSettings={() => setActiveView('settings')}
             onOpenHistory={() => setHistoryOpened(true)}
             onDropPaths={(paths) => void addFolders(dedupeStrings(paths))}
             onOpenFolder={(path) => {
