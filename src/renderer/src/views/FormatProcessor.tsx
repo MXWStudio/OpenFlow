@@ -208,8 +208,12 @@ export function FormatProcessor() {
          notifications.show({ color: 'red', title: '处理失败', message: res.error || '未知错误' });
          setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: '系统错误' })));
       }
-    } catch (err: any) {
-       notifications.show({ color: 'red', title: '处理异常', message: err.message || String(err) });
+    } catch (err) {
+       notifications.show({
+         color: 'red',
+         title: '处理异常',
+         message: err instanceof Error ? err.message : String(err)
+       });
        setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: '系统异常' })));
     } finally {
       setIsProcessing(false);

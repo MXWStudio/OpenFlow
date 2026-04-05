@@ -519,7 +519,7 @@ ipcMain.handle('shortcut:update', async (_, newShortcut: string) => {
 ipcMain.handle('db:getImportedData', async (_, batchId?: string) => {
   try {
     return await getImportedData(batchId)
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:getImportedData Error:', error)
     return []
   }
@@ -528,7 +528,7 @@ ipcMain.handle('db:getImportedData', async (_, batchId?: string) => {
 ipcMain.handle('db:insertImportedData', async (_, batchId: string, rowData: any) => {
   try {
     return await insertImportedData(batchId, rowData)
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:insertImportedData Error:', error)
     return -1
   }
@@ -538,7 +538,7 @@ ipcMain.handle('db:updateImportedData', async (_, id: number, rowData: any) => {
   try {
     await updateImportedData(id, rowData)
     return true
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:updateImportedData Error:', error)
     return false
   }
@@ -548,7 +548,7 @@ ipcMain.handle('db:deleteImportedData', async (_, id: number) => {
   try {
     await deleteImportedData(id)
     return true
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:deleteImportedData Error:', error)
     return false
   }
@@ -558,7 +558,7 @@ ipcMain.handle('db:deleteBatch', async (_, batchId: string) => {
   try {
     await deleteBatch(batchId)
     return true
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:deleteBatch Error:', error)
     return false
   }
@@ -568,7 +568,7 @@ ipcMain.handle('db:clearAllImportedData', async () => {
   try {
     await clearAllImportedData()
     return true
-  } catch (error: any) {
+  } catch (error) {
     console.error('db:clearAllImportedData Error:', error)
     return false
   }
@@ -617,9 +617,10 @@ ipcMain.handle('dialog:importExcel', async () => {
     const data = xlsx.utils.sheet_to_json(worksheet)
 
     return { fileName, data }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error parsing Excel:', error)
-    throw new Error(`无法解析 Excel 文件: ${error.message}`)
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`无法解析 Excel 文件: ${message}`)
   }
 })
 
@@ -824,8 +825,12 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
       } else {
         throw new Error('不支持的媒体格式')
       }
-    } catch (err: any) {
-      results.push({ id: file.id, success: false, error: err.message || String(err) })
+    } catch (err) {
+      results.push({
+        id: file.id,
+        success: false,
+        error: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
