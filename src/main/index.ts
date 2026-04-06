@@ -1034,19 +1034,20 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
     } catch {
       continue
     }
-    for (const name of names) {
-      if (SKIP_DIRS_READ_SIZE.has(name)) continue
+    const statPromises = names.map(async (name) => {
+      if (SKIP_DIRS_READ_SIZE.has(name)) return
+      if (!SIZE_FOLDER_REGEX.test(name)) return
       const full = join(dir, name)
-      let stat: fs.Stats
       try {
-        stat = await fs.stat(full)
+        const stat = await fs.stat(full)
+        if (stat.isDirectory()) {
+          sizeSet.add(name.replace(/[xX-]/g, '*'))
+        }
       } catch {
-        continue
+        // ignore
       }
-      if (!stat.isDirectory()) continue
-      if (!SIZE_FOLDER_REGEX.test(name)) continue
-      sizeSet.add(name.replace(/[xX-]/g, '*'))
-    }
+    })
+    await Promise.all(statPromises)
   }
   return [...sizeSet]
 })
