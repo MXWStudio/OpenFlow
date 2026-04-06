@@ -178,6 +178,10 @@ export function FormatProcessor() {
     if (files.length === 0) return;
     setIsProcessing(true);
 
+    // Check if user has chosen a custom format
+    // But what if it's processing a video and keeping original format?
+    // Wait, the main issue is the `files` array missing properties or properties getting lost.
+
     // reset status
     setFiles(prev => prev.map(f => ({ ...f, status: 'processing', error: undefined, targetPath: undefined })));
 
@@ -231,9 +235,6 @@ export function FormatProcessor() {
             <Title order={3} c="#1d2230">格式处理</Title>
             <Text size="sm" c="dimmed">批量调整分辨率、压缩质量、转换格式</Text>
          </Box>
-         <Group>
-            {files.length > 0 && <Button variant="light" color="red" onClick={clearFiles} disabled={isProcessing}>清空列表</Button>}
-         </Group>
       </Group>
 
       <Flex gap="lg" style={{ flex: 1, minHeight: 0 }}>
@@ -264,6 +265,10 @@ export function FormatProcessor() {
           ) : (
             <ScrollArea style={{ flex: 1 }}>
               <Stack gap="xs" p="xs">
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm" fw={500} c="dimmed">已添加 {files.length} 个文件</Text>
+                  <Button variant="light" color="red" size="xs" onClick={clearFiles} disabled={isProcessing}>清空列表</Button>
+                </Group>
                 {files.map(f => (
                   <Card key={f.id} withBorder p="sm" radius="md">
                     <Group justify="space-between" wrap="nowrap">

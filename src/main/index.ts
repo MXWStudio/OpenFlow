@@ -871,7 +871,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
   for (const file of files) {
     try {
       if (!file.filePath || !await fs.pathExists(file.filePath)) {
-        throw new Error('文件路径不存在')
+        throw new Error(`文件路径不存在: ${file.filePath}`)
       }
 
       const dir = dirname(file.filePath)
