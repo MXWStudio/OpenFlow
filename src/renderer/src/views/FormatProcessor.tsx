@@ -123,9 +123,20 @@ export function FormatProcessor() {
            continue;
         }
 
+        const filePath = window.electronAPI && window.electronAPI.webUtils ? window.electronAPI.webUtils.getPathForFile(file) : file.path;
+
+        if (!filePath) {
+           notifications.show({
+             color: 'red',
+             title: '文件路径解析失败',
+             message: `无法解析文件 ${file.name} 的本地路径。请尝试使用文件夹选择或其他方式。`
+           });
+           continue;
+        }
+
         newFiles.push({
-          id: file.path + Date.now() + Math.random(),
-          filePath: file.path,
+          id: filePath + Date.now() + Math.random().toString(36).slice(2, 9),
+          filePath: filePath,
           fileName: file.name,
           ext,
           size: file.size,
