@@ -1017,9 +1017,7 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
         for (const size of sizes) {
           const folderName = size.replace(/\*/g, 'x')
           const sizeDir = join(projectRoot, folderName)
-          dirPromises.push(
-            fs.ensureDir(sizeDir).then(() => fs.ensureDir(join(sizeDir, '_Assets')))
-          )
+          dirPromises.push(fs.ensureDir(join(sizeDir, '_Assets')))
         }
 
         for (const name of FIXED_FOLDERS) {
