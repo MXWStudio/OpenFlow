@@ -43,6 +43,7 @@ import {
   User,
   Workflow,
   FolderSearch,
+  BookType,
 } from 'lucide-react';
 import {
   buildTemplatePreview,
@@ -79,8 +80,9 @@ import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
 import { AiWorkspace } from './views/AiWorkspace';
+import { GameDictionaryWorkspace } from './views/GameDictionaryWorkspace';
 
-type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format';
+type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary' | 'settings';
 
 import { useMantineColorScheme } from '@mantine/core';
 
@@ -340,6 +342,7 @@ export default function App() {
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
     { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
     { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
+    { key: 'dictionary', label: '词典', icon: <BookType size={20} />, color: 'pink' },
   ];
 
   if (!isAppReady) {
@@ -578,6 +581,8 @@ export default function App() {
           <FormatProcessor />
         ) : activeView === 'ai' ? (
           <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={producerName} />
+        ) : activeView === 'dictionary' ? (
+          <GameDictionaryWorkspace />
         ) : (
           <Flex h="100%" align="center" justify="center" p={40}>
             <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>

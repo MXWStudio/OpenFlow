@@ -14,8 +14,10 @@ import {
   Badge,
   Paper,
   ThemeIcon,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core';
-import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
+import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { WorkflowSettings, formatBytes } from '../appState';
 
@@ -392,6 +394,33 @@ export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: Organiz
                               <Badge variant="outline" color="gray">{formatBytes(file.size)}</Badge>
                             </Group>
                           </Stack>
+
+                          {!isVideo && (
+                            <Tooltip label="提取为主图并添加到游戏词典">
+                              <ActionIcon
+                                variant="light"
+                                color="pink"
+                                size="lg"
+                                style={{ flexShrink: 0, marginRight: 8 }}
+                                onClick={async () => {
+                                  try {
+                                    const localPath = await window.electronAPI.fs.saveImageToLocal({ sourcePath: file.filePath });
+                                    await window.electronAPI.db.insertGameMapping({
+                                      game_name: file.gameName,
+                                      image_path: localPath,
+                                      aliases: []
+                                    });
+                                    notifications.show({ color: 'green', title: '成功', message: `已将 ${file.gameName} 添加到游戏词典` });
+                                  } catch (error) {
+                                    console.error(error);
+                                    notifications.show({ color: 'red', title: '失败', message: '添加到游戏词典失败' });
+                                  }
+                                }}
+                              >
+                                <BookPlus size={18} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
 
                           <Box style={{ textAlign: 'right', flexShrink: 0 }}>
                             <Text size="xs" c="dimmed">将移至</Text>
