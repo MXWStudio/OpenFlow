@@ -3,7 +3,7 @@ import { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime } fro
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
 
-export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial' | 'aiImage';
+export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial' | 'aiImage' | 'videoManual' | 'imageManual';
 export type TokenType =
   | 'ProjectName'
   | 'CleanProjectName'
@@ -94,6 +94,15 @@ export interface HistoryEntry {
   timestamp: number;
 }
 
+export interface GameMapping {
+  id?: number;
+  game_name: string;
+  image_path: string;
+  aliases: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ValidationResult {
   fileName: string;
   filePath: string;
@@ -142,6 +151,7 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   videoSpecial: '特殊版块',
   videoManual: '手搓命名',
   imageRegular: '常规图片',
+  imageManual: '手搓图片',
   imageSpecial: '特殊版块',
   aiImage: 'AI识别命名',
 };

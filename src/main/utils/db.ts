@@ -29,6 +29,21 @@ export const db = new sqlite3.Database(dbPath, (err) => {
         }
       }
     );
+    db.run(
+      `CREATE TABLE IF NOT EXISTS game_mappings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_name TEXT NOT NULL,
+        image_path TEXT NOT NULL,
+        aliases TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      (err) => {
+        if (err) {
+          console.error('Error creating game_mappings table', err.message);
+        }
+      }
+    );
   }
 });
 
@@ -52,6 +67,94 @@ export function getImportedData(batchId?: string): Promise<any[]> {
             row_data: JSON.parse(row.row_data),
           }))
         );
+      }
+    });
+  });
+}
+
+// --- Game Mappings ---
+
+export interface GameMapping {
+  id?: number;
+  game_name: string;
+  image_path: string;
+  aliases: string[];
+}
+
+export function getGameMappings(): Promise<GameMapping[]> {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT * FROM game_mappings ORDER BY created_at DESC`;
+    db.all(sql, [], (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(
+          rows.map((row: any) => ({
+            id: row.id,
+            game_name: row.game_name,
+            image_path: row.image_path,
+            aliases: JSON.parse(row.aliases),
+          }))
+        );
+      }
+    });
+  });
+}
+
+export function insertGameMapping(mapping: Omit<GameMapping, 'id'>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const sql = `INSERT INTO game_mappings (game_name, image_path, aliases) VALUES (?, ?, ?)`;
+    db.run(sql, [mapping.game_name, mapping.image_path, JSON.stringify(mapping.aliases)], function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this.lastID);
+      }
+    });
+  });
+}
+
+export function updateGameMapping(id: number, mapping: Partial<GameMapping>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (mapping.game_name !== undefined) {
+      fields.push(`game_name = ?`);
+      values.push(mapping.game_name);
+    }
+    if (mapping.image_path !== undefined) {
+      fields.push(`image_path = ?`);
+      values.push(mapping.image_path);
+    }
+    if (mapping.aliases !== undefined) {
+      fields.push(`aliases = ?`);
+      values.push(JSON.stringify(mapping.aliases));
+    }
+    if (fields.length === 0) {
+      resolve();
+      return;
+    }
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    const sql = `UPDATE game_mappings SET ${fields.join(', ')} WHERE id = ?`;
+    values.push(id);
+    db.run(sql, values, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+export function deleteGameMapping(id: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const sql = `DELETE FROM game_mappings WHERE id = ?`;
+    db.run(sql, [id], (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
       }
     });
   });

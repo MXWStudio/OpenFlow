@@ -106,10 +106,17 @@ export interface ElectronAPI {
     deleteImportedData: (id: number) => Promise<boolean>
     deleteBatch: (batchId: string) => Promise<boolean>
     clearAllImportedData: () => Promise<boolean>
+    getGameMappings: () => Promise<any[]>
+    insertGameMapping: (mapping: any) => Promise<number>
+    updateGameMapping: (id: number, mapping: any) => Promise<boolean>
+    deleteGameMapping: (id: number) => Promise<boolean>
   }
 
   /** 文件系统相关 */
   fs: {
+    /** 保存图片到本地存储用于游戏词典 */
+    saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) => Promise<string>
+
     /**
      * 批量在选定目录下创建多项目文件夹结构（主进程内弹窗选择目标总目录）
      * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）

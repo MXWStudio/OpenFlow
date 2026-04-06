@@ -24,6 +24,10 @@ import {
   getImportedData,
   insertImportedData,
   updateImportedData,
+  getGameMappings,
+  insertGameMapping,
+  updateGameMapping,
+  deleteGameMapping,
 } from './utils/db'
 
 // ─── 初始化 ────────────────────────────────────────────
@@ -712,6 +716,35 @@ ipcMain.handle('dialog:importExcel', async () => {
     console.error('Error parsing Excel:', error)
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`无法解析 Excel 文件: ${message}`)
+  }
+})
+
+ipcMain.handle('fs:saveImageToLocal', async (_, args: { dataUrl?: string; sourcePath?: string }) => {
+  try {
+    const userDataPath = app.getPath('userData')
+    const imagesDir = join(userDataPath, 'game_dictionary_images')
+    await fs.ensureDir(imagesDir)
+
+    let destPath = ''
+    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}`
+
+    if (args.dataUrl) {
+      const base64Data = args.dataUrl.replace(/^data:image\/\w+;base64,/, "")
+      const buffer = Buffer.from(base64Data, 'base64')
+      destPath = join(imagesDir, `${filename}.png`)
+      await fs.writeFile(destPath, buffer)
+    } else if (args.sourcePath) {
+      const ext = extname(args.sourcePath) || '.png'
+      destPath = join(imagesDir, `${filename}${ext}`)
+      await fs.copyFile(args.sourcePath, destPath)
+    } else {
+      throw new Error('No dataUrl or sourcePath provided')
+    }
+
+    return destPath
+  } catch (error) {
+    console.error('fs:saveImageToLocal error:', error)
+    throw error
   }
 })
 
@@ -1565,6 +1598,45 @@ ipcMain.handle('shell:openPath', async (_, path: string) => {
     return errorMsg || 'success'
   } catch (error) {
     return String(error)
+  }
+})
+
+// --- Game Mappings DB Handlers ---
+ipcMain.handle('db:getGameMappings', async () => {
+  try {
+    return await getGameMappings()
+  } catch (error) {
+    console.error('db:getGameMappings Error:', error)
+    throw error
+  }
+})
+
+ipcMain.handle('db:insertGameMapping', async (_, mapping: any) => {
+  try {
+    return await insertGameMapping(mapping)
+  } catch (error) {
+    console.error('db:insertGameMapping Error:', error)
+    throw error
+  }
+})
+
+ipcMain.handle('db:updateGameMapping', async (_, id: number, mapping: any) => {
+  try {
+    await updateGameMapping(id, mapping)
+    return true
+  } catch (error) {
+    console.error('db:updateGameMapping Error:', error)
+    throw error
+  }
+})
+
+ipcMain.handle('db:deleteGameMapping', async (_, id: number) => {
+  try {
+    await deleteGameMapping(id)
+    return true
+  } catch (error) {
+    console.error('db:deleteGameMapping Error:', error)
+    throw error
   }
 })
 

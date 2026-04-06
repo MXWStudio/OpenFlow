@@ -34,12 +34,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteImportedData: (id: number) => ipcRenderer.invoke('db:deleteImportedData', id),
     deleteBatch: (batchId: string) => ipcRenderer.invoke('db:deleteBatch', batchId),
     clearAllImportedData: () => ipcRenderer.invoke('db:clearAllImportedData'),
+    getGameMappings: () => ipcRenderer.invoke('db:getGameMappings'),
+    insertGameMapping: (mapping: any) => ipcRenderer.invoke('db:insertGameMapping', mapping),
+    updateGameMapping: (id: number, mapping: any) => ipcRenderer.invoke('db:updateGameMapping', id, mapping),
+    deleteGameMapping: (id: number) => ipcRenderer.invoke('db:deleteGameMapping', id),
   },
 
   // ────────────────────────────────────────────────
   // 文件系统 API
   // ────────────────────────────────────────────────
   fs: {
+    /** 保存图片到本地存储用于游戏词典 */
+    saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) =>
+      ipcRenderer.invoke('fs:saveImageToLocal', args),
+
     /** 批量初始化项目目录结构（主进程内弹窗选择目标总目录） */
     initFolders: (projectsData: Array<{ projectName: string; sizes: string[] }>) =>
       ipcRenderer.invoke('fs:initFolders', projectsData),
