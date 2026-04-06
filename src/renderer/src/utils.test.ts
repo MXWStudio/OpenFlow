@@ -40,11 +40,31 @@ describe('utils', () => {
   });
 
   describe('formatBytes', () => {
-    it('should format bytes correctly', () => {
+    it('should handle falsy values', () => {
       assert.strictEqual(formatBytes(0), '-');
+      assert.strictEqual(formatBytes(NaN), '-');
+    });
+
+    it('should format bytes correctly for B', () => {
       assert.strictEqual(formatBytes(500), '500 B');
+      assert.strictEqual(formatBytes(1023), '1023 B');
+    });
+
+    it('should format bytes correctly for KB', () => {
       assert.strictEqual(formatBytes(1024), '1.0 KB');
+      assert.strictEqual(formatBytes(1024 * 1.5), '1.5 KB');
+      assert.strictEqual(formatBytes(1024 * 1024 - 1), '1024.0 KB');
+    });
+
+    it('should format bytes correctly for MB', () => {
       assert.strictEqual(formatBytes(1024 * 1024), '1.00 MB');
+      assert.strictEqual(formatBytes(1024 * 1024 * 1.5), '1.50 MB');
+      assert.strictEqual(formatBytes(1024 * 1024 * 1024), '1024.00 MB');
+    });
+
+    it('should handle negative numbers', () => {
+      assert.strictEqual(formatBytes(-100), '-100 B');
+      assert.strictEqual(formatBytes(-2000), '-2000 B');
     });
   });
 
