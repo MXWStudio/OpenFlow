@@ -870,8 +870,16 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
 
   for (const file of files) {
     try {
-      if (!file.filePath || !await fs.pathExists(file.filePath)) {
-        throw new Error(`文件路径不存在: ${file.filePath}`)
+      if (!file.id) {
+         throw new Error(`缺少唯一标识: file.id`);
+      }
+
+      if (!file.filePath || typeof file.filePath !== 'string' || !file.filePath.trim()) {
+        throw new Error(`文件路径不存在或无效: ${file.filePath}`)
+      }
+
+      if (!await fs.pathExists(file.filePath)) {
+         throw new Error(`本地文件不存在，请检查路径: ${file.filePath}`)
       }
 
       const dir = dirname(file.filePath)

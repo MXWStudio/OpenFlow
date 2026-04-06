@@ -86,6 +86,11 @@ export interface ParsedRequirementJson {
 
 /** window.electronAPI 接口全量定义 */
 export interface ElectronAPI {
+  /** Electron 辅助工具 */
+  webUtils: {
+    getPathForFile: (file: File) => string
+  }
+
   /** 对话框相关 */
   dialog: {
     /** 打开系统文件选择框，仅限 .json 文件 */

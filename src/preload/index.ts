@@ -3,10 +3,13 @@
  * 使用 contextBridge 暴露受控 API，确保 renderer 无法直接访问 Node.js
  */
 
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 // 将所有安全 API 暴露到 window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', {
+  webUtils: {
+    getPathForFile: (file: File) => webUtils.getPathForFile(file)
+  },
   // ────────────────────────────────────────────────
   // 对话框 API
   // ────────────────────────────────────────────────
