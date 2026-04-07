@@ -551,6 +551,7 @@ export default function App() {
         ) : activeView === 'organizer' ? (
           <OrganizerWorkspace
             workflowSettings={workflowSettings}
+            workspaceSettings={workspaceSettings}
             onOpenSettings={() => {
               setActiveView('settings');
             }}
