@@ -188,31 +188,7 @@ export function DailyWorkspace({
   layoutRight,
   onLayoutChange,
 }: DailyWorkspaceProps) {
-  const previewRows =
-    validationResults.length > 0
-      ? validationResults
-      : [
-          {
-            fileName: '暂无提示词内容，请添加',
-            filePath: '',
-            folderName: 'Prompt',
-            ext: '.txt',
-            fileSize: 0,
-            actualWidth: 0,
-            actualHeight: 0,
-            status: 'missing' as const,
-          },
-          {
-            fileName: '提示说明配置',
-            filePath: '',
-            folderName: 'Config',
-            ext: '.json',
-            fileSize: 0,
-            actualWidth: 0,
-            actualHeight: 0,
-            status: 'missing' as const,
-          },
-        ];
+  const previewRows = validationResults;
 
   const groupedPreviewRows = useMemo(() => {
     const groups: Record<string, { folderName: string; rows: typeof previewRows; hasError: boolean }> = {};
@@ -469,10 +445,205 @@ export function DailyWorkspace({
             <Stack gap={22} px={30} py={18} pb={132}>
               <Droppable droppableId="rightCol">{(provided) => (<div ref={provided.innerRef} {...provided.droppableProps} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
 {layoutRight.map((id, index) => {
-  if (id === 'uploadMedia') return (
+  if (id === 'quickActions') return (
     <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
-<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>上传素材</SectionTitle>
+<Group grow align="flex-start" gap="md">
+              <Card radius={30} p={22} withBorder shadow="sm" style={{ ...cardStyle, flex: 6 }}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>特殊命名</SectionTitle>
+                <SimpleGrid cols={2} spacing="md">
+                  <Button
+                    variant={isSpecialEnabled ? "filled" : "light"}
+                    color={isSpecialEnabled ? "orange" : "gray"}
+                    leftSection={<Sparkles size={16} />}
+                    onClick={() => onToggleSpecialEnabled(!isSpecialEnabled)}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        fontWeight: 800,
+                        transition: 'all 0.2s ease',
+                      },
+                    }}
+                  >
+                    创意比特
+                  </Button>
+                  <Button
+                    variant={isManualEnabled ? "filled" : "light"}
+                    color={isManualEnabled ? "violet" : "gray"}
+                    leftSection={<Sparkles size={16} />}
+                    onClick={() => onToggleManualEnabled(!isManualEnabled)}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        fontWeight: 800,
+                        transition: 'all 0.2s ease',
+                      },
+                    }}
+                  >
+                    手搓命名
+                  </Button>
+                </SimpleGrid>
+              </Card>
+
+              <Card radius={30} p={22} withBorder shadow="sm" style={{ ...cardStyle, flex: 4 }}>
+                <SectionTitle>快捷操作</SectionTitle>
+                <SimpleGrid cols={2} spacing="md">
+                  <Button
+                    variant="light"
+                    color="blue"
+                    leftSection={<FolderPlus size={16} />}
+                    onClick={onAddFolder}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        fontWeight: 800,
+                      },
+                    }}
+                  >
+                    添加文件夹
+                  </Button>
+                  <Button
+                    variant="light"
+                    color="red"
+                    leftSection={<Trash2 size={16} />}
+                    onClick={onClearFolders}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        fontWeight: 800,
+                      },
+                    }}
+                  >
+                    清空列表
+                  </Button>
+                  {hasFinishedRenaming && (
+                    <Button
+                      variant="light"
+                      color="teal"
+                      leftSection={<FolderOpen size={16} />}
+                      onClick={() => {
+                        if (lastRenamedPaths.length > 0) {
+                          onOpenFolder(lastRenamedPaths[0]);
+                        }
+                      }}
+                      radius="xl"
+                      size="md"
+                      style={{ gridColumn: 'span 2' }}
+                      styles={{
+                        root: {
+                          fontWeight: 800,
+                        },
+                      }}
+                    >
+                      打开对应文件夹
+                    </Button>
+                  )}
+                </SimpleGrid>
+
+                {folderPaths.length > 0 && (
+                  <Stack gap="sm" mt="md">
+                    {folderPaths.map((path) => (
+                      <Paper
+                        key={path}
+                        withBorder
+                        radius={18}
+                        p="sm"
+                        style={{
+                          borderColor: '#e2e8f0',
+                          background: '#fbfdff',
+                        }}
+                      >
+                        <Group justify="space-between" wrap="nowrap">
+                          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                            <ThemeIcon size={34} radius="xl" variant="light" color="blue">
+                              <FolderOpen size={16} />
+                            </ThemeIcon>
+                            <Text truncate c="#334155">
+                              {path}
+                            </Text>
+                          </Group>
+                          <Button variant="subtle" color="red" onClick={() => onRemoveFolder(path)}>
+                            删除
+                          </Button>
+                        </Group>
+                      </Paper>
+                    ))}
+                  </Stack>
+                )}
+              </Card>
+            </Group>
+              </div>)}</Draggable>
+  );
+  if (id === 'systemStatus') return (
+    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+<Group grow align="stretch" gap="md">
+              <Card radius={30} p={22} withBorder shadow="sm" style={{ ...cardStyle, flex: 6 }}>
+                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>系统状态</SectionTitle>
+                <Paper
+                  radius={26}
+                  p={30}
+                  style={{
+                    height: '100%',
+                    background:
+                      'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
+                    border: '1px solid #edf2f7',
+                    boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                  }}
+                >
+                  <Group justify="space-between" wrap="nowrap" align="center" h="100%">
+                    <Box style={{ flex: 1 }}>
+                      <Group gap={10} mb="sm">
+                        <Box
+                          w={8}
+                          h={8}
+                          style={{
+                            borderRadius: 999,
+                            background: hasIssues ? '#f59e0b' : '#34d399',
+                          }}
+                        />
+                        <Badge
+                          variant="light"
+                          radius="sm"
+                          color={hasIssues ? 'yellow' : 'teal'}
+                          styles={{ root: { fontWeight: 800 } }}
+                        >
+                          {statusLabel}
+                        </Badge>
+                      </Group>
+
+                      <Title order={2} c="#0f284d" mb={8} style={{ fontSize: 32, lineHeight: 1.1 }}>
+                        {statusTitle}
+                      </Title>
+
+                      <Text c="#64748b" size="md" fw={500}>
+                        {statusDescription}
+                      </Text>
+                    </Box>
+
+                    <Paper
+                      radius={22}
+                      p="lg"
+                      shadow="sm"
+                      style={{
+                        width: 72,
+                        height: 90,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#ffffff',
+                      }}
+                    >
+                      <FileText size={28} color="#d6dee9" />
+                    </Paper>
+                  </Group>
+                </Paper>
+              </Card>
+
+              <Card radius={30} p={22} withBorder shadow="sm" style={{ ...cardStyle, flex: 4 }}>
+                <SectionTitle>上传素材</SectionTitle>
                 <Dropzone
                   onDrop={() => {}} // Handle in onDropCapture
                   onDropCapture={(e: React.DragEvent) => {
@@ -512,220 +683,30 @@ export function DailyWorkspace({
                     root: {
                       border: '2px dashed #cad7e8',
                       background: '#f9fbff',
-                      minHeight: folderPaths.length > 0 ? 80 : 154,
-                      transition: 'min-height 0.2s ease',
+                      height: 'calc(100% - 38px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
                       cursor: 'pointer',
+                      padding: '16px',
                     },
                     inner: {
                       pointerEvents: 'none',
                     },
                   }}
                 >
-                  <Flex direction={folderPaths.length > 0 ? "row" : "column"} align="center" justify="center" mih={folderPaths.length > 0 ? 80 : 154} gap="sm" style={{ transition: 'min-height 0.2s ease' }}>
-                    <ThemeIcon variant="transparent" color="gray" size={folderPaths.length > 0 ? 32 : 48}>
-                      <UploadCloud size={folderPaths.length > 0 ? 24 : 28} color="#98a8bf" />
+                  <Flex direction="column" align="center" justify="center" gap="sm">
+                    <ThemeIcon variant="transparent" color="gray" size={42}>
+                      <UploadCloud size={28} color="#98a8bf" />
                     </ThemeIcon>
-                    <Text size={folderPaths.length > 0 ? "md" : "lg"} c="#7185a3">
-                      拖拽文件夹到这里，或{' '}
-                      <Text span c="#2563eb" fw={800}>
-                        点击选择文件夹
-                      </Text>
+                    <Text size="sm" c="#7185a3" ta="center">
+                      拖拽或 <Text span c="#2563eb" fw={800}>点击</Text>
                     </Text>
                   </Flex>
                 </Dropzone>
               </Card>
-
-              </div>)}</Draggable>
-  );
-  if (id === 'quickActions') return (
-    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
-<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>快捷操作</SectionTitle>
-                <SimpleGrid cols={2} spacing="md" mb="md">
-                  <Button
-                    variant={isSpecialEnabled ? "filled" : "light"}
-                    color={isSpecialEnabled ? "orange" : "gray"}
-                    leftSection={<Sparkles size={16} />}
-                    onClick={() => onToggleSpecialEnabled(!isSpecialEnabled)}
-                    radius="xl"
-                    size="md"
-                    styles={{
-                      root: {
-                        fontWeight: 800,
-                        transition: 'all 0.2s ease',
-                      },
-                    }}
-                  >
-                    创意比特
-                  </Button>
-                  <Button
-                    variant={isManualEnabled ? "filled" : "light"}
-                    color={isManualEnabled ? "violet" : "gray"}
-                    leftSection={<Sparkles size={16} />}
-                    onClick={() => onToggleManualEnabled(!isManualEnabled)}
-                    radius="xl"
-                    size="md"
-                    styles={{
-                      root: {
-                        fontWeight: 800,
-                        transition: 'all 0.2s ease',
-                      },
-                    }}
-                  >
-                    手搓命名
-                  </Button>
-                  <Button
-                    variant="light"
-                    color="blue"
-                    leftSection={<FolderPlus size={16} />}
-                    onClick={onAddFolder}
-                    radius="xl"
-                    size="md"
-                    styles={{
-                      root: {
-                        fontWeight: 800,
-                      },
-                    }}
-                  >
-                    添加文件夹
-                  </Button>
-                  <Button
-                    variant="light"
-                    color="red"
-                    leftSection={<Trash2 size={16} />}
-                    onClick={onClearFolders}
-                    radius="xl"
-                    size="md"
-                    styles={{
-                      root: {
-                        fontWeight: 800,
-                      },
-                    }}
-                  >
-                    清空列表
-                  </Button>
-                </SimpleGrid>
-
-                {folderPaths.length > 0 && (
-                  <Stack gap="sm" mt="md">
-                    {folderPaths.map((path) => (
-                      <Paper
-                        key={path}
-                        withBorder
-                        radius={18}
-                        p="sm"
-                        style={{
-                          borderColor: '#e2e8f0',
-                          background: '#fbfdff',
-                        }}
-                      >
-                        <Group justify="space-between" wrap="nowrap">
-                          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                            <ThemeIcon size={34} radius="xl" variant="light" color="blue">
-                              <FolderOpen size={16} />
-                            </ThemeIcon>
-                            <Text truncate c="#334155">
-                              {path}
-                            </Text>
-                          </Group>
-                          <Button variant="subtle" color="red" onClick={() => onRemoveFolder(path)}>
-                            删除
-                          </Button>
-                        </Group>
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-              </Card>
-
-              </div>)}</Draggable>
-  );
-  if (id === 'systemStatus') return (
-    <Draggable key={id} draggableId={id} index={index}>{(dragProvided) => (<div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
-<Card radius={30} p={22} withBorder shadow="sm" style={cardStyle}>
-                <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>系统状态</SectionTitle>
-                <Paper
-                  radius={26}
-                  p={30}
-                  style={{
-                    background:
-                      'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
-                    border: '1px solid #edf2f7',
-                    boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
-                  }}
-                >
-                  <Group justify="space-between" wrap="nowrap" align="center">
-                    <Box maw={560}>
-                      <Group gap={10} mb="md">
-                        <Box
-                          w={8}
-                          h={8}
-                          style={{
-                            borderRadius: 999,
-                            background: hasIssues ? '#f59e0b' : '#34d399',
-                          }}
-                        />
-                        <Badge
-                          variant="light"
-                          radius="sm"
-                          color={hasIssues ? 'yellow' : 'teal'}
-                          styles={{ root: { fontWeight: 800 } }}
-                        >
-                          {statusLabel}
-                        </Badge>
-                      </Group>
-
-                      <Title order={1} c="#0f284d" mb={12} style={{ fontSize: 56, lineHeight: 1.02 }}>
-                        {statusTitle}
-                      </Title>
-
-                      <Text c="#64748b" size="lg" fw={500}>
-                        {statusDescription}
-                      </Text>
-
-                      {hasFinishedRenaming && (
-                        <Button
-                          mt="xl"
-                          size="md"
-                          radius="xl"
-                          variant="light"
-                          color="blue"
-                          leftSection={<FolderOpen size={18} />}
-                          onClick={() => {
-                            if (lastRenamedPaths.length > 0) {
-                              onOpenFolder(lastRenamedPaths[0]);
-                            }
-                          }}
-                          styles={{
-                            root: {
-                              fontWeight: 800,
-                            }
-                          }}
-                        >
-                          打开对应文件夹
-                        </Button>
-                      )}
-                    </Box>
-
-                    <Paper
-                      radius={22}
-                      p="lg"
-                      shadow="sm"
-                      style={{
-                        width: 88,
-                        height: 110,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: '#ffffff',
-                      }}
-                    >
-                      <FileText size={36} color="#d6dee9" />
-                    </Paper>
-                  </Group>
-                </Paper>
-              </Card>
-
+            </Group>
               </div>)}</Draggable>
   );
   if (id === 'mediaDetails') return (
