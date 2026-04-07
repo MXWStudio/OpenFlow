@@ -90,7 +90,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('daily');
   const { setColorScheme } = useMantineColorScheme();
   const [isAppReady, setIsAppReady] = useState(false);
-  const [isTableExpanded, setIsTableExpanded] = useState(true);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -116,7 +116,7 @@ export default function App() {
   const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
   const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
-  const [layoutRight, setLayoutRight] = useState<string[]>(['uploadMedia', 'quickActions', 'systemStatus', 'mediaDetails']);
+  const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
   const dragCounter = useRef(0);
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
