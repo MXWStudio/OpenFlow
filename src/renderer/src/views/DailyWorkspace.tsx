@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
+  Accordion,
   ActionIcon,
   Badge,
   Box,
@@ -212,6 +213,27 @@ export function DailyWorkspace({
             status: 'missing' as const,
           },
         ];
+
+  const groupedPreviewRows = useMemo(() => {
+    const groups: Record<string, { folderName: string; rows: typeof previewRows; hasError: boolean }> = {};
+    for (const row of previewRows) {
+      if (!groups[row.folderName]) {
+        groups[row.folderName] = { folderName: row.folderName, rows: [], hasError: false };
+      }
+      groups[row.folderName].rows.push(row);
+      if (row.status !== 'valid') {
+        groups[row.folderName].hasError = true;
+      }
+    }
+    return Object.values(groups).sort((a, b) => {
+      if (a.hasError === b.hasError) return 0;
+      return a.hasError ? -1 : 1;
+    });
+  }, [previewRows]);
+
+  const defaultAccordionValues = useMemo(() => {
+    return groupedPreviewRows.filter(g => g.hasError).map(g => g.folderName);
+  }, [groupedPreviewRows]);
 
   const hasFinishedRenaming = lastRenamedPaths.length > 0 && folderPaths.length === 0 && !isValidating && !hasValidated;
 
@@ -749,68 +771,114 @@ export function DailyWorkspace({
                 </Box>
 
                 <Collapse in={isTableExpanded}>
-                  <Table
-                    highlightOnHover
-                    horizontalSpacing="xl"
-                    verticalSpacing="md"
-                    styles={{
-                      thead: {
-                        background: '#ffffff',
-                      },
-                      th: {
-                        color: '#8ea2c1',
-                        fontSize: 13,
-                        fontWeight: 800,
-                        borderBottom: '1px solid #eef3f8',
-                      },
-                      td: {
-                        borderTop: '1px solid #f1f5f9',
-                        color: '#334155',
-                        fontSize: 15,
-                      },
-                      tr: {
-                        transition: 'background-color 120ms ease',
-                      },
-                    }}
-                  >
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>文件名</Table.Th>
-                        <Table.Th>文件夹</Table.Th>
-                        <Table.Th>扩展名</Table.Th>
-                        <Table.Th>大小</Table.Th>
-                        <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {previewRows.map((row, index) => (
-                        <Table.Tr key={`${row.fileName}-${index}`}>
-                          <Table.Td>
-                            <Text fw={800} c="#22324c">
-                              {row.fileName}
-                              {row.ext}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text c="#8ea2c1">{row.folderName}</Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text c="#8ea2c1">{row.ext}</Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text c="#8ea2c1">
-                              {row.actualWidth && row.actualHeight
-                                ? `${row.actualWidth}×${row.actualHeight}`
-                                : formatBytes(row.fileSize)}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td style={{ textAlign: 'right' }}>
-                            <StatusBadge result={row} />
-                          </Table.Td>
-                        </Table.Tr>
+                  {groupedPreviewRows.length > 0 && (
+                    <Accordion
+                      multiple
+                      defaultValue={defaultAccordionValues}
+                      variant="separated"
+                      styles={{
+                        item: {
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #eef3f8',
+                          borderRadius: 8,
+                          marginBottom: 8,
+                          '&[data-active]': {
+                            borderColor: '#dbe4ef',
+                          }
+                        },
+                        control: {
+                          padding: '12px 22px',
+                          '&:hover': {
+                            backgroundColor: '#f8fbff',
+                          }
+                        },
+                        panel: {
+                          padding: '0 22px 12px 22px',
+                        },
+                        content: {
+                          padding: 0,
+                        }
+                      }}
+                    >
+                      {groupedPreviewRows.map((group) => (
+                        <Accordion.Item key={group.folderName} value={group.folderName}>
+                          <Accordion.Control>
+                            <Group justify="space-between">
+                              <Group gap="sm">
+                                <FolderOpen size={18} color={group.hasError ? '#ef4444' : '#8ea2c1'} />
+                                <Text fw={800} c={group.hasError ? '#ef4444' : '#334155'}>
+                                  {group.folderName}
+                                </Text>
+                                <Badge color={group.hasError ? 'red' : 'teal'} variant="light" size="sm">
+                                  {group.rows.length} 项
+                                </Badge>
+                              </Group>
+                            </Group>
+                          </Accordion.Control>
+                          <Accordion.Panel>
+                            <Table
+                              highlightOnHover
+                              horizontalSpacing="xl"
+                              verticalSpacing="sm"
+                              styles={{
+                                thead: {
+                                  background: '#ffffff',
+                                },
+                                th: {
+                                  color: '#8ea2c1',
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  borderBottom: '1px solid #eef3f8',
+                                },
+                                td: {
+                                  borderTop: '1px solid #f1f5f9',
+                                  color: '#334155',
+                                  fontSize: 14,
+                                },
+                                tr: {
+                                  transition: 'background-color 120ms ease',
+                                },
+                              }}
+                            >
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th>文件名</Table.Th>
+                                  <Table.Th>扩展名</Table.Th>
+                                  <Table.Th>大小</Table.Th>
+                                  <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {group.rows.map((row, index) => (
+                                  <Table.Tr key={`${row.fileName}-${index}`}>
+                                    <Table.Td>
+                                      <Text fw={800} c="#22324c">
+                                        {row.fileName}
+                                        {row.ext}
+                                      </Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Text c="#8ea2c1">{row.ext}</Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Text c="#8ea2c1">
+                                        {row.actualWidth && row.actualHeight
+                                          ? `${row.actualWidth}×${row.actualHeight}`
+                                          : formatBytes(row.fileSize)}
+                                      </Text>
+                                    </Table.Td>
+                                    <Table.Td style={{ textAlign: 'right' }}>
+                                      <StatusBadge result={row} />
+                                    </Table.Td>
+                                  </Table.Tr>
+                                ))}
+                              </Table.Tbody>
+                            </Table>
+                          </Accordion.Panel>
+                        </Accordion.Item>
                       ))}
-                    </Table.Tbody>
-                  </Table>
+                    </Accordion>
+                  )}
                 </Collapse>
               </Card>
 </div>)}</Draggable>
