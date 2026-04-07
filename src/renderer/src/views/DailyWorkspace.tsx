@@ -543,36 +543,6 @@ export function DailyWorkspace({
                   )}
                 </SimpleGrid>
 
-                {folderPaths.length > 0 && (
-                  <Stack gap="sm" mt="md">
-                    {folderPaths.map((path) => (
-                      <Paper
-                        key={path}
-                        withBorder
-                        radius={18}
-                        p="sm"
-                        style={{
-                          borderColor: '#e2e8f0',
-                          background: '#fbfdff',
-                        }}
-                      >
-                        <Group justify="space-between" wrap="nowrap">
-                          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                            <ThemeIcon size={34} radius="xl" variant="light" color="blue">
-                              <FolderOpen size={16} />
-                            </ThemeIcon>
-                            <Text truncate c="#334155">
-                              {path}
-                            </Text>
-                          </Group>
-                          <Button variant="subtle" color="red" onClick={() => onRemoveFolder(path)}>
-                            删除
-                          </Button>
-                        </Group>
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
               </Card>
             </Group>
               </div>)}</Draggable>
@@ -677,33 +647,74 @@ export function DailyWorkspace({
                     }
                   }}
                   activateOnClick={false}
-                  onClick={onAddFolder}
+                  onClick={folderPaths.length === 0 ? onAddFolder : undefined}
                   radius={24}
                   styles={{
                     root: {
-                      border: '2px dashed #cad7e8',
-                      background: '#f9fbff',
+                      border: folderPaths.length > 0 ? 'none' : '2px dashed #cad7e8',
+                      background: folderPaths.length > 0 ? 'transparent' : '#f9fbff',
                       height: 'calc(100% - 38px)',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      alignItems: folderPaths.length > 0 ? 'flex-start' : 'center',
+                      justifyContent: folderPaths.length > 0 ? 'flex-start' : 'center',
                       transition: 'all 0.2s ease',
-                      cursor: 'pointer',
-                      padding: '16px',
+                      cursor: folderPaths.length > 0 ? 'default' : 'pointer',
+                      padding: folderPaths.length > 0 ? 0 : '16px',
                     },
                     inner: {
-                      pointerEvents: 'none',
+                      pointerEvents: folderPaths.length > 0 ? 'auto' : 'none',
+                      width: '100%',
                     },
                   }}
                 >
-                  <Flex direction="column" align="center" justify="center" gap="sm">
-                    <ThemeIcon variant="transparent" color="gray" size={42}>
-                      <UploadCloud size={28} color="#98a8bf" />
-                    </ThemeIcon>
-                    <Text size="sm" c="#7185a3" ta="center">
-                      拖拽或 <Text span c="#2563eb" fw={800}>点击</Text>
-                    </Text>
-                  </Flex>
+                  {folderPaths.length > 0 ? (
+                    <ScrollArea style={{ height: '100%', width: '100%' }} offsetScrollbars>
+                      <Stack gap="sm">
+                        {folderPaths.map((path) => (
+                          <Paper
+                            key={path}
+                            withBorder
+                            radius={18}
+                            p="sm"
+                            style={{
+                              borderColor: '#e2e8f0',
+                              background: '#fbfdff',
+                            }}
+                          >
+                            <Group justify="space-between" wrap="nowrap">
+                              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                                <ThemeIcon size={34} radius="xl" variant="light" color="blue">
+                                  <FolderOpen size={16} />
+                                </ThemeIcon>
+                                <Text truncate c="#334155">
+                                  {path}
+                                </Text>
+                              </Group>
+                              <Button
+                                variant="subtle"
+                                color="red"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRemoveFolder(path);
+                                }}
+                              >
+                                删除
+                              </Button>
+                            </Group>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </ScrollArea>
+                  ) : (
+                    <Flex direction="column" align="center" justify="center" gap="sm">
+                      <ThemeIcon variant="transparent" color="gray" size={42}>
+                        <UploadCloud size={28} color="#98a8bf" />
+                      </ThemeIcon>
+                      <Text size="sm" c="#7185a3" ta="center">
+                        拖拽或 <Text span c="#2563eb" fw={800}>点击</Text>
+                      </Text>
+                    </Flex>
+                  )}
                 </Dropzone>
               </Card>
             </Group>
