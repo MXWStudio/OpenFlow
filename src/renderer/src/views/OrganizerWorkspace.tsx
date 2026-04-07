@@ -19,10 +19,11 @@ import {
 } from '@mantine/core';
 import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
-import { WorkflowSettings, formatBytes } from '../appState';
+import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
 
 interface OrganizerWorkspaceProps {
   workflowSettings: WorkflowSettings;
+  workspaceSettings: WorkspaceSettings;
   onOpenSettings: () => void;
 }
 
@@ -39,14 +40,15 @@ interface ScannedFile {
   selected: boolean;
 }
 
-export function OrganizerWorkspace({ workflowSettings, onOpenSettings }: OrganizerWorkspaceProps) {
+export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpenSettings }: OrganizerWorkspaceProps) {
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [hasOrganized, setHasOrganized] = useState(false);
 
-  const { organizerSourceDir, organizerDestDir, organizerFormats } = workflowSettings;
+  const { organizerFormats } = workflowSettings;
+  const { sourceDir: organizerSourceDir, destDir: organizerDestDir } = workspaceSettings;
 
   const handleScan = async () => {
     if (!organizerSourceDir) {
