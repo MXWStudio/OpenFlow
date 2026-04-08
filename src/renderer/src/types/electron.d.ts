@@ -119,7 +119,7 @@ export interface ElectronAPI {
 
   /** 文件系统相关 */
   fs: {
-    /** 保存图片到本地存储用于游戏词典 */
+    /** 保存图片到本地存储用于游戏库 */
     saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) => Promise<string>
 
     /**

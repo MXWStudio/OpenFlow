@@ -47,7 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件系统 API
   // ────────────────────────────────────────────────
   fs: {
-    /** 保存图片到本地存储用于游戏词典 */
+    /** 保存图片到本地存储用于游戏库 */
     saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) =>
       ipcRenderer.invoke('fs:saveImageToLocal', args),
 

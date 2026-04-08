@@ -39,7 +39,7 @@ export function GameDictionaryWorkspace() {
       setMappings(data);
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '错误', message: '加载游戏词典失败' });
+      notifications.show({ color: 'red', title: '错误', message: '加载游戏库失败' });
     }
   };
 
@@ -126,8 +126,8 @@ export function GameDictionaryWorkspace() {
   const handleFileUpload = async (file: File | null) => {
     if (!file) return;
     try {
-      // In electron, File has a path property.
-      const sourcePath = (file as any).path;
+      // Use the exposed webUtils to get the actual file path safely in Electron
+      const sourcePath = window.electronAPI.webUtils.getPathForFile(file);
       if (sourcePath) {
         const localPath = await window.electronAPI.fs.saveImageToLocal({ sourcePath });
         setEditingMapping(prev => ({ ...prev, image_path: localPath }));
@@ -146,7 +146,7 @@ export function GameDictionaryWorkspace() {
   return (
     <Box p="md" h="100%" style={{ display: 'flex', flexDirection: 'column' }}>
       <Group justify="space-between" mb="md">
-        <Title order={2}>游戏视觉与名称映射</Title>
+        <Title order={2}>游戏库</Title>
         <Group>
           <TextInput
             placeholder="搜索游戏名称或别名..."
