@@ -686,9 +686,14 @@ export function DailyWorkspace({
                                 <ThemeIcon size={34} radius="xl" variant="light" color="blue">
                                   <FolderOpen size={16} />
                                 </ThemeIcon>
-                                <Text truncate c="#334155">
-                                  {path}
-                                </Text>
+                                <Stack gap={2} style={{ minWidth: 0, overflow: 'hidden' }}>
+                                  <Text truncate c="#334155" fw={800} size="sm">
+                                    {path.includes('\\') ? path.split('\\').pop() : path.split('/').pop()}
+                                  </Text>
+                                  <Text truncate c="dimmed" size="xs">
+                                    {path}
+                                  </Text>
+                                </Stack>
                               </Group>
                               <Button
                                 variant="subtle"
