@@ -555,6 +555,13 @@ export default function App() {
             onOpenSettings={() => {
               setActiveView('settings');
             }}
+            onChangeWorkspaceSettings={async (partialSettings) => {
+              const newSettings = { ...workspaceSettings, ...partialSettings };
+              setWorkspaceSettings(newSettings);
+              if (window.electronAPI) {
+                await window.electronAPI.store.set('workspaceSettings', newSettings);
+              }
+            }}
           />
         ) : activeView === 'settings' ? (
           <SettingsWorkspace

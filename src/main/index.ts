@@ -990,6 +990,9 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
 
 // ─── IPC: 文件系统 ───────────────────────────────────────
 
+// 记录最近一次整理操作的文件移动路径 (新路径 -> 旧路径)
+let lastOrganizedFiles: Record<string, string> = {}
+
 /**
  * fs:initFolders
  * 批量生成项目文件夹结构。接收 projectsData: Array<{ projectName, sizes }>，
@@ -1504,6 +1507,10 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
  */
 ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
   if (!files || files.length === 0) return { success: false, error: '没有需要移动的文件' }
+
+  // 清空上一次的记录，确保撤销只针对当前这一次转移
+  lastOrganizedFiles = {}
+
   const results = []
   const dirCache = new Map<string, Set<string>>()
 
@@ -1589,12 +1596,50 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
       await fs.move(file.filePath, targetFilePath)
       existingFiles.add(targetFileName)
       results.push({ id: file.id, success: true, targetPath: targetFilePath })
+      lastOrganizedFiles[targetFilePath] = file.filePath
     } catch (err) {
       results.push({ id: file.id, success: false, error: String(err) })
     }
   }
 
   return { success: true, results, missingFolders: Array.from(missingFolders) }
+})
+
+/**
+ * fs:undoOrganize
+ * 撤销上一次的素材整理移动
+ */
+ipcMain.handle('fs:undoOrganize', async () => {
+  const keys = Object.keys(lastOrganizedFiles)
+  if (keys.length === 0) {
+    return { success: false, error: '没有可以撤销的转移记录' }
+  }
+
+  let successCount = 0
+  let failCount = 0
+
+  for (const currentPath of keys) {
+    const originalPath = lastOrganizedFiles[currentPath]
+    try {
+      if (await fs.pathExists(currentPath)) {
+        await fs.move(currentPath, originalPath, { overwrite: true })
+        successCount++
+      } else {
+        failCount++
+      }
+    } catch (err) {
+      console.error(`撤销转移失败: ${currentPath} -> ${originalPath}`, err)
+      failCount++
+    }
+  }
+
+  // 清空记录
+  lastOrganizedFiles = {}
+
+  return {
+    success: true,
+    message: `撤销完成。成功恢复 ${successCount} 个文件，失败/未找到 ${failCount} 个。`
+  }
 })
 
 // ─── IPC: Shell ──────────────────────────────────────────
