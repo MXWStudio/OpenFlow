@@ -398,7 +398,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                           </Stack>
 
                           {!isVideo && (
-                            <Tooltip label="提取为主图并添加到游戏词典">
+                            <Tooltip label="提取为主图并添加到游戏库">
                               <ActionIcon
                                 variant="light"
                                 color="pink"
@@ -412,10 +412,10 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                                       image_path: localPath,
                                       aliases: []
                                     });
-                                    notifications.show({ color: 'green', title: '成功', message: `已将 ${file.gameName} 添加到游戏词典` });
+                                    notifications.show({ color: 'green', title: '成功', message: `已将 ${file.gameName} 添加到游戏库` });
                                   } catch (error) {
                                     console.error(error);
-                                    notifications.show({ color: 'red', title: '失败', message: '添加到游戏词典失败' });
+                                    notifications.show({ color: 'red', title: '失败', message: '添加到游戏库失败' });
                                   }
                                 }}
                               >

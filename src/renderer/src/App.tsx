@@ -43,7 +43,7 @@ import {
   User,
   Workflow,
   FolderSearch,
-  BookType,
+  Library,
 } from 'lucide-react';
 import {
   buildTemplatePreview,
@@ -342,7 +342,7 @@ export default function App() {
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
     { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
     { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
-    { key: 'dictionary', label: '词典', icon: <BookType size={20} />, color: 'pink' },
+    { key: 'dictionary', label: '库', icon: <Library size={20} />, color: 'pink' },
   ];
 
   if (!isAppReady) {
