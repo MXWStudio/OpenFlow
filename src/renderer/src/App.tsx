@@ -61,6 +61,7 @@ import {
   DEFAULT_SHORTCUTS,
   DEFAULT_PROCESSING,
   DEFAULT_DATA_STATS,
+  DEFAULT_SCREENSHOT,
   type ApiKeys,
   type HistoryEntry,
   type TemplateKey,
@@ -73,6 +74,7 @@ import {
   type ShortcutSettings,
   type ProcessingSettings,
   type DataStatsSettings,
+  type ScreenshotSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
@@ -115,6 +117,7 @@ export default function App() {
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
   const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
   const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
+  const [screenshotSettings, setScreenshotSettings] = useState<ScreenshotSettings>(DEFAULT_SCREENSHOT);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
   const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
   const dragCounter = useRef(0);
@@ -193,6 +196,7 @@ export default function App() {
       }
       if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
       if (config.dataStatsSettings) setDataStatsSettings(config.dataStatsSettings as DataStatsSettings);
+      if (config.screenshotSettings) setScreenshotSettings(config.screenshotSettings as ScreenshotSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.dailyLayoutLeft)) setLayoutLeft(config.dailyLayoutLeft as string[]);
@@ -581,6 +585,8 @@ export default function App() {
             setProcessingSettings={setProcessingSettings}
             dataStatsSettings={dataStatsSettings}
             setDataStatsSettings={setDataStatsSettings}
+            screenshotSettings={screenshotSettings}
+            setScreenshotSettings={setScreenshotSettings}
             producerName={producerName}
           />
         ) : activeView === 'bitable' ? (

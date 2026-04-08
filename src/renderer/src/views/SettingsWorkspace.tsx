@@ -15,6 +15,9 @@ import {
   Radio,
   ScrollArea,
   Select,
+  Popover,
+  Table,
+  Code,
   SimpleGrid,
   Slider,
   Stack,
@@ -48,6 +51,11 @@ import {
   Workflow,
   Wrench,
   X,
+  Crop,
+  Layers,
+  Download,
+  MousePointer,
+  HelpCircle,
 } from 'lucide-react';
 import {
   buildTemplatePreview,
@@ -63,6 +71,7 @@ import {
   TOKEN_OPTIONS,
   type ApiKeys,
   type DataStatsSettings,
+  type ScreenshotSettings,
   type ProcessingSettings,
   type ShortcutSettings,
   type SystemSettings,
@@ -72,6 +81,7 @@ import {
   type WorkflowSettings,
   type WorkspaceSettings,
 } from '../appState';
+import { parseNamingRule } from '../screenshotUtils';
 
 interface SettingsWorkspaceProps {
   userInfo: UserInfo;
@@ -90,6 +100,8 @@ interface SettingsWorkspaceProps {
   setProcessingSettings: React.Dispatch<React.SetStateAction<ProcessingSettings>>;
   dataStatsSettings: DataStatsSettings;
   setDataStatsSettings: React.Dispatch<React.SetStateAction<DataStatsSettings>>;
+  screenshotSettings: ScreenshotSettings;
+  setScreenshotSettings: React.Dispatch<React.SetStateAction<ScreenshotSettings>>;
   producerName: string;
 }
 
@@ -110,13 +122,19 @@ export function SettingsWorkspace({
   setProcessingSettings,
   dataStatsSettings,
   setDataStatsSettings,
+  screenshotSettings,
+  setScreenshotSettings,
   producerName,
 }: SettingsWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<string>('system');
   const [shortcutConflicts, setShortcutConflicts] = useState<Record<keyof ShortcutSettings, boolean>>({
     togglePanel: false,
     screenshot: false,
+    screenshotAndCopy: false,
+    customScreenshot: false,
     pinImage: false,
+    hideShowAllPins: false,
+    switchPinGroup: false,
   });
 
   // Check shortcut conflicts
@@ -146,6 +164,7 @@ export function SettingsWorkspace({
     await window.electronAPI.store.set('shortcutSettings', shortcutSettings);
     await window.electronAPI.store.set('processingSettings', processingSettings);
     await window.electronAPI.store.set('dataStatsSettings', dataStatsSettings);
+    await window.electronAPI.store.set('screenshotSettings', screenshotSettings);
 
     // Legacy settings (need to keep for backwards compatibility if parts of app depend on it)
     await window.electronAPI.store.set('screenshotShortcut', shortcutSettings.screenshot);
@@ -199,7 +218,13 @@ export function SettingsWorkspace({
             <Tabs.Tab value="workspace" leftSection={<HardDrive size={18} />}>工作区</Tabs.Tab>
             <Tabs.Tab value="templates" leftSection={<Workflow size={18} />}>命名模板</Tabs.Tab>
 
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">工具与增强</Text>
+                        <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">工具与增强</Text>
+            <Tabs.Tab value="screenshot-control" leftSection={<MousePointer size={18} />}>截图控制</Tabs.Tab>
+            <Tabs.Tab value="screenshot-output" leftSection={<Download size={18} />}>截图输出</Tabs.Tab>
+            <Tabs.Tab value="screenshot-pin" leftSection={<Layers size={18} />}>截图贴图</Tabs.Tab>
+
+            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">高级设定</Text>
+
             <Tabs.Tab value="shortcuts" leftSection={<Keyboard size={18} />}>快捷键</Tabs.Tab>
             <Tabs.Tab value="processing" leftSection={<Cpu size={18} />}>处理引擎</Tabs.Tab>
             <Tabs.Tab value="ai" leftSection={<Bot size={18} />}>AI 集成</Tabs.Tab>
@@ -493,6 +518,230 @@ export function SettingsWorkspace({
                     );
                   })}
                 </Stack>
+              </Box>
+            </Stack>
+          </Tabs.Panel>
+
+
+          <Tabs.Panel value="screenshot-control" pt="md">
+            <Stack gap="xl" maw={700}>
+              <Box>
+                <Title order={4} mb="lg">Snipaste 快捷键</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Stack gap="lg">
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>截屏:</Text>
+                      <TextInput flex={1} value={shortcutSettings.screenshot} onChange={(e) => handleShortcutChange('screenshot', e.currentTarget.value)} />
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>截屏并自动复制:</Text>
+                      <TextInput flex={1} value={shortcutSettings.screenshotAndCopy} onChange={(e) => handleShortcutChange('screenshotAndCopy', e.currentTarget.value)} />
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>自定义截屏:</Text>
+                      <TextInput flex={1} value={shortcutSettings.customScreenshot} onChange={(e) => handleShortcutChange('customScreenshot', e.currentTarget.value)} />
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>贴图:</Text>
+                      <TextInput flex={1} value={shortcutSettings.pinImage} onChange={(e) => handleShortcutChange('pinImage', e.currentTarget.value)} />
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>隐藏/显示所有贴图:</Text>
+                      <TextInput flex={1} value={shortcutSettings.hideShowAllPins} onChange={(e) => handleShortcutChange('hideShowAllPins', e.currentTarget.value)} />
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={500} w={150}>切换到另一贴图组:</Text>
+                      <TextInput flex={1} value={shortcutSettings.switchPinGroup} onChange={(e) => handleShortcutChange('switchPinGroup', e.currentTarget.value)} />
+                    </Group>
+                  </Stack>
+                </Card>
+              </Box>
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="screenshot-output" pt="md">
+            <Stack gap="xl" maw={700}>
+              <Box>
+                <Title order={4} mb="lg">输出</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Stack gap="xl">
+                    <Group align="center">
+                      <Text fw={500}>图像质量:</Text>
+                      <NumberInput
+                        w={100}
+                        value={screenshotSettings.imageQuality}
+                        onChange={(val) => setScreenshotSettings(prev => ({ ...prev, imageQuality: typeof val === 'number' ? val : -1 }))}
+                        min={-1}
+                        max={100}
+                      />
+                      <Tooltip label="范围: 0 到 100 或 -1。设为 0 可最大压缩图像，100 为完全不压缩。设为 -1 会自动决定。">
+                        <ActionIcon variant="subtle"><HelpCircle size={16} /></ActionIcon>
+                      </Tooltip>
+                    </Group>
+
+                    <Box>
+                      <Text fw={600} mb="sm">手动保存</Text>
+                      <Stack gap="sm" pl="md" style={{ borderLeft: '2px solid var(--mantine-color-default-border)' }}>
+                        <TextInput
+                          label="文件名"
+                          value={screenshotSettings.manualSaveName}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, manualSaveName: e.currentTarget.value }))}
+                        />
+                        <TextInput
+                          label="预览"
+                          readOnly
+                          value={parseNamingRule(screenshotSettings.manualSaveName)}
+                          styles={{ input: { backgroundColor: 'var(--mantine-color-gray-1)' } }}
+                        />
+                        <Checkbox
+                          label="记住上一次使用的图片扩展名"
+                          checked={screenshotSettings.manualSaveRememberExtension}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, manualSaveRememberExtension: e.currentTarget.checked }))}
+                        />
+                      </Stack>
+                    </Box>
+
+                    <Box>
+                      <Text fw={600} mb="sm">快捷保存</Text>
+                      <Stack gap="sm" pl="md" style={{ borderLeft: '2px solid var(--mantine-color-default-border)' }}>
+                        <Checkbox
+                          label="显示通知"
+                          checked={screenshotSettings.quickSaveNotify}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, quickSaveNotify: e.currentTarget.checked }))}
+                        />
+                        <TextInput
+                          label="路径"
+                          value={screenshotSettings.quickSavePath}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, quickSavePath: e.currentTarget.value }))}
+                          rightSection={
+                            <ActionIcon onClick={() => selectFolder((p) => setScreenshotSettings(prev => ({ ...prev, quickSavePath: p + '/$yyyy-MM-dd$.png' })))}>
+                              <FolderSearch size={16} />
+                            </ActionIcon>
+                          }
+                        />
+                        <TextInput
+                          label="预览"
+                          readOnly
+                          value={parseNamingRule(screenshotSettings.quickSavePath)}
+                          styles={{ input: { backgroundColor: 'var(--mantine-color-gray-1)' } }}
+                        />
+                      </Stack>
+                    </Box>
+
+                    <Box>
+                      <Group gap="xs" mb="sm">
+                        <Checkbox
+                          checked={screenshotSettings.autoSaveEnabled}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, autoSaveEnabled: e.currentTarget.checked }))}
+                        />
+                        <Text fw={600}>自动保存</Text>
+                      </Group>
+                      <Stack gap="sm" pl="md" style={{ borderLeft: '2px solid var(--mantine-color-default-border)' }}>
+                        <TextInput
+                          label="路径"
+                          disabled={!screenshotSettings.autoSaveEnabled}
+                          value={screenshotSettings.autoSavePath}
+                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, autoSavePath: e.currentTarget.value }))}
+                          rightSection={
+                            <ActionIcon disabled={!screenshotSettings.autoSaveEnabled} onClick={() => selectFolder((p) => setScreenshotSettings(prev => ({ ...prev, autoSavePath: p + '/$yyyy-MM-dd$.png' })))}>
+                              <FolderSearch size={16} />
+                            </ActionIcon>
+                          }
+                        />
+                        <TextInput
+                          label="预览"
+                          disabled={!screenshotSettings.autoSaveEnabled}
+                          readOnly
+                          value={parseNamingRule(screenshotSettings.autoSavePath)}
+                          styles={{ input: { backgroundColor: 'var(--mantine-color-gray-1)' } }}
+                        />
+                      </Stack>
+                    </Box>
+
+                    <Box mt="xl">
+                      <Popover width={400} position="bottom-start" withArrow shadow="md">
+                        <Popover.Target>
+                          <Button variant="default" size="xs">命名规则帮助</Button>
+                        </Popover.Target>
+                        <Popover.Dropdown>
+                          <ScrollArea h={300}>
+                            <Text size="sm" fw={700} mb="xs">支持的命名规则</Text>
+                            <Table size="xs" striped highlightOnHover>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th>变量名</Table.Th>
+                                  <Table.Th>说明</Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                <Table.Tr><Table.Td><Code>%os%</Code></Table.Td><Table.Td>操作系统</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>%computername%</Code></Table.Td><Table.Td>计算机名</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>%username%</Code></Table.Td><Table.Td>用户名</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>%title%</Code></Table.Td><Table.Td>当前窗口标题</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>$yyyy-MM-dd$</Code></Table.Td><Table.Td>年-月-日 (如 2026-04-08)</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>$HH-mm-ss$</Code></Table.Td><Table.Td>时-分-秒</Table.Td></Table.Tr>
+                                <Table.Tr><Table.Td><Code>$yy-M-d$</Code></Table.Td><Table.Td>短格式时间</Table.Td></Table.Tr>
+                              </Table.Tbody>
+                            </Table>
+                          </ScrollArea>
+                        </Popover.Dropdown>
+                      </Popover>
+                    </Box>
+
+                  </Stack>
+                </Card>
+              </Box>
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="screenshot-pin" pt="md">
+            <Stack gap="xl" maw={700}>
+              <Box>
+                <Title order={4} mb="lg">贴图行为</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Stack gap="md">
+                    <Checkbox
+                      label="窗口阴影"
+                      checked={screenshotSettings.pinShadow}
+                      onChange={(e) => setScreenshotSettings(prev => ({ ...prev, pinShadow: e.currentTarget.checked }))}
+                    />
+                    <Group align="center">
+                      <Text w={120}>默认不透明度:</Text>
+                      <NumberInput
+                        w={100}
+                        value={screenshotSettings.pinOpacity}
+                        onChange={(val) => setScreenshotSettings(prev => ({ ...prev, pinOpacity: typeof val === 'number' ? val : 100 }))}
+                        min={10} max={100}
+                      />
+                      <Text>%</Text>
+                    </Group>
+                    <Group align="center">
+                      <Text w={120}>最大窗口尺寸:</Text>
+                      <NumberInput
+                        w={120}
+                        value={screenshotSettings.pinMaxWidth}
+                        onChange={(val) => setScreenshotSettings(prev => ({ ...prev, pinMaxWidth: typeof val === 'number' ? val : 12000 }))}
+                        min={100} max={50000}
+                      />
+                    </Group>
+                    <Group align="center">
+                      <Text w={120}>快速缩略图大小:</Text>
+                      <NumberInput
+                        w={80}
+                        value={screenshotSettings.pinThumbWidth}
+                        onChange={(val) => setScreenshotSettings(prev => ({ ...prev, pinThumbWidth: typeof val === 'number' ? val : 50 }))}
+                        min={10} max={500}
+                      />
+                      <Text>×</Text>
+                      <NumberInput
+                        w={80}
+                        value={screenshotSettings.pinThumbHeight}
+                        onChange={(val) => setScreenshotSettings(prev => ({ ...prev, pinThumbHeight: typeof val === 'number' ? val : 50 }))}
+                        min={10} max={500}
+                      />
+                    </Group>
+                  </Stack>
+                </Card>
               </Box>
             </Stack>
           </Tabs.Panel>
