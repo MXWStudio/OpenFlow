@@ -28,6 +28,10 @@ import {
   insertGameMapping,
   updateGameMapping,
   deleteGameMapping,
+  getExcelFiles,
+  insertExcelFile,
+  deleteExcelFile,
+  clearAllExcelFiles
 } from './utils/db'
 
 // ─── 初始化 ────────────────────────────────────────────
@@ -639,6 +643,44 @@ ipcMain.handle('db:updateImportedData', async (_, id: number, rowData: any) => {
   }
 })
 
+ipcMain.handle('db:getExcelFiles', async () => {
+  try {
+    return await getExcelFiles()
+  } catch (error) {
+    console.error('db:getExcelFiles Error:', error)
+    return []
+  }
+})
+
+ipcMain.handle('db:insertExcelFile', async (_, file: any) => {
+  try {
+    return await insertExcelFile(file)
+  } catch (error) {
+    console.error('db:insertExcelFile Error:', error)
+    return -1
+  }
+})
+
+ipcMain.handle('db:deleteExcelFile', async (_, id: number) => {
+  try {
+    await deleteExcelFile(id)
+    return true
+  } catch (error) {
+    console.error('db:deleteExcelFile Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:clearAllExcelFiles', async () => {
+  try {
+    await clearAllExcelFiles()
+    return true
+  } catch (error) {
+    console.error('db:clearAllExcelFiles Error:', error)
+    return false
+  }
+})
+
 ipcMain.handle('db:deleteImportedData', async (_, id: number) => {
   try {
     await deleteImportedData(id)
@@ -699,6 +741,19 @@ ipcMain.handle('dialog:importExcel', async () => {
   try {
     const filePath = result.filePaths[0]
     const fileName = basename(filePath)
+    const ext = extname(filePath)
+
+    // Ensure local backup directory exists
+    const userDataPath = app.getPath('userData')
+    const backupDir = join(userDataPath, 'imported_excels')
+    await fs.ensureDir(backupDir)
+
+    // Create a unique filename to avoid overwrites
+    const uniqueFilename = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`
+    const savedPath = join(backupDir, uniqueFilename)
+
+    // Copy the original file to the backup location
+    await fs.copyFile(filePath, savedPath)
 
     // Read the file
     const fileBuffer = await fs.readFile(filePath)
@@ -711,11 +766,39 @@ ipcMain.handle('dialog:importExcel', async () => {
     // Convert to JSON (array of objects)
     const data = xlsx.utils.sheet_to_json(worksheet)
 
-    return { fileName, data }
+    return { fileName, data, savedPath }
   } catch (error) {
     console.error('Error parsing Excel:', error)
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`无法解析 Excel 文件: ${message}`)
+  }
+})
+
+// Auto-cleanup handler for old Excel files (older than 30 days)
+ipcMain.handle('fs:cleanupOldExcels', async () => {
+  try {
+    const userDataPath = app.getPath('userData')
+    const backupDir = join(userDataPath, 'imported_excels')
+    if (!(await fs.pathExists(backupDir))) return true
+
+    const files = await fs.readdir(backupDir)
+    const now = Date.now()
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+    let deletedCount = 0
+    for (const file of files) {
+      const filePath = join(backupDir, file)
+      const stat = await fs.stat(filePath)
+      if (now - stat.mtimeMs > THIRTY_DAYS_MS) {
+        await fs.remove(filePath)
+        deletedCount++
+      }
+    }
+    console.log(`Cleaned up ${deletedCount} old Excel files.`)
+    return true
+  } catch (error) {
+    console.error('Error cleaning up Excel files:', error)
+    return false
   }
 })
 

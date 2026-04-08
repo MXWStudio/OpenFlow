@@ -44,6 +44,20 @@ export const db = new sqlite3.Database(dbPath, (err) => {
         }
       }
     );
+    db.run(
+      `CREATE TABLE IF NOT EXISTS excel_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        saved_path TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      (err) => {
+        if (err) {
+          console.error('Error creating excel_files table', err.message);
+        }
+      }
+    );
   }
 });
 
@@ -67,6 +81,68 @@ export function getImportedData(batchId?: string): Promise<any[]> {
             row_data: JSON.parse(row.row_data),
           }))
         );
+      }
+    });
+  });
+}
+
+// --- Excel Files Mappings ---
+
+export interface ExcelFileRecord {
+  id?: number;
+  batch_id: string;
+  file_name: string;
+  saved_path: string;
+  created_at?: string;
+}
+
+export function getExcelFiles(): Promise<ExcelFileRecord[]> {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT * FROM excel_files ORDER BY created_at DESC`;
+    db.all(sql, [], (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows as ExcelFileRecord[]);
+      }
+    });
+  });
+}
+
+export function insertExcelFile(file: Omit<ExcelFileRecord, 'id' | 'created_at'>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const sql = `INSERT INTO excel_files (batch_id, file_name, saved_path) VALUES (?, ?, ?)`;
+    db.run(sql, [file.batch_id, file.file_name, file.saved_path], function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this.lastID);
+      }
+    });
+  });
+}
+
+export function deleteExcelFile(id: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const sql = `DELETE FROM excel_files WHERE id = ?`;
+    db.run(sql, [id], (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+export function clearAllExcelFiles(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const sql = `DELETE FROM excel_files`;
+    db.run(sql, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
       }
     });
   });
