@@ -281,7 +281,9 @@ function createWindow(): void {
 // ─── 截屏功能 ───────────────────────────────────────────
 
 async function startScreenshot() {
+  console.log('--- Starting Screenshot ---')
   if (screenshotWindow) {
+    console.log('Screenshot window already exists')
     if (!screenshotWindow.isDestroyed()) {
       screenshotWindow.focus()
       return
@@ -302,6 +304,7 @@ async function startScreenshot() {
 
   const width = maxX - minX
   const height = maxY - minY
+  console.log('Display bounds:', { minX, minY, width, height })
 
   screenshotWindow = new BrowserWindow({
     x: minX,
@@ -325,39 +328,50 @@ async function startScreenshot() {
 
   // Capture all screens
   try {
+    console.log('Capturing sources...')
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width, height }
     })
 
-    // We'll pass the first source for now (often spans all if setup right, or we just pass the primary)
-    // For a true multi-monitor setup in Electron, you'd stitch them, but passing primary is standard MVP.
-    // Let's pass the first screen's thumbnail as data URL.
+    console.log('Sources found:', sources.length)
+    if (sources.length === 0) {
+      throw new Error('No screen sources found')
+    }
+
+    // We'll pass the first source for now
     const source = sources[0]
+    console.log('Selected source:', source.name)
 
     screenshotWindow.once('ready-to-show', () => {
+      console.log('Screenshot window ready to show')
       if (screenshotWindow && !screenshotWindow.isDestroyed()) {
         screenshotWindow.show()
         screenshotWindow.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
+        console.log('Sent screenshot:captured to renderer')
       }
     })
 
     const isDev = !app.isPackaged
     if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-      screenshotWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`)
-      // screenshotWindow.webContents.openDevTools({ mode: 'detach' })
+      const url = `${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`
+      console.log('Loading URL:', url)
+      screenshotWindow.loadURL(url)
     } else {
-      screenshotWindow.loadFile(join(__dirname, '../renderer/screenshot.html'))
+      const path = join(__dirname, '../renderer/screenshot.html')
+      console.log('Loading file:', path)
+      screenshotWindow.loadFile(path)
     }
   } catch (err) {
-    console.error('Screenshot capture failed', err)
+    console.error('Screenshot capture failed:', err)
     if (screenshotWindow) {
       screenshotWindow.close()
       screenshotWindow = null
     }
   }
 
-  screenshotWindow.on('closed', () => {
+  screenshotWindow?.on('closed', () => {
+    console.log('Screenshot window closed')
     screenshotWindow = null
   })
 }
@@ -372,6 +386,7 @@ function closeScreenshot() {
 // ─── 悬浮贴图功能 ────────────────────────────────────────
 
 function createPinWindow(dataUrl: string, bounds: { width: number, height: number, x: number, y: number }) {
+  console.log('Creating Pin Window with bounds:', bounds)
   const pinWin = new BrowserWindow({
     width: Math.round(bounds.width),
     height: Math.round(bounds.height),
@@ -404,6 +419,30 @@ function createPinWindow(dataUrl: string, bounds: { width: number, height: numbe
   pinWindows.add(pinWin)
   pinWin.on('closed', () => {
     pinWindows.delete(pinWin)
+  })
+}
+
+/**
+ * 从剪贴板读取图片并贴图
+ */
+function pinFromClipboard() {
+  console.log('--- Pinning from Clipboard ---')
+  const image = clipboard.readImage()
+  if (image.isEmpty()) {
+    console.log('Clipboard is empty or does not contain an image')
+    return
+  }
+
+  const size = image.getSize()
+  const display = screen.getPrimaryDisplay()
+  const x = (display.bounds.width - size.width) / 2
+  const y = (display.bounds.height - size.height) / 2
+
+  createPinWindow(image.toDataURL(), {
+    width: size.width,
+    height: size.height,
+    x: Math.max(0, x),
+    y: Math.max(0, y)
   })
 }
 
@@ -530,6 +569,15 @@ app.whenReady().then(async () => {
       }
     },
     { label: '开始截图', click: () => startScreenshot() },
+    { label: '截图开发调试', click: () => {
+        if (screenshotWindow) screenshotWindow.webContents.openDevTools({ mode: 'detach' })
+        else {
+          startScreenshot().then(() => {
+            screenshotWindow?.webContents.openDevTools({ mode: 'detach' })
+          })
+        }
+      }
+    },
     { type: 'separator' },
     { label: '退出', click: () => {
         (app as any).isQuitting = true
@@ -540,11 +588,21 @@ app.whenReady().then(async () => {
   tray.setToolTip('OpenFlow Studio')
   tray.setContextMenu(contextMenu)
 
-  // Register shortcut
-  const shortcut = await storeGetValue('screenshotShortcut') as string || 'CommandOrControl+Shift+A'
-  globalShortcut.register(shortcut, () => {
+  // Register shortcuts
+  const screenshotShortcut = await storeGetValue('screenshotShortcut') as string || 'F1'
+  const pinShortcut = await storeGetValue('pinShortcut') as string || 'F3'
+
+  globalShortcut.register(screenshotShortcut, () => {
+    console.log('Screenshot shortcut triggered:', screenshotShortcut)
     startScreenshot()
   })
+
+  globalShortcut.register(pinShortcut, () => {
+    console.log('Pin shortcut triggered:', pinShortcut)
+    pinFromClipboard()
+  })
+
+  console.log(`Shortcuts registered - Screenshot: ${screenshotShortcut}, Pin: ${pinShortcut}`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -575,6 +633,11 @@ ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: 
     let success = true
     if (newShortcut.screenshot) {
       success = globalShortcut.register(newShortcut.screenshot, () => startScreenshot()) && success
+      if (success) await storeSetValue('screenshotShortcut', newShortcut.screenshot)
+    }
+    if (newShortcut.pinImage) {
+      success = globalShortcut.register(newShortcut.pinImage, () => pinFromClipboard()) && success
+      if (success) await storeSetValue('pinShortcut', newShortcut.pinImage)
     }
     if (newShortcut.togglePanel) {
       success = globalShortcut.register(newShortcut.togglePanel, () => {
@@ -590,7 +653,6 @@ ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: 
         }
       }) && success
     }
-    // We ignore pinImage shortcut for now as there's no global handler for it yet in main
     return success
   }
 })

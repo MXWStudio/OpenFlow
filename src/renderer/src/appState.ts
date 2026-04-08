@@ -181,8 +181,8 @@ export const DEFAULT_WORKSPACE: WorkspaceSettings = {
 };
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   togglePanel: 'CommandOrControl+Shift+Space',
-  screenshot: 'CommandOrControl+Shift+A',
-  pinImage: 'CommandOrControl+Shift+P',
+  screenshot: 'F1',
+  pinImage: 'F3',
 };
 export const DEFAULT_PROCESSING: ProcessingSettings = {
   imageFormat: 'original',
