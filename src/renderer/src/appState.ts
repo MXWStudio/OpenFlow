@@ -67,8 +67,45 @@ export interface WorkspaceSettings {
 export interface ShortcutSettings {
   togglePanel: string;
   screenshot: string;
+  screenshotAndCopy: string;
+  customScreenshot: string;
   pinImage: string;
+  hideShowAllPins: string;
+  switchPinGroup: string;
 }
+
+
+export interface ScreenshotSettings {
+  // Output
+  imageQuality: number;
+  manualSaveName: string;
+  manualSaveRememberExtension: boolean;
+  quickSaveNotify: boolean;
+  quickSavePath: string;
+  autoSaveEnabled: boolean;
+  autoSavePath: string;
+  // Pin
+  pinShadow: boolean;
+  pinOpacity: number;
+  pinMaxWidth: number;
+  pinThumbWidth: number;
+  pinThumbHeight: number;
+}
+
+export const DEFAULT_SCREENSHOT: ScreenshotSettings = {
+  imageQuality: -1,
+  manualSaveName: '$yyyy-MM-dd$.png',
+  manualSaveRememberExtension: true,
+  quickSaveNotify: true,
+  quickSavePath: '~/Desktop/$yyyy-MM-dd$.png',
+  autoSaveEnabled: true,
+  autoSavePath: '~/Pictures/$yyyy-MM-dd$.png',
+  pinShadow: true,
+  pinOpacity: 100,
+  pinMaxWidth: 12000,
+  pinThumbWidth: 50,
+  pinThumbHeight: 50,
+};
 
 export interface ProcessingSettings {
   imageFormat: 'original' | 'webp';
@@ -181,8 +218,12 @@ export const DEFAULT_WORKSPACE: WorkspaceSettings = {
 };
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   togglePanel: 'CommandOrControl+Shift+Space',
-  screenshot: 'CommandOrControl+Shift+A',
-  pinImage: 'CommandOrControl+Shift+P',
+  screenshot: 'CommandOrControl+1',
+  screenshotAndCopy: 'CommandOrControl+2',
+  customScreenshot: 'Shift+F1',
+  pinImage: 'CommandOrControl+3',
+  hideShowAllPins: 'Shift+F3',
+  switchPinGroup: 'CommandOrControl+F3',
 };
 export const DEFAULT_PROCESSING: ProcessingSettings = {
   imageFormat: 'original',
