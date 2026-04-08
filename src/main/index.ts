@@ -28,6 +28,10 @@ import {
   insertGameMapping,
   updateGameMapping,
   deleteGameMapping,
+  getExcelFiles,
+  insertExcelFile,
+  deleteExcelFile,
+  clearAllExcelFiles
 } from './utils/db'
 
 // ─── 初始化 ────────────────────────────────────────────
@@ -277,7 +281,9 @@ function createWindow(): void {
 // ─── 截屏功能 ───────────────────────────────────────────
 
 async function startScreenshot() {
+  console.log('--- Starting Screenshot ---')
   if (screenshotWindow) {
+    console.log('Screenshot window already exists')
     if (!screenshotWindow.isDestroyed()) {
       screenshotWindow.focus()
       return
@@ -298,6 +304,7 @@ async function startScreenshot() {
 
   const width = maxX - minX
   const height = maxY - minY
+  console.log('Display bounds:', { minX, minY, width, height })
 
   screenshotWindow = new BrowserWindow({
     x: minX,
@@ -321,39 +328,50 @@ async function startScreenshot() {
 
   // Capture all screens
   try {
+    console.log('Capturing sources...')
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width, height }
     })
 
-    // We'll pass the first source for now (often spans all if setup right, or we just pass the primary)
-    // For a true multi-monitor setup in Electron, you'd stitch them, but passing primary is standard MVP.
-    // Let's pass the first screen's thumbnail as data URL.
+    console.log('Sources found:', sources.length)
+    if (sources.length === 0) {
+      throw new Error('No screen sources found')
+    }
+
+    // We'll pass the first source for now
     const source = sources[0]
+    console.log('Selected source:', source.name)
 
     screenshotWindow.once('ready-to-show', () => {
+      console.log('Screenshot window ready to show')
       if (screenshotWindow && !screenshotWindow.isDestroyed()) {
         screenshotWindow.show()
         screenshotWindow.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
+        console.log('Sent screenshot:captured to renderer')
       }
     })
 
     const isDev = !app.isPackaged
     if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-      screenshotWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`)
-      // screenshotWindow.webContents.openDevTools({ mode: 'detach' })
+      const url = `${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`
+      console.log('Loading URL:', url)
+      screenshotWindow.loadURL(url)
     } else {
-      screenshotWindow.loadFile(join(__dirname, '../renderer/screenshot.html'))
+      const path = join(__dirname, '../renderer/screenshot.html')
+      console.log('Loading file:', path)
+      screenshotWindow.loadFile(path)
     }
   } catch (err) {
-    console.error('Screenshot capture failed', err)
+    console.error('Screenshot capture failed:', err)
     if (screenshotWindow) {
       screenshotWindow.close()
       screenshotWindow = null
     }
   }
 
-  screenshotWindow.on('closed', () => {
+  screenshotWindow?.on('closed', () => {
+    console.log('Screenshot window closed')
     screenshotWindow = null
   })
 }
@@ -368,6 +386,7 @@ function closeScreenshot() {
 // ─── 悬浮贴图功能 ────────────────────────────────────────
 
 function createPinWindow(dataUrl: string, bounds: { width: number, height: number, x: number, y: number }) {
+  console.log('Creating Pin Window with bounds:', bounds)
   const pinWin = new BrowserWindow({
     width: Math.round(bounds.width),
     height: Math.round(bounds.height),
@@ -400,6 +419,30 @@ function createPinWindow(dataUrl: string, bounds: { width: number, height: numbe
   pinWindows.add(pinWin)
   pinWin.on('closed', () => {
     pinWindows.delete(pinWin)
+  })
+}
+
+/**
+ * 从剪贴板读取图片并贴图
+ */
+function pinFromClipboard() {
+  console.log('--- Pinning from Clipboard ---')
+  const image = clipboard.readImage()
+  if (image.isEmpty()) {
+    console.log('Clipboard is empty or does not contain an image')
+    return
+  }
+
+  const size = image.getSize()
+  const display = screen.getPrimaryDisplay()
+  const x = (display.bounds.width - size.width) / 2
+  const y = (display.bounds.height - size.height) / 2
+
+  createPinWindow(image.toDataURL(), {
+    width: size.width,
+    height: size.height,
+    x: Math.max(0, x),
+    y: Math.max(0, y)
   })
 }
 
@@ -526,6 +569,15 @@ app.whenReady().then(async () => {
       }
     },
     { label: '开始截图', click: () => startScreenshot() },
+    { label: '截图开发调试', click: () => {
+        if (screenshotWindow) screenshotWindow.webContents.openDevTools({ mode: 'detach' })
+        else {
+          startScreenshot().then(() => {
+            screenshotWindow?.webContents.openDevTools({ mode: 'detach' })
+          })
+        }
+      }
+    },
     { type: 'separator' },
     { label: '退出', click: () => {
         (app as any).isQuitting = true
@@ -536,11 +588,21 @@ app.whenReady().then(async () => {
   tray.setToolTip('OpenFlow Studio')
   tray.setContextMenu(contextMenu)
 
-  // Register shortcut
-  const shortcut = await storeGetValue('screenshotShortcut') as string || 'CommandOrControl+Shift+A'
-  globalShortcut.register(shortcut, () => {
+  // Register shortcuts
+  const screenshotShortcut = await storeGetValue('screenshotShortcut') as string || 'F1'
+  const pinShortcut = await storeGetValue('pinShortcut') as string || 'F3'
+
+  globalShortcut.register(screenshotShortcut, () => {
+    console.log('Screenshot shortcut triggered:', screenshotShortcut)
     startScreenshot()
   })
+
+  globalShortcut.register(pinShortcut, () => {
+    console.log('Pin shortcut triggered:', pinShortcut)
+    pinFromClipboard()
+  })
+
+  console.log(`Shortcuts registered - Screenshot: ${screenshotShortcut}, Pin: ${pinShortcut}`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -571,6 +633,11 @@ ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: 
     let success = true
     if (newShortcut.screenshot) {
       success = globalShortcut.register(newShortcut.screenshot, () => startScreenshot()) && success
+      if (success) await storeSetValue('screenshotShortcut', newShortcut.screenshot)
+    }
+    if (newShortcut.pinImage) {
+      success = globalShortcut.register(newShortcut.pinImage, () => pinFromClipboard()) && success
+      if (success) await storeSetValue('pinShortcut', newShortcut.pinImage)
     }
     if (newShortcut.togglePanel) {
       success = globalShortcut.register(newShortcut.togglePanel, () => {
@@ -586,7 +653,6 @@ ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: 
         }
       }) && success
     }
-    // We ignore pinImage shortcut for now as there's no global handler for it yet in main
     return success
   }
 })
@@ -635,6 +701,44 @@ ipcMain.handle('db:updateImportedData', async (_, id: number, rowData: any) => {
     return true
   } catch (error) {
     console.error('db:updateImportedData Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:getExcelFiles', async () => {
+  try {
+    return await getExcelFiles()
+  } catch (error) {
+    console.error('db:getExcelFiles Error:', error)
+    return []
+  }
+})
+
+ipcMain.handle('db:insertExcelFile', async (_, file: any) => {
+  try {
+    return await insertExcelFile(file)
+  } catch (error) {
+    console.error('db:insertExcelFile Error:', error)
+    return -1
+  }
+})
+
+ipcMain.handle('db:deleteExcelFile', async (_, id: number) => {
+  try {
+    await deleteExcelFile(id)
+    return true
+  } catch (error) {
+    console.error('db:deleteExcelFile Error:', error)
+    return false
+  }
+})
+
+ipcMain.handle('db:clearAllExcelFiles', async () => {
+  try {
+    await clearAllExcelFiles()
+    return true
+  } catch (error) {
+    console.error('db:clearAllExcelFiles Error:', error)
     return false
   }
 })
@@ -699,6 +803,19 @@ ipcMain.handle('dialog:importExcel', async () => {
   try {
     const filePath = result.filePaths[0]
     const fileName = basename(filePath)
+    const ext = extname(filePath)
+
+    // Ensure local backup directory exists
+    const userDataPath = app.getPath('userData')
+    const backupDir = join(userDataPath, 'imported_excels')
+    await fs.ensureDir(backupDir)
+
+    // Create a unique filename to avoid overwrites
+    const uniqueFilename = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`
+    const savedPath = join(backupDir, uniqueFilename)
+
+    // Copy the original file to the backup location
+    await fs.copyFile(filePath, savedPath)
 
     // Read the file
     const fileBuffer = await fs.readFile(filePath)
@@ -711,11 +828,39 @@ ipcMain.handle('dialog:importExcel', async () => {
     // Convert to JSON (array of objects)
     const data = xlsx.utils.sheet_to_json(worksheet)
 
-    return { fileName, data }
+    return { fileName, data, savedPath }
   } catch (error) {
     console.error('Error parsing Excel:', error)
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`无法解析 Excel 文件: ${message}`)
+  }
+})
+
+// Auto-cleanup handler for old Excel files (older than 30 days)
+ipcMain.handle('fs:cleanupOldExcels', async () => {
+  try {
+    const userDataPath = app.getPath('userData')
+    const backupDir = join(userDataPath, 'imported_excels')
+    if (!(await fs.pathExists(backupDir))) return true
+
+    const files = await fs.readdir(backupDir)
+    const now = Date.now()
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+    let deletedCount = 0
+    for (const file of files) {
+      const filePath = join(backupDir, file)
+      const stat = await fs.stat(filePath)
+      if (now - stat.mtimeMs > THIRTY_DAYS_MS) {
+        await fs.remove(filePath)
+        deletedCount++
+      }
+    }
+    console.log(`Cleaned up ${deletedCount} old Excel files.`)
+    return true
+  } catch (error) {
+    console.error('Error cleaning up Excel files:', error)
+    return false
   }
 })
 
@@ -989,6 +1134,9 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
 })
 
 // ─── IPC: 文件系统 ───────────────────────────────────────
+
+// 记录最近一次整理操作的文件移动路径 (新路径 -> 旧路径)
+let lastOrganizedFiles: Record<string, string> = {}
 
 /**
  * fs:initFolders
@@ -1504,6 +1652,10 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
  */
 ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
   if (!files || files.length === 0) return { success: false, error: '没有需要移动的文件' }
+
+  // 清空上一次的记录，确保撤销只针对当前这一次转移
+  lastOrganizedFiles = {}
+
   const results = []
   const dirCache = new Map<string, Set<string>>()
 
@@ -1589,12 +1741,50 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
       await fs.move(file.filePath, targetFilePath)
       existingFiles.add(targetFileName)
       results.push({ id: file.id, success: true, targetPath: targetFilePath })
+      lastOrganizedFiles[targetFilePath] = file.filePath
     } catch (err) {
       results.push({ id: file.id, success: false, error: String(err) })
     }
   }
 
   return { success: true, results, missingFolders: Array.from(missingFolders) }
+})
+
+/**
+ * fs:undoOrganize
+ * 撤销上一次的素材整理移动
+ */
+ipcMain.handle('fs:undoOrganize', async () => {
+  const keys = Object.keys(lastOrganizedFiles)
+  if (keys.length === 0) {
+    return { success: false, error: '没有可以撤销的转移记录' }
+  }
+
+  let successCount = 0
+  let failCount = 0
+
+  for (const currentPath of keys) {
+    const originalPath = lastOrganizedFiles[currentPath]
+    try {
+      if (await fs.pathExists(currentPath)) {
+        await fs.move(currentPath, originalPath, { overwrite: true })
+        successCount++
+      } else {
+        failCount++
+      }
+    } catch (err) {
+      console.error(`撤销转移失败: ${currentPath} -> ${originalPath}`, err)
+      failCount++
+    }
+  }
+
+  // 清空记录
+  lastOrganizedFiles = {}
+
+  return {
+    success: true,
+    message: `撤销完成。成功恢复 ${successCount} 个文件，失败/未找到 ${failCount} 个。`
+  }
 })
 
 // ─── IPC: Shell ──────────────────────────────────────────

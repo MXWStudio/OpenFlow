@@ -41,6 +41,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     insertGameMapping: (mapping: any) => ipcRenderer.invoke('db:insertGameMapping', mapping),
     updateGameMapping: (id: number, mapping: any) => ipcRenderer.invoke('db:updateGameMapping', id, mapping),
     deleteGameMapping: (id: number) => ipcRenderer.invoke('db:deleteGameMapping', id),
+    getExcelFiles: () => ipcRenderer.invoke('db:getExcelFiles'),
+    insertExcelFile: (file: any) => ipcRenderer.invoke('db:insertExcelFile', file),
+    deleteExcelFile: (id: number) => ipcRenderer.invoke('db:deleteExcelFile', id),
+    clearAllExcelFiles: () => ipcRenderer.invoke('db:clearAllExcelFiles'),
   },
 
   // ────────────────────────────────────────────────
@@ -88,9 +92,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     executeOrganize: (files: unknown[], destDir: string) =>
       ipcRenderer.invoke('fs:executeOrganize', { files, destDir }),
 
+    /** 撤销素材转移 */
+    undoOrganize: () =>
+      ipcRenderer.invoke('fs:undoOrganize'),
+
     /** 批量格式处理 */
     processFormat: (files: any[], config: any) =>
       ipcRenderer.invoke('fs:processFormat', { files, config }),
+
+    /** 自动清理旧的 Excel 备份文件 */
+    cleanupOldExcels: () => ipcRenderer.invoke('fs:cleanupOldExcels'),
   },
 
   // ────────────────────────────────────────────────

@@ -25,6 +25,7 @@ interface OrganizerWorkspaceProps {
   workflowSettings: WorkflowSettings;
   workspaceSettings: WorkspaceSettings;
   onOpenSettings: () => void;
+  onChangeWorkspaceSettings?: (settings: Partial<WorkspaceSettings>) => void;
 }
 
 interface ScannedFile {
@@ -40,7 +41,7 @@ interface ScannedFile {
   selected: boolean;
 }
 
-export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpenSettings }: OrganizerWorkspaceProps) {
+export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
@@ -49,6 +50,13 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
 
   const { organizerFormats } = workflowSettings;
   const { sourceDir: organizerSourceDir, destDir: organizerDestDir } = workspaceSettings;
+
+  const getDirName = (pathStr: string) => {
+    if (!pathStr) return '未配置';
+    const separator = pathStr.includes('\\') ? '\\' : '/';
+    const parts = pathStr.split(separator).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : pathStr;
+  };
 
   const handleScan = async () => {
     if (!organizerSourceDir) {
@@ -103,6 +111,28 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
     if (selectedFiles.length === 0) {
       notifications.show({ color: 'orange', title: '未选择文件', message: '请至少勾选一个文件。' });
       return;
+    }
+
+    // 防错校验：检查目标目录是否包含今日日期
+    const destDirName = getDirName(organizerDestDir);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayFormats = [
+      `${year}${month}${day}`,
+      `${year}-${month}-${day}`,
+      `${month}${day}`,
+      `${year.toString().slice(-2)}${month}${day}`
+    ];
+
+    const containsToday = todayFormats.some(format => destDirName.includes(format));
+
+    if (!containsToday) {
+      const isConfirmed = window.confirm(`警告：您当前的转移目录 (${destDirName}) 似乎不包含今天的日期。\n\n您是否忘记更改转移目录位置了？\n\n如果确认无误，请点击"确定"继续转移；否则点击"取消"去更改转移目录。`);
+      if (!isConfirmed) {
+        return;
+      }
     }
 
     setIsOrganizing(true);
@@ -221,7 +251,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
           <Stack gap={22} px={30} py={18} pb={132}>
             <Card
               radius={30}
-              p={22}
+              p={30}
               withBorder
               shadow="sm"
               style={{
@@ -229,103 +259,200 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                 boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
               }}
             >
-              <Group gap={8} mb="md">
-                <FolderSearch size={14} color="#d7e0eb" />
-                <Text fw={800} size="lg" c="#8ea2c1">
-                  系统状态
-                </Text>
-              </Group>
-              <Paper
-                radius={26}
-                p={30}
-                style={{
-                  background:
-                    'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
-                  border: '1px solid #edf2f7',
-                  boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
-                }}
-              >
-                <Group justify="space-between" wrap="nowrap" align="center">
-                  <Box maw={560}>
-                    <Group gap={10} mb="md">
-                      <Box
-                        w={8}
-                        h={8}
-                        style={{
-                          borderRadius: 999,
-                          background: hasOrganized ? '#34d399' : isScanning || isOrganizing ? '#60a5fa' : '#94a3b8',
-                        }}
-                      />
-                      <Badge
-                        variant="light"
-                        radius="sm"
-                        color={hasOrganized ? 'teal' : isScanning || isOrganizing ? 'blue' : 'gray'}
-                        styles={{ root: { fontWeight: 800 } }}
-                      >
-                        {statusLabel}
-                      </Badge>
-                    </Group>
-
-                    <Title order={1} c="#0f284d" mb={12} style={{ fontSize: 48, lineHeight: 1.02 }}>
-                      {statusTitle}
-                    </Title>
-
-                    <Text c="#64748b" size="lg" fw={500}>
-                      {statusDescription}
+              <Group wrap="nowrap" align="stretch" gap={30}>
+                {/* 左侧 60% 系统状态 */}
+                <Box style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
+                  <Group gap={8} mb="lg">
+                    <FolderSearch size={14} color="#d7e0eb" />
+                    <Text fw={800} size="lg" c="#8ea2c1">
+                      系统状态
                     </Text>
+                  </Group>
+                  <Paper
+                    radius={26}
+                    p={30}
+                    h="100%"
+                    style={{
+                      background:
+                        'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
+                      border: '1px solid #edf2f7',
+                      boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Group justify="space-between" wrap="nowrap" align="center" h="100%">
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Group gap={10} mb="md">
+                          <Box
+                            w={8}
+                            h={8}
+                            style={{
+                              borderRadius: 999,
+                              background: hasOrganized ? '#34d399' : isScanning || isOrganizing ? '#60a5fa' : '#94a3b8',
+                            }}
+                          />
+                          <Badge
+                            variant="light"
+                            radius="sm"
+                            color={hasOrganized ? 'teal' : isScanning || isOrganizing ? 'blue' : 'gray'}
+                            styles={{ root: { fontWeight: 800 } }}
+                          >
+                            {statusLabel}
+                          </Badge>
+                        </Group>
 
-                    <Group mt="xl">
-                      <Button
-                        size="md"
-                        radius="xl"
-                        variant="default"
-                        leftSection={<FolderOpen size={18} />}
-                        onClick={handleOpenSourceFolder}
-                        styles={{
-                          root: {
-                            fontWeight: 800,
-                          }
+                        <Title order={1} c="#0f284d" mb={12} style={{ fontSize: 32, lineHeight: 1.02 }}>
+                          {statusTitle}
+                        </Title>
+
+                        <Text c="#64748b" size="md" fw={500}>
+                          {statusDescription}
+                        </Text>
+
+                        <Group mt="xl">
+                          <Button
+                            size="md"
+                            radius="xl"
+                            variant="default"
+                            leftSection={<FolderOpen size={18} />}
+                            onClick={handleOpenSourceFolder}
+                            styles={{ root: { fontWeight: 800 } }}
+                          >
+                            打开源目录
+                          </Button>
+                          {hasOrganized && (
+                            <Button
+                              size="md"
+                              radius="xl"
+                              variant="light"
+                              color="blue"
+                              leftSection={<FolderOpen size={18} />}
+                              onClick={handleOpenDestFolder}
+                              styles={{ root: { fontWeight: 800 } }}
+                            >
+                              打开整理目录
+                            </Button>
+                          )}
+                        </Group>
+                      </Box>
+                      <Paper
+                        radius={22}
+                        p="lg"
+                        shadow="sm"
+                        style={{
+                          width: 88,
+                          height: 110,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: '#ffffff',
+                          flexShrink: 0
                         }}
                       >
-                        打开源目录
-                      </Button>
-                      {hasOrganized && (
+                        <FileText size={36} color="#d6dee9" />
+                      </Paper>
+                    </Group>
+                  </Paper>
+                </Box>
+
+                {/* 右侧 40% 快捷操作 */}
+                <Box style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
+                   <Group gap={8} mb="lg">
+                    <FolderSearch size={14} color="#d7e0eb" opacity={0} />
+                    <Text fw={800} size="lg" c="#8ea2c1">
+                      快捷操作
+                    </Text>
+                  </Group>
+                  <Paper
+                    radius={26}
+                    p={24}
+                    h="100%"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.8)',
+                      border: '1px solid #edf2f7',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Stack gap="lg" h="100%" justify="center">
+                      <Group justify="space-between" wrap="nowrap">
+                        <Tooltip label={organizerSourceDir || '未配置源目录'}>
+                          <Text fw={600} size="md" c="#334155" truncate style={{ flex: 1, cursor: 'help' }}>
+                            源: {getDirName(organizerSourceDir)}
+                          </Text>
+                        </Tooltip>
                         <Button
-                          size="md"
-                          radius="xl"
                           variant="light"
                           color="blue"
-                          leftSection={<FolderOpen size={18} />}
-                          onClick={handleOpenDestFolder}
-                          styles={{
-                            root: {
-                              fontWeight: 800,
+                          size="sm"
+                          radius="md"
+                          onClick={async () => {
+                            const newPath = await window.electronAPI.dialog.selectFolder();
+                            if (newPath) {
+                              if (onChangeWorkspaceSettings) {
+                                onChangeWorkspaceSettings({ sourceDir: newPath });
+                              }
+                              notifications.show({ color: 'green', title: '成功', message: '已更改源目录配置。' });
                             }
                           }}
                         >
-                          打开目标整理目录
+                          更改目录
                         </Button>
-                      )}
-                    </Group>
-                  </Box>
+                      </Group>
 
-                  <Paper
-                    radius={22}
-                    p="lg"
-                    shadow="sm"
-                    style={{
-                      width: 88,
-                      height: 110,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: '#ffffff',
-                    }}
-                  >
-                    <FileText size={36} color="#d6dee9" />
+                      <Group justify="space-between" wrap="nowrap">
+                        <Tooltip label={organizerDestDir || '未配置转移目录'}>
+                          <Text fw={600} size="md" c="#334155" truncate style={{ flex: 1, cursor: 'help' }}>
+                            目标: {getDirName(organizerDestDir)}
+                          </Text>
+                        </Tooltip>
+                        <Button
+                          variant="light"
+                          color="blue"
+                          size="sm"
+                          radius="md"
+                          onClick={async () => {
+                            const newPath = await window.electronAPI.dialog.selectFolder();
+                            if (newPath) {
+                              if (onChangeWorkspaceSettings) {
+                                onChangeWorkspaceSettings({ destDir: newPath });
+                              }
+                              notifications.show({ color: 'green', title: '成功', message: '已更改转移目录配置。' });
+                            }
+                          }}
+                        >
+                          更改目录
+                        </Button>
+                      </Group>
+
+                      <Box mt="auto">
+                        <Button
+                          fullWidth
+                          variant="light"
+                          color="red"
+                          size="md"
+                          radius="md"
+                          onClick={async () => {
+                            try {
+                              const result = await window.electronAPI.fs.undoOrganize();
+                              if (result.success) {
+                                notifications.show({ color: 'green', title: '撤销成功', message: result.message });
+                                // Automatically scan to refresh the list after undoing
+                                handleScan();
+                              } else {
+                                notifications.show({ color: 'orange', title: '撤销失败', message: result.error });
+                              }
+                            } catch (err) {
+                              notifications.show({ color: 'red', title: '执行撤销时出错', message: String(err) });
+                            }
+                          }}
+                        >
+                          撤销转移
+                        </Button>
+                      </Box>
+                    </Stack>
                   </Paper>
-                </Group>
-              </Paper>
+                </Box>
+              </Group>
             </Card>
 
             <Card
@@ -345,9 +472,6 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                     待整理素材
                   </Text>
                 </Group>
-                <Text size="sm" c="dimmed">
-                  源目录: {organizerSourceDir || '未配置'}
-                </Text>
               </Group>
 
               {files.length === 0 ? (

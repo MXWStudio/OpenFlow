@@ -13,9 +13,11 @@ import {
   TextInput,
   Title,
   ActionIcon,
+  ScrollArea,
+  Menu,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { Upload, Trash2, Save, BarChart3, TableProperties } from 'lucide-react';
+import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -82,11 +84,21 @@ const EditableCell = ({ getValue, row, column, table }: any) => {
   );
 };
 
+interface ExcelFileRecord {
+  id: number;
+  batch_id: string;
+  file_name: string;
+  saved_path: string;
+  created_at: string;
+}
+
 export function BitableWorkspace() {
   const [activeTab, setActiveTab] = useState<string | null>('table');
   const [data, setData] = useState<ImportRecord[]>([]);
+  const [fileList, setFileList] = useState<ExcelFileRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Dashboard configuration
   const [xAxisField, setXAxisField] = useState<string | null>(null);
@@ -94,8 +106,30 @@ export function BitableWorkspace() {
   const [categoryField, setCategoryField] = useState<string | null>(null);
 
   useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.fs.cleanupOldExcels();
+      loadFileRecords();
+    }
+  }, []);
+
+  useEffect(() => {
     loadData();
   }, [selectedBatch]);
+
+  async function loadFileRecords() {
+    if (!window.electronAPI) return;
+    try {
+      const files = await window.electronAPI.db.getExcelFiles();
+      setFileList(files);
+      if (files.length > 0 && !selectedBatch) {
+        setSelectedBatch(files[0].batch_id);
+      } else if (files.length === 0) {
+        setSelectedBatch(null);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function loadData() {
     if (!window.electronAPI) return;
@@ -131,16 +165,26 @@ export function BitableWorkspace() {
       const result = await window.electronAPI.dialog.importExcel();
       if (!result) return;
 
-      const { fileName, data: excelData } = result;
+      const { fileName, data: excelData, savedPath } = result;
       const batchId = `${fileName}_${Date.now()}`;
 
       setLoading(true);
+
+      // Save file record
+      await window.electronAPI.db.insertExcelFile({
+        batch_id: batchId,
+        file_name: fileName,
+        saved_path: savedPath || ''
+      });
+
+      // Save row data
       for (const row of excelData) {
         await window.electronAPI.db.insertImportedData(batchId, row);
       }
       notifications.show({ color: 'green', title: '导入成功', message: `已导入 ${excelData.length} 条记录。` });
-      setSelectedBatch(null); // Load all
-      loadData();
+
+      await loadFileRecords();
+      setSelectedBatch(batchId);
     } catch (error) {
       notifications.show({
         color: 'red',
@@ -148,6 +192,33 @@ export function BitableWorkspace() {
         message: error instanceof Error ? error.message : String(error)
       });
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteFile(file: ExcelFileRecord) {
+    if (!confirm(`确定要删除报表 "${file.file_name}" 吗？这会删除相关的数据。`)) return;
+    try {
+      await window.electronAPI.db.deleteBatch(file.batch_id);
+      if (file.id) await window.electronAPI.db.deleteExcelFile(file.id);
+
+      notifications.show({ color: 'green', title: '删除成功' });
+      if (selectedBatch === file.batch_id) {
+        setSelectedBatch(null);
+      }
+      await loadFileRecords();
+    } catch (error) {
+      notifications.show({ color: 'red', title: '删除失败' });
+    }
+  }
+
+  async function handleOpenFile(filePath: string) {
+    if (!filePath) {
+      notifications.show({ color: 'red', title: '无法打开', message: '该记录没有关联的本地文件' });
+      return;
+    }
+    const result = await window.electronAPI.shell.openPath(filePath);
+    if (result !== 'success') {
+      notifications.show({ color: 'red', title: '打开失败', message: result });
     }
   }
 
@@ -166,12 +237,27 @@ export function BitableWorkspace() {
     if (!confirm('确定要清空所有数据吗？此操作不可恢复！')) return;
     try {
       await window.electronAPI.db.clearAllImportedData();
+      await window.electronAPI.db.clearAllExcelFiles();
       setData([]);
+      setFileList([]);
+      setSelectedBatch(null);
       notifications.show({ color: 'green', title: '已清空所有数据' });
     } catch (error) {
       notifications.show({ color: 'red', title: '清空失败' });
     }
   }
+
+  // Filtered data based on search
+  const filteredData = useMemo(() => {
+    if (!searchQuery) return data;
+    const lowerQuery = searchQuery.toLowerCase();
+    return data.filter(item => {
+      // Search across all values in row_data
+      return Object.values(item.row_data).some(val =>
+        String(val).toLowerCase().includes(lowerQuery)
+      );
+    });
+  }, [data, searchQuery]);
 
   // --- Table Setup ---
   const dynamicColumns = useMemo(() => {
@@ -206,12 +292,12 @@ export function BitableWorkspace() {
   }, [data]);
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns: dynamicColumns,
     getCoreRowModel: getCoreRowModel(),
     meta: {
       updateData: async (rowIndex: number, columnId: string, value: any) => {
-        const row = data[rowIndex];
+        const row = filteredData[rowIndex];
         const newRowData = { ...row.row_data, [columnId]: value };
 
         // Optimistic UI update
@@ -279,22 +365,75 @@ export function BitableWorkspace() {
 
 
   return (
-    <Flex h="100%" direction="column" bg="#f7f9fc" p="xl">
-      <Group justify="space-between" mb="lg">
-        <Title order={2} c="#1d2230">个人素材产能统计与可视化看板</Title>
-        <Group>
-          <Button leftSection={<Upload size={16} />} onClick={handleImport} loading={loading}>
-            导入 Excel
+    <Flex h="100%" direction="row" bg="#f7f9fc" gap="md" p="xl">
+      {/* Left Panel: File List */}
+      <Card radius="md" p="md" withBorder shadow="sm" style={{ width: '300px', display: 'flex', flexDirection: 'column' }}>
+        <Title order={4} mb="md">导入历史</Title>
+        <Button fullWidth leftSection={<Upload size={16} />} onClick={handleImport} loading={loading} mb="md">
+          导入 Excel 报表
+        </Button>
+        <ScrollArea style={{ flex: 1 }}>
+          <Stack gap="xs">
+            {fileList.length === 0 ? (
+              <Text c="dimmed" ta="center" mt="xl" size="sm">暂无导入记录</Text>
+            ) : (
+              fileList.map((file) => (
+                <Card
+                  key={file.id}
+                  p="sm"
+                  radius="sm"
+                  withBorder
+                  style={{
+                    cursor: 'pointer',
+                    borderColor: selectedBatch === file.batch_id ? '#339af0' : undefined,
+                    backgroundColor: selectedBatch === file.batch_id ? '#e7f5ff' : undefined
+                  }}
+                  onClick={() => setSelectedBatch(file.batch_id)}
+                  onDoubleClick={() => handleOpenFile(file.saved_path)}
+                >
+                  <Group justify="space-between" wrap="nowrap">
+                    <Group gap="xs" style={{ overflow: 'hidden', flex: 1 }}>
+                      <FileSpreadsheet size={16} color="#20c997" />
+                      <Text size="sm" truncate fw={500} title={file.file_name}>{file.file_name}</Text>
+                    </Group>
+                    <Menu position="bottom-end" shadow="sm">
+                      <Menu.Target>
+                        <ActionIcon variant="subtle" color="gray" onClick={(e) => e.stopPropagation()}>
+                          <MoreVertical size={16} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item leftSection={<ExternalLink size={14} />} onClick={(e) => { e.stopPropagation(); handleOpenFile(file.saved_path); }}>
+                          打开原文件
+                        </Menu.Item>
+                        <Menu.Item color="red" leftSection={<Trash2 size={14} />} onClick={(e) => { e.stopPropagation(); handleDeleteFile(file); }}>
+                          删除记录
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  </Group>
+                  <Text size="xs" c="dimmed" mt={4}>
+                    {new Date(file.created_at || '').toLocaleString()}
+                  </Text>
+                </Card>
+              ))
+            )}
+          </Stack>
+        </ScrollArea>
+        {fileList.length > 0 && (
+          <Button variant="light" color="red" fullWidth mt="md" onClick={handleClearAll}>
+            清空所有记录
           </Button>
-          <Button variant="light" color="red" leftSection={<Trash2 size={16} />} onClick={handleClearAll} disabled={data.length === 0}>
-            清空数据
-          </Button>
-        </Group>
-      </Group>
+        )}
+      </Card>
 
+      {/* Right Panel: Content Area */}
       <Card radius="md" p={0} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} withBorder shadow="sm">
-        <Tabs value={activeTab} onChange={setActiveTab} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <Tabs.List px="md" pt="sm">
+        <Box p="md" pb={0}>
+          <Title order={2} c="#1d2230" mb="md">个人素材产能统计与可视化看板</Title>
+        </Box>
+        <Tabs value={activeTab} onChange={setActiveTab} style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0 }}>
+          <Tabs.List px="md">
             <Tabs.Tab value="table" leftSection={<TableProperties size={16} />}>
               数据表格
             </Tabs.Tab>
@@ -303,14 +442,24 @@ export function BitableWorkspace() {
             </Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="table" style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-            {data.length === 0 ? (
+          <Tabs.Panel value="table" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '16px' }}>
+            {!selectedBatch ? (
               <Flex align="center" justify="center" h="100%">
-                <Text c="dimmed">暂无数据，请先导入 Excel 表格</Text>
+                <Text c="dimmed">请在左侧选择或导入 Excel 报表</Text>
               </Flex>
             ) : (
-              <Box style={{ overflowX: 'auto' }}>
-                <Table striped highlightOnHover withTableBorder withColumnBorders>
+              <>
+                <Group mb="md">
+                  <TextInput
+                    placeholder="搜索表格内容..."
+                    leftSection={<Search size={16} />}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    style={{ width: '300px' }}
+                  />
+                </Group>
+                <Box style={{ overflowX: 'auto', flex: 1 }}>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders>
                   <Table.Thead>
                     {table.getHeaderGroups().map((headerGroup) => (
                       <Table.Tr key={headerGroup.id}>
@@ -328,18 +477,27 @@ export function BitableWorkspace() {
                     ))}
                   </Table.Thead>
                   <Table.Tbody>
-                    {table.getRowModel().rows.map((row) => (
-                      <Table.Tr key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <Table.Td key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </Table.Td>
-                        ))}
+                    {table.getRowModel().rows.length > 0 ? (
+                      table.getRowModel().rows.map((row) => (
+                        <Table.Tr key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <Table.Td key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </Table.Td>
+                          ))}
+                        </Table.Tr>
+                      ))
+                    ) : (
+                      <Table.Tr>
+                        <Table.Td colSpan={dynamicColumns.length} style={{ textAlign: 'center' }}>
+                          暂无匹配数据
+                        </Table.Td>
                       </Table.Tr>
-                    ))}
+                    )}
                   </Table.Tbody>
                 </Table>
               </Box>
+              </>
             )}
           </Tabs.Panel>
 
