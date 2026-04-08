@@ -251,7 +251,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
           <Stack gap={22} px={30} py={18} pb={132}>
             <Card
               radius={30}
-              p={22}
+              p={30}
               withBorder
               shadow="sm"
               style={{
@@ -259,10 +259,10 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                 boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
               }}
             >
-              <Group wrap="nowrap" align="stretch" gap="lg">
+              <Group wrap="nowrap" align="stretch" gap={30}>
                 {/* 左侧 60% 系统状态 */}
-                <Box style={{ flex: '0 0 60%', minWidth: 0 }}>
-                  <Group gap={8} mb="md">
+                <Box style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
+                  <Group gap={8} mb="lg">
                     <FolderSearch size={14} color="#d7e0eb" />
                     <Text fw={800} size="lg" c="#8ea2c1">
                       系统状态
@@ -277,6 +277,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                         'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
                       border: '1px solid #edf2f7',
                       boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                      overflow: 'hidden',
                     }}
                   >
                     <Group justify="space-between" wrap="nowrap" align="center" h="100%">
@@ -355,8 +356,8 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                 </Box>
 
                 {/* 右侧 40% 快捷操作 */}
-                <Box style={{ flex: '0 0 calc(40% - var(--mantine-spacing-lg))', minWidth: 0 }}>
-                   <Group gap={8} mb="md">
+                <Box style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
+                   <Group gap={8} mb="lg">
                     <FolderSearch size={14} color="#d7e0eb" opacity={0} />
                     <Text fw={800} size="lg" c="#8ea2c1">
                       快捷操作
@@ -369,6 +370,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                     style={{
                       background: 'rgba(255, 255, 255, 0.8)',
                       border: '1px solid #edf2f7',
+                      overflow: 'hidden',
                     }}
                   >
                     <Stack gap="lg" h="100%" justify="center">
