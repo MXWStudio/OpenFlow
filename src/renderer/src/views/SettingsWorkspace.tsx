@@ -17,7 +17,6 @@ import {
   Select,
   Popover,
   Table,
-  Code,
   SimpleGrid,
   Slider,
   Stack,

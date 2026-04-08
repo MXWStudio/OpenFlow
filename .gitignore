@@ -9,3 +9,4 @@ coverage/
 !.env.example
 build-dist/
 data/productivity.db
+.shapeup/001-ui-refactor-framing/frame.md
