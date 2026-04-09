@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Accordion,
@@ -207,8 +207,15 @@ export function DailyWorkspace({
     });
   }, [previewRows]);
 
-  const defaultAccordionValues = useMemo(() => {
-    return groupedPreviewRows.filter(g => g.hasError).map(g => g.folderName);
+  const [accordionValue, setAccordionValue] = useState<string[]>([]);
+
+  useEffect(() => {
+    const errorFolders = groupedPreviewRows.filter(g => g.hasError).map(g => g.folderName);
+    if (errorFolders.length > 0) {
+      setAccordionValue(errorFolders);
+    } else {
+      setAccordionValue([]);
+    }
   }, [groupedPreviewRows]);
 
   const hasFinishedRenaming = lastRenamedPaths.length > 0 && folderPaths.length === 0 && !isValidating && !hasValidated;
@@ -771,7 +778,8 @@ export function DailyWorkspace({
                   {groupedPreviewRows.length > 0 && (
                     <Accordion
                       multiple
-                      defaultValue={defaultAccordionValues}
+                      value={accordionValue}
+                      onChange={setAccordionValue}
                       variant="separated"
                       styles={{
                         item: {

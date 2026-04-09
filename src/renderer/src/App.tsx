@@ -305,7 +305,6 @@ export default function App() {
     setIsValidating(true);
     setValidationResults([]);
     setHasValidated(false);
-    setIsTableExpanded(true);
     try {
       const allResults: ValidationResult[] = [];
       for (const folderPath of folderPaths) {
@@ -317,8 +316,12 @@ export default function App() {
       setValidationResults(allResults);
       setHasValidated(true);
       const issues = allResults.filter((item) => item.status !== 'valid').length;
-      if (issues === 0) notify('green', '校验通过', '全部素材符合要求。');
-      else notify('red', '校验异常', `${issues} 项素材存在问题。`);
+      if (issues === 0) {
+        notify('green', '校验通过', '全部素材符合要求。');
+      } else {
+        notify('red', '校验异常', `${issues} 项素材存在问题。`);
+        setIsTableExpanded(true);
+      }
     } catch {
       notify('red', '校验失败', '校验过程中发生错误，请重试。');
     } finally {
