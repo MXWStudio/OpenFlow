@@ -205,12 +205,12 @@ function applyNewTemplate(
       result = tokenStr
     } else {
       // 检查是否需要省略横杠
-      // 规则：当前是 Date，并且上一个是 CustomText 且其值为 RS 或 RSQ
+      // 规则：当前是 Date，并且上一个是 CustomText 且它是第一个元素
       const prevToken = templateTokens[i - 1]
       const omitHyphen = token.type === 'Date' &&
                          prevToken &&
                          prevToken.type === 'CustomText' &&
-                         (prevToken.value === 'RS' || prevToken.value === 'RSQ')
+                         i - 1 === 0
 
       if (omitHyphen) {
         result += tokenStr
