@@ -1616,19 +1616,46 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
     // 分辨率支持 x 或 * (1080x607 -> 1080-607)
     // 但实际要求转换成分辨率用 '-' 作为分隔符
     const parts = baseName.split('-')
-    if (parts.length >= 4) {
-      // 假设格式为：GameName-1080x607-20260401-19
-      // 注意：游戏名本身可能包含 '-'
-      const sequence = parts.pop()
-      const date = parts.pop()
-      const rawRes = parts.pop()
-      const gameName = parts.join('-') // 剩余部分都是游戏名
+    if (parts.length >= 2) {
+      let sequence = ''
+      let date = ''
+      let rawRes = ''
+
+      const isRes = (p: string) => /^\d+[xX*]\d+$/.test(p)
+
+      if (isRes(parts[parts.length - 1])) {
+        // 格式: 游戏名-分辨率
+        rawRes = parts.pop() as string
+      } else if (parts.length >= 3 && isRes(parts[parts.length - 2])) {
+        // 格式: 游戏名-分辨率-时间
+        date = parts.pop() as string
+        rawRes = parts.pop() as string
+      } else if (parts.length >= 4 && isRes(parts[parts.length - 3])) {
+        // 格式: 游戏名-分辨率-时间-序号
+        sequence = parts.pop() as string
+        date = parts.pop() as string
+        rawRes = parts.pop() as string
+      } else if (parts.length >= 3) {
+        // 退化容错处理
+        if (parts.length >= 4) {
+          sequence = parts.pop() as string
+          date = parts.pop() as string
+          rawRes = parts.pop() as string
+        } else {
+          date = parts.pop() as string
+          rawRes = parts.pop() as string
+        }
+      } else {
+        continue
+      }
+
+      const gameName = parts.join('-')
 
       if (rawRes && gameName) {
         // 转换分辨率 (如 1080x607 -> 1080-607)
         const parsedRes = rawRes.replace(/[xX*]/g, '-')
         results.push({
-          id: fullPath, // 使用全路径作为唯一标识
+          id: fullPath,
           fileName: name,
           filePath: fullPath,
           gameName,
@@ -1637,7 +1664,7 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
           sequence,
           ext,
           size: stat.size,
-          selected: true // 默认选中
+          selected: true
         })
       }
     }

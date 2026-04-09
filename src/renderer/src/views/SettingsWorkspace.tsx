@@ -26,6 +26,7 @@ import {
   TextInput,
   Title,
   Tooltip,
+  useMantineColorScheme
 } from '@mantine/core';
 import { notify } from '../utils/notify';
 import {
@@ -126,6 +127,7 @@ export function SettingsWorkspace({
   setScreenshotSettings,
   producerName,
 }: SettingsWorkspaceProps) {
+  const { setColorScheme } = useMantineColorScheme();
   const [activeTab, setActiveTab] = useState<string>('system');
   const [shortcutConflicts, setShortcutConflicts] = useState<Record<keyof ShortcutSettings, boolean>>({
     togglePanel: false,
@@ -247,7 +249,11 @@ export function SettingsWorkspace({
                       </Box>
                       <Select
                         value={systemSettings.theme}
-                        onChange={(val: any) => setSystemSettings(prev => ({ ...prev, theme: val || 'auto' }))}
+                        onChange={(val: any) => {
+                          const newTheme = val || 'auto';
+                          setSystemSettings(prev => ({ ...prev, theme: newTheme }));
+                          setColorScheme(newTheme);
+                        }}
                         data={[
                           { label: '浅色', value: 'light' },
                           { label: '深色', value: 'dark' },
@@ -287,7 +293,7 @@ export function SettingsWorkspace({
                       </Box>
                       <Switch
                         checked={systemSettings.autoStart}
-                        onChange={(e) => setSystemSettings(prev => ({ ...prev, autoStart: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setSystemSettings(prev => ({ ...prev, autoStart: checked })); }}
                       />
                     </Group>
                     <Divider />
@@ -298,7 +304,7 @@ export function SettingsWorkspace({
                       </Box>
                       <Switch
                         checked={systemSettings.closeToTray}
-                        onChange={(e) => setSystemSettings(prev => ({ ...prev, closeToTray: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setSystemSettings(prev => ({ ...prev, closeToTray: checked })); }}
                       />
                     </Group>
                     <Divider />
@@ -309,7 +315,7 @@ export function SettingsWorkspace({
                       </Box>
                       <Switch
                         checked={systemSettings.autoUpdate}
-                        onChange={(e) => setSystemSettings(prev => ({ ...prev, autoUpdate: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setSystemSettings(prev => ({ ...prev, autoUpdate: checked })); }}
                       />
                     </Group>
                   </Stack>
@@ -328,17 +334,17 @@ export function SettingsWorkspace({
                       label="姓名"
                       description="将用于重命名模板中的制作人拼音缩写"
                       value={userInfo.name}
-                      onChange={(e) => setUserInfo((prev) => ({ ...prev, name: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setUserInfo(prev => ({ ...prev, name: val })); }}
                     />
                     <TextInput
                       label="部门"
                       value={userInfo.department}
-                      onChange={(e) => setUserInfo((prev) => ({ ...prev, department: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setUserInfo(prev => ({ ...prev, department: val })); }}
                     />
                     <TextInput
                       label="邮箱"
                       value={userInfo.email}
-                      onChange={(e) => setUserInfo((prev) => ({ ...prev, email: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setUserInfo(prev => ({ ...prev, email: val })); }}
                     />
                   </Stack>
                 </Card>
@@ -356,7 +362,7 @@ export function SettingsWorkspace({
                       label="默认的素材源文件夹路径"
                       placeholder="例如: C:\Users\xxx\Downloads"
                       value={workspaceSettings.sourceDir}
-                      onChange={(e) => setWorkspaceSettings((prev) => ({ ...prev, sourceDir: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setWorkspaceSettings(prev => ({ ...prev, sourceDir: val })); }}
                       rightSection={
                         <ActionIcon onClick={() => selectFolder((p) => setWorkspaceSettings(prev => ({ ...prev, sourceDir: p })))}>
                           <FolderSearch size={16} />
@@ -368,7 +374,7 @@ export function SettingsWorkspace({
                       description="重命名后文件/目录转移的根路径"
                       placeholder="例如: D:\Assets\Games"
                       value={workspaceSettings.destDir}
-                      onChange={(e) => setWorkspaceSettings((prev) => ({ ...prev, destDir: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setWorkspaceSettings(prev => ({ ...prev, destDir: val })); }}
                       rightSection={
                         <ActionIcon onClick={() => selectFolder((p) => setWorkspaceSettings(prev => ({ ...prev, destDir: p })))}>
                           <FolderSearch size={16} />
@@ -585,7 +591,7 @@ export function SettingsWorkspace({
                         <TextInput
                           label="文件名"
                           value={screenshotSettings.manualSaveName}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, manualSaveName: e.currentTarget.value }))}
+                          onChange={(e) => { const val = e.currentTarget.value; setScreenshotSettings(prev => ({ ...prev, manualSaveName: val })); }}
                         />
                         <TextInput
                           label="预览"
@@ -596,7 +602,7 @@ export function SettingsWorkspace({
                         <Checkbox
                           label="记住上一次使用的图片扩展名"
                           checked={screenshotSettings.manualSaveRememberExtension}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, manualSaveRememberExtension: e.currentTarget.checked }))}
+                          onChange={(e) => { const checked = e.currentTarget.checked; setScreenshotSettings(prev => ({ ...prev, manualSaveRememberExtension: checked })); }}
                         />
                       </Stack>
                     </Box>
@@ -607,12 +613,12 @@ export function SettingsWorkspace({
                         <Checkbox
                           label="显示通知"
                           checked={screenshotSettings.quickSaveNotify}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, quickSaveNotify: e.currentTarget.checked }))}
+                          onChange={(e) => { const checked = e.currentTarget.checked; setScreenshotSettings(prev => ({ ...prev, quickSaveNotify: checked })); }}
                         />
                         <TextInput
                           label="路径"
                           value={screenshotSettings.quickSavePath}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, quickSavePath: e.currentTarget.value }))}
+                          onChange={(e) => { const val = e.currentTarget.value; setScreenshotSettings(prev => ({ ...prev, quickSavePath: val })); }}
                           rightSection={
                             <ActionIcon onClick={() => selectFolder((p) => setScreenshotSettings(prev => ({ ...prev, quickSavePath: p + '/$yyyy-MM-dd$.png' })))}>
                               <FolderSearch size={16} />
@@ -632,7 +638,7 @@ export function SettingsWorkspace({
                       <Group gap="xs" mb="sm">
                         <Checkbox
                           checked={screenshotSettings.autoSaveEnabled}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, autoSaveEnabled: e.currentTarget.checked }))}
+                          onChange={(e) => { const checked = e.currentTarget.checked; setScreenshotSettings(prev => ({ ...prev, autoSaveEnabled: checked })); }}
                         />
                         <Text fw={600}>自动保存</Text>
                       </Group>
@@ -641,7 +647,7 @@ export function SettingsWorkspace({
                           label="路径"
                           disabled={!screenshotSettings.autoSaveEnabled}
                           value={screenshotSettings.autoSavePath}
-                          onChange={(e) => setScreenshotSettings(prev => ({ ...prev, autoSavePath: e.currentTarget.value }))}
+                          onChange={(e) => { const val = e.currentTarget.value; setScreenshotSettings(prev => ({ ...prev, autoSavePath: val })); }}
                           rightSection={
                             <ActionIcon disabled={!screenshotSettings.autoSaveEnabled} onClick={() => selectFolder((p) => setScreenshotSettings(prev => ({ ...prev, autoSavePath: p + '/$yyyy-MM-dd$.png' })))}>
                               <FolderSearch size={16} />
@@ -703,7 +709,7 @@ export function SettingsWorkspace({
                     <Checkbox
                       label="窗口阴影"
                       checked={screenshotSettings.pinShadow}
-                      onChange={(e) => setScreenshotSettings(prev => ({ ...prev, pinShadow: e.currentTarget.checked }))}
+                      onChange={(e) => { const checked = e.currentTarget.checked; setScreenshotSettings(prev => ({ ...prev, pinShadow: checked })); }}
                     />
                     <Group align="center">
                       <Text w={120}>默认不透明度:</Text>
@@ -827,7 +833,7 @@ export function SettingsWorkspace({
                       label="是否剔除音轨"
                       description="导出视频时静音处理"
                       checked={processingSettings.videoRemoveAudio}
-                      onChange={(e) => setProcessingSettings(prev => ({ ...prev, videoRemoveAudio: e.currentTarget.checked }))}
+                      onChange={(e) => { const checked = e.currentTarget.checked; setProcessingSettings(prev => ({ ...prev, videoRemoveAudio: checked })); }}
                     />
                   </Stack>
                 </Card>
@@ -840,7 +846,7 @@ export function SettingsWorkspace({
                     <TextInput
                       label="截图默认保存路径"
                       value={processingSettings.screenshotDir}
-                      onChange={(e) => setProcessingSettings((prev) => ({ ...prev, screenshotDir: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setProcessingSettings(prev => ({ ...prev, screenshotDir: val })); }}
                       rightSection={
                         <ActionIcon onClick={() => selectFolder((p) => setProcessingSettings(prev => ({ ...prev, screenshotDir: p })))}>
                           <FolderSearch size={16} />
@@ -851,12 +857,12 @@ export function SettingsWorkspace({
                       <Switch
                         label="截图边缘带阴影"
                         checked={processingSettings.screenshotShadow}
-                        onChange={(e) => setProcessingSettings(prev => ({ ...prev, screenshotShadow: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setProcessingSettings(prev => ({ ...prev, screenshotShadow: checked })); }}
                       />
                       <Switch
                         label="截图边缘带圆角"
                         checked={processingSettings.screenshotRounded}
-                        onChange={(e) => setProcessingSettings(prev => ({ ...prev, screenshotRounded: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setProcessingSettings(prev => ({ ...prev, screenshotRounded: checked })); }}
                       />
                     </Group>
                   </Stack>
@@ -875,38 +881,26 @@ export function SettingsWorkspace({
                       label="API 服务地址 (Base URL)"
                       placeholder="例如：https://api.openai.com/v1"
                       value={apiKeys.aiIntegration?.apiBaseUrl || ''}
-                      onChange={(e) => setApiKeys((prev) => ({
-                        ...prev,
-                        aiIntegration: { ...prev.aiIntegration, apiBaseUrl: e.currentTarget.value } as any
-                      }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys((prev) => ({ ...prev, aiIntegration: { ...prev.aiIntegration, apiBaseUrl: val } as any })); }}
                     />
                     <PasswordInput
                       label="API 密钥 (API Key)"
                       placeholder="输入 API Key"
                       value={apiKeys.aiIntegration?.apiKey || ''}
-                      onChange={(e) => setApiKeys((prev) => ({
-                        ...prev,
-                        aiIntegration: { ...prev.aiIntegration, apiKey: e.currentTarget.value } as any
-                      }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys((prev) => ({ ...prev, aiIntegration: { ...prev.aiIntegration, apiKey: val } as any })); }}
                     />
                     <TextInput
                       label="模型名称 (Model)"
                       placeholder="例如：gpt-4o"
                       value={apiKeys.aiIntegration?.modelName || ''}
-                      onChange={(e) => setApiKeys((prev) => ({
-                        ...prev,
-                        aiIntegration: { ...prev.aiIntegration, modelName: e.currentTarget.value } as any
-                      }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys((prev) => ({ ...prev, aiIntegration: { ...prev.aiIntegration, modelName: val } as any })); }}
                     />
                     <TextInput
                       label="系统提示词 (System Prompt)"
                       description="指导 AI 如何识别图片并返回所需格式"
                       placeholder="请识别图片，提取“画面元素”和“游戏品类”..."
                       value={apiKeys.aiIntegration?.systemPrompt || ''}
-                      onChange={(e) => setApiKeys((prev) => ({
-                        ...prev,
-                        aiIntegration: { ...prev.aiIntegration, systemPrompt: e.currentTarget.value } as any
-                      }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys((prev) => ({ ...prev, aiIntegration: { ...prev.aiIntegration, systemPrompt: val } as any })); }}
                     />
                   </Stack>
                 </Card>
@@ -919,13 +913,13 @@ export function SettingsWorkspace({
                     <PasswordInput
                       label="Gemini API Key"
                       value={apiKeys.geminiKey}
-                      onChange={(e) => setApiKeys((prev) => ({ ...prev, geminiKey: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys(prev => ({ ...prev, geminiKey: val })); }}
                     />
                     <TextInput
                       label="Stable Diffusion 地址"
                       placeholder="http://127.0.0.1:7860"
                       value={apiKeys.sdPath}
-                      onChange={(e) => setApiKeys((prev) => ({ ...prev, sdPath: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setApiKeys(prev => ({ ...prev, sdPath: val })); }}
                     />
                   </Stack>
                 </Card>
@@ -943,7 +937,7 @@ export function SettingsWorkspace({
                       label="本地数据文件存放路径"
                       description="如 SQLite 记录文件的存放位置"
                       value={dataStatsSettings.dataDir}
-                      onChange={(e) => setDataStatsSettings((prev) => ({ ...prev, dataDir: e.currentTarget.value }))}
+                      onChange={(e) => { const val = e.currentTarget.value; setDataStatsSettings(prev => ({ ...prev, dataDir: val })); }}
                       rightSection={
                         <ActionIcon onClick={() => selectFolder((p) => setDataStatsSettings(prev => ({ ...prev, dataDir: p })))}>
                           <FolderSearch size={16} />
@@ -965,7 +959,7 @@ export function SettingsWorkspace({
                     <Switch
                       label="周末计入产能统计基数"
                       checked={dataStatsSettings.includeWeekend}
-                      onChange={(e) => setDataStatsSettings(prev => ({ ...prev, includeWeekend: e.currentTarget.checked }))}
+                      onChange={(e) => { const checked = e.currentTarget.checked; setDataStatsSettings(prev => ({ ...prev, includeWeekend: checked })); }}
                     />
                     <Select
                       label="月报报表默认导出格式"
