@@ -16,7 +16,7 @@ import {
   ScrollArea,
   Menu,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search } from 'lucide-react';
 import {
   useReactTable,
@@ -154,7 +154,7 @@ export function BitableWorkspace() {
       }
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '加载失败', message: '无法读取数据库记录。' });
+      notify('red', '加载失败', '无法读取数据库记录。');
     } finally {
       setLoading(false);
     }
@@ -181,16 +181,12 @@ export function BitableWorkspace() {
       for (const row of excelData) {
         await window.electronAPI.db.insertImportedData(batchId, row);
       }
-      notifications.show({ color: 'green', title: '导入成功', message: `已导入 ${excelData.length} 条记录。` });
+      notify('green', '导入成功', `已导入 ${excelData.length} 条记录。`);
 
       await loadFileRecords();
       setSelectedBatch(batchId);
     } catch (error) {
-      notifications.show({
-        color: 'red',
-        title: '导入失败',
-        message: error instanceof Error ? error.message : String(error)
-      });
+      notify('red', '导入失败', error instanceof Error ? error.message : String(error));
       setLoading(false);
     }
   }
@@ -201,24 +197,24 @@ export function BitableWorkspace() {
       await window.electronAPI.db.deleteBatch(file.batch_id);
       if (file.id) await window.electronAPI.db.deleteExcelFile(file.id);
 
-      notifications.show({ color: 'green', title: '删除成功' });
+      notify('green', '删除成功' );
       if (selectedBatch === file.batch_id) {
         setSelectedBatch(null);
       }
       await loadFileRecords();
     } catch (error) {
-      notifications.show({ color: 'red', title: '删除失败' });
+      notify('red', '删除失败' );
     }
   }
 
   async function handleOpenFile(filePath: string) {
     if (!filePath) {
-      notifications.show({ color: 'red', title: '无法打开', message: '该记录没有关联的本地文件' });
+      notify('red', '无法打开', '该记录没有关联的本地文件');
       return;
     }
     const result = await window.electronAPI.shell.openPath(filePath);
     if (result !== 'success') {
-      notifications.show({ color: 'red', title: '打开失败', message: result });
+      notify('red', '打开失败', result);
     }
   }
 
@@ -227,9 +223,9 @@ export function BitableWorkspace() {
     try {
       await window.electronAPI.db.deleteImportedData(id);
       setData(prev => prev.filter(r => r.id !== id));
-      notifications.show({ color: 'green', title: '删除成功' });
+      notify('green', '删除成功' );
     } catch (error) {
-      notifications.show({ color: 'red', title: '删除失败' });
+      notify('red', '删除失败' );
     }
   }
 
@@ -241,9 +237,9 @@ export function BitableWorkspace() {
       setData([]);
       setFileList([]);
       setSelectedBatch(null);
-      notifications.show({ color: 'green', title: '已清空所有数据' });
+      notify('green', '已清空所有数据' );
     } catch (error) {
-      notifications.show({ color: 'red', title: '清空失败' });
+      notify('red', '清空失败' );
     }
   }
 
@@ -314,7 +310,7 @@ export function BitableWorkspace() {
         try {
           await window.electronAPI.db.updateImportedData(row.id, newRowData);
         } catch (error) {
-          notifications.show({ color: 'red', title: '保存失败' });
+          notify('red', '保存失败' );
           loadData(); // Revert on failure
         }
       },

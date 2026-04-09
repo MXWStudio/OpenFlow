@@ -16,7 +16,7 @@ import {
   Badge,
   Loader,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import { Trash2, FolderSearch, UploadCloud, Settings, ChevronRight } from 'lucide-react';
 import { dedupeStrings } from '../appState';
 
@@ -126,11 +126,7 @@ export function FormatProcessor() {
         const filePath = window.electronAPI && window.electronAPI.webUtils ? window.electronAPI.webUtils.getPathForFile(file) : file.path;
 
         if (!filePath) {
-           notifications.show({
-             color: 'red',
-             title: '文件路径解析失败',
-             message: `无法解析文件 ${file.name} 的本地路径。请尝试使用文件夹选择或其他方式。`
-           });
+           notify('red', '文件路径解析失败', `无法解析文件 ${file.name} 的本地路径。请尝试使用文件夹选择或其他方式。`);
            continue;
         }
 
@@ -147,11 +143,7 @@ export function FormatProcessor() {
     }
 
     if (conflictType) {
-      notifications.show({
-         color: 'orange',
-         title: '类型不匹配',
-         message: '批量处理只能同时处理图片或视频，已自动忽略不匹配的文件。'
-      });
+      notify('orange', '类型不匹配', '批量处理只能同时处理图片或视频，已自动忽略不匹配的文件。');
     }
 
     if (newFiles.length > 0) {
@@ -215,20 +207,16 @@ export function FormatProcessor() {
 
          const successCount = res.results.filter((r: any) => r.success).length;
          if (successCount === files.length) {
-            notifications.show({ color: 'green', title: '处理完成', message: `成功处理 ${successCount} 个文件` });
+            notify('green', '处理完成', `成功处理 ${successCount} 个文件`);
          } else {
-            notifications.show({ color: 'orange', title: '处理完成', message: `成功处理 ${successCount} 个文件，失败 ${files.length - successCount} 个` });
+            notify('orange', '处理完成', `成功处理 ${successCount} 个文件，失败 ${files.length - successCount} 个`);
          }
       } else {
-         notifications.show({ color: 'red', title: '处理失败', message: res.error || '未知错误' });
+         notify('red', '处理失败', res.error || '未知错误');
          setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: '系统错误' })));
       }
     } catch (err) {
-       notifications.show({
-         color: 'red',
-         title: '处理异常',
-         message: err instanceof Error ? err.message : String(err)
-       });
+       notify('red', '处理异常', err instanceof Error ? err.message : String(err));
        setFiles(prev => prev.map(f => ({ ...f, status: 'error', error: '系统异常' })));
     } finally {
       setIsProcessing(false);

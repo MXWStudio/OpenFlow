@@ -89,8 +89,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('fs:scanOrganizerFolder', { sourceDir, allowedFormats }),
 
     /** 执行素材转移 */
-    executeOrganize: (files: unknown[], destDir: string) =>
-      ipcRenderer.invoke('fs:executeOrganize', { files, destDir }),
+    executeOrganize: (files: unknown[], destDir: string, isQimiEnabled?: boolean) =>
+      ipcRenderer.invoke('fs:executeOrganize', { files, destDir, isQimiEnabled }),
 
     /** 撤销素材转移 */
     undoOrganize: () =>

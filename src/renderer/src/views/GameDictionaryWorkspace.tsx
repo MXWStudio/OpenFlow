@@ -18,7 +18,7 @@ import {
   Badge
 } from '@mantine/core';
 import { Plus, Trash, Search, Image as ImageIcon, ClipboardPaste } from 'lucide-react';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import { GameMapping } from '../appState';
 
 export function GameDictionaryWorkspace() {
@@ -39,7 +39,7 @@ export function GameDictionaryWorkspace() {
       setMappings(data);
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '错误', message: '加载游戏库失败' });
+      notify('red', '错误', '加载游戏库失败');
     }
   };
 
@@ -64,10 +64,10 @@ export function GameDictionaryWorkspace() {
             try {
               const localPath = await window.electronAPI.fs.saveImageToLocal({ dataUrl });
               setEditingMapping(prev => ({ ...prev, image_path: localPath }));
-              notifications.show({ color: 'green', title: '成功', message: '已粘贴图片' });
+              notify('green', '成功', '已粘贴图片');
             } catch (error) {
               console.error(error);
-              notifications.show({ color: 'red', title: '错误', message: '保存粘贴的图片失败' });
+              notify('red', '错误', '保存粘贴的图片失败');
             }
           }
         }
@@ -89,7 +89,7 @@ export function GameDictionaryWorkspace() {
 
   const handleSave = async () => {
     if (!editingMapping.game_name || !editingMapping.image_path) {
-      notifications.show({ color: 'orange', title: '提示', message: '请填写游戏名称并上传主视觉图' });
+      notify('orange', '提示', '请填写游戏名称并上传主视觉图');
       return;
     }
 
@@ -97,16 +97,16 @@ export function GameDictionaryWorkspace() {
     try {
       if (editingMapping.id) {
         await window.electronAPI.db.updateGameMapping(editingMapping.id, editingMapping);
-        notifications.show({ color: 'green', title: '成功', message: '已更新记录' });
+        notify('green', '成功', '已更新记录');
       } else {
         await window.electronAPI.db.insertGameMapping(editingMapping);
-        notifications.show({ color: 'green', title: '成功', message: '已添加新记录' });
+        notify('green', '成功', '已添加新记录');
       }
       setIsModalOpen(false);
       loadMappings();
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '错误', message: '保存失败' });
+      notify('red', '错误', '保存失败');
     } finally {
       setIsSaving(false);
     }
@@ -115,11 +115,11 @@ export function GameDictionaryWorkspace() {
   const handleDelete = async (id: number) => {
     try {
       await window.electronAPI.db.deleteGameMapping(id);
-      notifications.show({ color: 'green', title: '成功', message: '已删除记录' });
+      notify('green', '成功', '已删除记录');
       loadMappings();
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '错误', message: '删除失败' });
+      notify('red', '错误', '删除失败');
     }
   };
 
@@ -134,7 +134,7 @@ export function GameDictionaryWorkspace() {
       }
     } catch (error) {
       console.error(error);
-      notifications.show({ color: 'red', title: '错误', message: '保存上传的图片失败' });
+      notify('red', '错误', '保存上传的图片失败');
     }
   };
 

@@ -1650,7 +1650,7 @@ ipcMain.handle('fs:scanOrganizerFolder', async (_, { sourceDir, allowedFormats }
  * fs:executeOrganize
  * 执行整理移动：从扫描结果列表中，移动到目标目录/游戏名/分辨率/
  */
-ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
+ipcMain.handle('fs:executeOrganize', async (_, { files, destDir, isQimiEnabled }) => {
   if (!files || files.length === 0) return { success: false, error: '没有需要移动的文件' }
 
   // 清空上一次的记录，确保撤销只针对当前这一次转移
@@ -1689,26 +1689,32 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
     const gameFolder = join(destDir, file.gameName)
     let finalResolution = file.resolution
 
-    // Check if the game folder exists and look for an existing resolution folder
-    if (await fs.pathExists(gameFolder)) {
-      try {
-        const gameSubDirs = await fs.readdir(gameFolder)
-        // Normalize the target resolution to just numbers, e.g. "1080-607" -> "1080_607"
-        const normalizedTarget = file.resolution.replace(/[xX*\-]/g, '_')
+    // If it is an mp4 file and qimi generation is enabled, force the target folder to be '奇觅生成'
+    let qimiCreated = false;
+    if (isQimiEnabled && file.ext && file.ext.toLowerCase() === '.mp4') {
+      finalResolution = '奇觅生成';
+    } else {
+      // Check if the game folder exists and look for an existing resolution folder
+      if (await fs.pathExists(gameFolder)) {
+        try {
+          const gameSubDirs = await fs.readdir(gameFolder)
+          // Normalize the target resolution to just numbers, e.g. "1080-607" -> "1080_607"
+          const normalizedTarget = file.resolution.replace(/[xX*\-]/g, '_')
 
-        for (const subDir of gameSubDirs) {
-          const fullSubDirPath = join(gameFolder, subDir)
-          const stat = await fs.stat(fullSubDirPath)
-          if (stat.isDirectory()) {
-            const normalizedSubDir = subDir.replace(/[xX*\-]/g, '_')
-            if (normalizedSubDir === normalizedTarget) {
-              finalResolution = subDir
-              break
+          for (const subDir of gameSubDirs) {
+            const fullSubDirPath = join(gameFolder, subDir)
+            const stat = await fs.stat(fullSubDirPath)
+            if (stat.isDirectory()) {
+              const normalizedSubDir = subDir.replace(/[xX*\-]/g, '_')
+              if (normalizedSubDir === normalizedTarget) {
+                finalResolution = subDir
+                break
+              }
             }
           }
+        } catch (err) {
+          // Ignore read errors, will just use the default resolution name
         }
-      } catch (err) {
-        // Ignore read errors, will just use the default resolution name
       }
     }
 
@@ -1716,7 +1722,11 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir }) => {
 
     // 如果目标文件夹不存在，记录并创建
     if (!(await fs.pathExists(targetFolder))) {
-      missingFolders.add(`【${file.gameName}】缺少文件夹，已为您创建【${finalResolution}】文件夹。`)
+      if (finalResolution === '奇觅生成') {
+        missingFolders.add(`已为您创建【奇觅生成】文件夹。`)
+      } else {
+        missingFolders.add(`【${file.gameName}】缺少文件夹，已为您创建【${finalResolution}】文件夹。`)
+      }
       await fs.ensureDir(targetFolder)
     }
 
