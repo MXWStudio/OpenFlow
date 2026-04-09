@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import { Dropzone, IMAGE_MIME_TYPE } from '@mantine/dropzone';
 import { Sparkles, UploadCloud, CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import { WorkflowSettings, ApiKeys } from '../appState';
 import { applyAiTemplate } from '../utils'; // We'll create this helper
 
@@ -183,7 +183,7 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
     }
 
     setIsProcessing(false);
-    notifications.show({ color: 'green', title: '处理完成', message: '所有图片已处理完毕。' });
+    notify('green', '处理完成', '所有图片已处理完毕。');
   };
 
   const handleClear = () => {

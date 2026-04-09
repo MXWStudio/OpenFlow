@@ -172,7 +172,7 @@ export interface ElectronAPI {
     scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) => Promise<any[]>
 
     /** 执行素材转移 */
-    executeOrganize: (files: any[], destDir: string) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
+    executeOrganize: (files: any[], destDir: string, isQimiEnabled?: boolean) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
 
     /** 批量格式处理 */
     processFormat: (files: any[], config: any) => Promise<{ success: boolean; results: any[]; error?: string }>

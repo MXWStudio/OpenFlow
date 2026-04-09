@@ -24,7 +24,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from './utils/notify';
 import { createAvatar } from '@dicebear/core';
 import * as dylan from '@dicebear/dylan';
 import {
@@ -64,6 +64,7 @@ import {
   DEFAULT_SCREENSHOT,
   type ApiKeys,
   type HistoryEntry,
+  type NotificationHistoryEntry,
   type TemplateKey,
   type TokenType,
   type UserInfo,
@@ -89,6 +90,7 @@ type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary
 import { useMantineColorScheme } from '@mantine/core';
 
 export default function App() {
+  const [isQimiEnabled, setIsQimiEnabled] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>('daily');
   const { setColorScheme } = useMantineColorScheme();
   const [isAppReady, setIsAppReady] = useState(false);
@@ -109,6 +111,8 @@ export default function App() {
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([]);
+  const [notificationHistory, setNotificationHistory] = useState<NotificationHistoryEntry[]>([]);
+  const [isNotificationCenterOpened, setIsNotificationCenterOpened] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
   const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
@@ -143,6 +147,21 @@ export default function App() {
       }).toDataUri(),
     [userInfo.name],
   );
+
+  useEffect(() => {
+    const handleNotification = async (e: Event) => {
+      const customEvent = e as CustomEvent<NotificationHistoryEntry>;
+      setNotificationHistory((prev) => {
+        const next = [customEvent.detail, ...prev].slice(0, 100);
+        if (window.electronAPI) {
+          window.electronAPI.store.set('notificationHistory', next);
+        }
+        return next;
+      });
+    };
+    window.addEventListener('app-notification', handleNotification);
+    return () => window.removeEventListener('app-notification', handleNotification);
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI) {
@@ -199,6 +218,7 @@ export default function App() {
       if (config.screenshotSettings) setScreenshotSettings(config.screenshotSettings as ScreenshotSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
+      if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
       if (Array.isArray(config.dailyLayoutLeft)) setLayoutLeft(config.dailyLayoutLeft as string[]);
       if (Array.isArray(config.dailyLayoutRight)) setLayoutRight(config.dailyLayoutRight as string[]);
     }).finally(() => setIsAppReady(true));
@@ -213,9 +233,6 @@ export default function App() {
     }
   }
 
-  function notify(color: 'green' | 'red' | 'orange' | 'gray', title: string, message?: string) {
-    notifications.show({ color, title, message, autoClose: 3000 });
-  }
 
   function resetValidationState() {
     setValidationResults([]);
@@ -470,17 +487,20 @@ export default function App() {
           <Box style={{ marginTop: 'auto' }} />
 
           <Stack gap={16} align="center" pb={10}>
-            <Indicator color="red" size={8} offset={5}>
+            <Indicator color="red" size={8} offset={5} disabled={notificationHistory.length === 0}>
               <ActionIcon
                 variant="subtle"
+                onClick={() => setIsNotificationCenterOpened(true)}
                 styles={{
                   root: {
                     width: 46,
                     height: 46,
-                    color: '#a8b5c9',
+                    color: isNotificationCenterOpened ? '#e2eeff' : '#a8b5c9',
+                    background: isNotificationCenterOpened ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    borderRadius: 12,
                   },
                 }}
               >
@@ -556,9 +576,7 @@ export default function App() {
           <OrganizerWorkspace
             workflowSettings={workflowSettings}
             workspaceSettings={workspaceSettings}
-            onOpenSettings={() => {
-              setActiveView('settings');
-            }}
+            onOpenSettings={() => setActiveView('settings')}
             onChangeWorkspaceSettings={async (partialSettings) => {
               const newSettings = { ...workspaceSettings, ...partialSettings };
               setWorkspaceSettings(newSettings);
@@ -566,6 +584,8 @@ export default function App() {
                 await window.electronAPI.store.set('workspaceSettings', newSettings);
               }
             }}
+            isQimiEnabled={isQimiEnabled}
+            onToggleQimiEnabled={setIsQimiEnabled}
           />
         ) : activeView === 'settings' ? (
           <SettingsWorkspace
@@ -613,6 +633,44 @@ export default function App() {
           </Flex>
         )}
       </Box>
+
+            <Drawer opened={isNotificationCenterOpened} onClose={() => setIsNotificationCenterOpened(false)} position="left" size={420} title="消息中心">
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Text size="sm" c="dimmed">保留最近 100 条通知</Text>
+            <Button variant="subtle" color="red" size="xs" onClick={() => {
+              setNotificationHistory([]);
+              if (window.electronAPI) window.electronAPI.store.set('notificationHistory', []);
+            }}>
+              清空历史
+            </Button>
+          </Group>
+          {notificationHistory.length === 0 && <Text c="dimmed" mt="md" ta="center">暂无消息记录</Text>}
+          {notificationHistory.map((item) => (
+            <Card key={item.id} withBorder radius="md" p="sm" shadow="sm">
+              <Group wrap="nowrap" align="flex-start">
+                <Box
+                  w={8}
+                  h={8}
+                  mt={6}
+                  style={{
+                    borderRadius: 999,
+                    background: ['green', 'teal'].includes(item.color) ? '#34d399' : ['red', 'pink'].includes(item.color) ? '#f87171' : ['orange', 'yellow'].includes(item.color) ? '#fbbf24' : '#60a5fa',
+                    flexShrink: 0
+                  }}
+                />
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Group justify="space-between" mb={4}>
+                    <Text fw={700} size="sm">{item.title}</Text>
+                    <Text size="xs" c="dimmed">{new Date(item.timestamp).toLocaleString()}</Text>
+                  </Group>
+                  {item.message && <Text size="xs" c="dimmed">{item.message}</Text>}
+                </Box>
+              </Group>
+            </Card>
+          ))}
+        </Stack>
+      </Drawer>
 
       <Drawer opened={historyOpened} onClose={() => setHistoryOpened(false)} position="right" size={420} title="历史记录">
         <Stack gap="sm">

@@ -8,6 +8,7 @@ import {
   Group,
   Image,
   ScrollArea,
+  SimpleGrid,
   Stack,
   Text,
   Title,
@@ -18,10 +19,12 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
 
 interface OrganizerWorkspaceProps {
+  isQimiEnabled: boolean;
+  onToggleQimiEnabled: (enabled: boolean) => void;
   workflowSettings: WorkflowSettings;
   workspaceSettings: WorkspaceSettings;
   onOpenSettings: () => void;
@@ -41,7 +44,9 @@ interface ScannedFile {
   selected: boolean;
 }
 
-export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
+export function OrganizerWorkspace({
+  isQimiEnabled,
+  onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
@@ -60,12 +65,12 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
 
   const handleScan = async () => {
     if (!organizerSourceDir) {
-      notifications.show({ color: 'orange', title: '未配置扫描目录', message: '请先在系统设置中配置“默认扫描目录”。' });
+      notify('orange', '未配置扫描目录', '请先在系统设置中配置“默认扫描目录”。');
       onOpenSettings();
       return;
     }
     if (!organizerFormats || organizerFormats.length === 0) {
-      notifications.show({ color: 'orange', title: '未配置支持格式', message: '请先在系统设置中勾选至少一种支持格式（如 jpg, mp4）。' });
+      notify('orange', '未配置支持格式', '请先在系统设置中勾选至少一种支持格式（如 jpg, mp4）。');
       onOpenSettings();
       return;
     }
@@ -77,12 +82,12 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
       setHasScanned(true);
       setHasOrganized(false);
       if (results.length === 0) {
-        notifications.show({ color: 'blue', title: '扫描完成', message: '未找到符合格式要求的素材文件。' });
+        notify('blue', '扫描完成', '未找到符合格式要求的素材文件。');
       } else {
-        notifications.show({ color: 'green', title: '扫描完成', message: `共发现 ${results.length} 个文件待整理。` });
+        notify('green', '扫描完成', `共发现 ${results.length} 个文件待整理。`);
       }
     } catch (err) {
-      notifications.show({ color: 'red', title: '扫描失败', message: String(err) });
+      notify('red', '扫描失败', String(err));
     } finally {
       setIsScanning(false);
     }
@@ -102,14 +107,14 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
 
   const handleOrganize = async () => {
     if (!organizerDestDir) {
-      notifications.show({ color: 'orange', title: '未配置转移目录', message: '请先在系统设置中配置“素材转移目录”。' });
+      notify('orange', '未配置转移目录', '请先在系统设置中配置“素材转移目录”。');
       onOpenSettings();
       return;
     }
 
     const selectedFiles = files.filter(f => f.selected);
     if (selectedFiles.length === 0) {
-      notifications.show({ color: 'orange', title: '未选择文件', message: '请至少勾选一个文件。' });
+      notify('orange', '未选择文件', '请至少勾选一个文件。');
       return;
     }
 
@@ -137,20 +142,15 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
 
     setIsOrganizing(true);
     try {
-      const response = await window.electronAPI.fs.executeOrganize(selectedFiles, organizerDestDir);
+      const response = await window.electronAPI.fs.executeOrganize(selectedFiles, organizerDestDir, isQimiEnabled);
       if (!response.success) {
-        notifications.show({ color: 'red', title: '整理失败', message: response.error });
+        notify('red', '整理失败', response.error);
         return;
       }
 
       if (response.missingFolders && response.missingFolders.length > 0) {
         response.missingFolders.forEach(msg => {
-          notifications.show({
-            color: 'blue',
-            title: '新建文件夹提示',
-            message: msg,
-            autoClose: 10000
-          });
+          notify('blue', '新建文件夹提示', msg, 10000);
         });
       }
 
@@ -158,10 +158,10 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
       const failCount = response.results?.filter(r => !r.success).length || 0;
 
       if (failCount === 0) {
-        notifications.show({ color: 'green', title: '整理完成', message: `成功移动了 ${successCount} 个文件。` });
+        notify('green', '整理完成', `成功移动了 ${successCount} 个文件。`);
         setHasOrganized(true);
       } else {
-        notifications.show({ color: 'orange', title: '整理完成 (部分失败)', message: `成功: ${successCount}, 失败: ${failCount}` });
+        notify('orange', '整理完成 (部分失败)', `成功: ${successCount}, 失败: ${failCount}`);
       }
 
       // Remove successful files from the list
@@ -171,7 +171,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
          setHasOrganized(true);
       }
     } catch (err) {
-      notifications.show({ color: 'red', title: '整理过程发生错误', message: String(err) });
+      notify('red', '整理过程发生错误', String(err));
     } finally {
       setIsOrganizing(false);
     }
@@ -365,7 +365,7 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                   </Group>
                   <Paper
                     radius={26}
-                    p={24}
+                    p={22}
                     h="100%"
                     style={{
                       background: 'rgba(255, 255, 255, 0.8)',
@@ -373,82 +373,112 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                       overflow: 'hidden',
                     }}
                   >
-                    <Stack gap="lg" h="100%" justify="center">
-                      <Group justify="space-between" wrap="nowrap">
+                    <Stack gap="md" h="100%">
+                      <SimpleGrid cols={2} spacing="md" style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+                        <Button
+                          variant={isQimiEnabled ? "filled" : "light"}
+                          color={isQimiEnabled ? "orange" : "gray"}
+                          leftSection={<PlayCircle size={16} />}
+                          onClick={() => onToggleQimiEnabled(!isQimiEnabled)}
+                          radius="xl"
+                          size="md"
+                          styles={{
+                            root: {
+                              fontWeight: 800,
+                              transition: 'all 0.2s ease',
+                              gridColumn: 'span 2'
+                            },
+                          }}
+                        >
+                          视频转移-奇觅生成
+                        </Button>
                         <Tooltip label={organizerSourceDir || '未配置源目录'}>
-                          <Text fw={600} size="md" c="#334155" truncate style={{ flex: 1, cursor: 'help' }}>
-                            源: {getDirName(organizerSourceDir)}
-                          </Text>
-                        </Tooltip>
-                        <Button
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                          radius="md"
-                          onClick={async () => {
-                            const newPath = await window.electronAPI.dialog.selectFolder();
-                            if (newPath) {
-                              if (onChangeWorkspaceSettings) {
-                                onChangeWorkspaceSettings({ sourceDir: newPath });
+                          <Button
+                            variant="light"
+                            color="blue"
+                            leftSection={<FolderOpen size={16} />}
+                            onClick={async () => {
+                              const newPath = await window.electronAPI.dialog.selectFolder();
+                              if (newPath) {
+                                if (onChangeWorkspaceSettings) {
+                                  onChangeWorkspaceSettings({ sourceDir: newPath });
+                                }
+                                notify('green', '成功', '已更改源目录配置。');
                               }
-                              notifications.show({ color: 'green', title: '成功', message: '已更改源目录配置。' });
-                            }
-                          }}
-                        >
-                          更改目录
-                        </Button>
-                      </Group>
-
-                      <Group justify="space-between" wrap="nowrap">
+                            }}
+                            radius="xl"
+                            size="md"
+                            styles={{
+                              root: {
+                                fontWeight: 800,
+                              },
+                              label: {
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }
+                            }}
+                          >
+                            更改源目录
+                          </Button>
+                        </Tooltip>
                         <Tooltip label={organizerDestDir || '未配置转移目录'}>
-                          <Text fw={600} size="md" c="#334155" truncate style={{ flex: 1, cursor: 'help' }}>
-                            目标: {getDirName(organizerDestDir)}
-                          </Text>
+                          <Button
+                            variant="light"
+                            color="blue"
+                            leftSection={<FolderOpen size={16} />}
+                            onClick={async () => {
+                              const newPath = await window.electronAPI.dialog.selectFolder();
+                              if (newPath) {
+                                if (onChangeWorkspaceSettings) {
+                                  onChangeWorkspaceSettings({ destDir: newPath });
+                                }
+                                notify('green', '成功', '已更改转移目录配置。');
+                              }
+                            }}
+                            radius="xl"
+                            size="md"
+                            styles={{
+                              root: {
+                                fontWeight: 800,
+                              },
+                              label: {
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }
+                            }}
+                          >
+                            更改转移目录
+                          </Button>
                         </Tooltip>
                         <Button
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                          radius="md"
-                          onClick={async () => {
-                            const newPath = await window.electronAPI.dialog.selectFolder();
-                            if (newPath) {
-                              if (onChangeWorkspaceSettings) {
-                                onChangeWorkspaceSettings({ destDir: newPath });
-                              }
-                              notifications.show({ color: 'green', title: '成功', message: '已更改转移目录配置。' });
-                            }
-                          }}
-                        >
-                          更改目录
-                        </Button>
-                      </Group>
-
-                      <Box mt="auto">
-                        <Button
-                          fullWidth
                           variant="light"
                           color="red"
-                          size="md"
-                          radius="md"
+                          leftSection={<FolderSync size={16} />}
                           onClick={async () => {
                             try {
                               const result = await window.electronAPI.fs.undoOrganize();
                               if (result.success) {
-                                notifications.show({ color: 'green', title: '撤销成功', message: result.message });
-                                // Automatically scan to refresh the list after undoing
+                                notify('green', '撤销成功', result.message);
                                 handleScan();
                               } else {
-                                notifications.show({ color: 'orange', title: '撤销失败', message: result.error });
+                                notify('orange', '撤销失败', result.error);
                               }
                             } catch (err) {
-                              notifications.show({ color: 'red', title: '执行撤销时出错', message: String(err) });
+                              notify('red', '执行撤销时出错', String(err));
                             }
+                          }}
+                          radius="xl"
+                          size="md"
+                          style={{ gridColumn: 'span 2' }}
+                          styles={{
+                            root: {
+                              fontWeight: 800,
+                            },
                           }}
                         >
                           撤销转移
                         </Button>
-                      </Box>
+                      </SimpleGrid>
                     </Stack>
                   </Paper>
                 </Box>
@@ -536,10 +566,10 @@ export function OrganizerWorkspace({ workflowSettings, workspaceSettings, onOpen
                                       image_path: localPath,
                                       aliases: []
                                     });
-                                    notifications.show({ color: 'green', title: '成功', message: `已将 ${file.gameName} 添加到游戏库` });
+                                    notify('green', '成功', `已将 ${file.gameName} 添加到游戏库`);
                                   } catch (error) {
                                     console.error(error);
-                                    notifications.show({ color: 'red', title: '失败', message: '添加到游戏库失败' });
+                                    notify('red', '失败', '添加到游戏库失败');
                                   }
                                 }}
                               >

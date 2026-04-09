@@ -26,7 +26,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from '../utils/notify';
 import {
   BarChart3,
   Bot,
@@ -176,7 +176,7 @@ export function SettingsWorkspace({
       window.electronAPI.ipcRenderer.invoke('shortcut:update', shortcutSettings);
     }
 
-    notifications.show({ color: 'green', title: '设置已保存', message: '所有配置已成功更新' });
+    notify('green', '设置已保存', '所有配置已成功更新');
   };
 
   const selectFolder = async (setter: (val: string) => void) => {

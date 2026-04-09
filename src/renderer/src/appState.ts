@@ -50,7 +50,15 @@ export interface ApiKeys {
   aiIntegration?: AiIntegrationSettings;
 }
 
-export interface SystemSettings {
+export interface NotificationHistoryEntry {
+  id: string;
+  color: string;
+  title: string;
+  message?: string;
+  timestamp: number;
+}
+
+interface SystemSettings {
   theme: 'light' | 'dark' | 'auto';
   language: 'zh' | 'en' | 'ja';
   autoStart: boolean;
