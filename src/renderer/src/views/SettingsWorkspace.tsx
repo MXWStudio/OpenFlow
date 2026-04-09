@@ -29,6 +29,7 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import { notify } from '../utils/notify';
+import { AiHelpModal } from './AiHelpModal';
 import {
   BarChart3,
   Bot,
@@ -129,6 +130,7 @@ export function SettingsWorkspace({
 }: SettingsWorkspaceProps) {
   const { setColorScheme } = useMantineColorScheme();
   const [activeTab, setActiveTab] = useState<string>('system');
+  const [aiHelpModalOpened, setAiHelpModalOpened] = useState(false);
   const [shortcutConflicts, setShortcutConflicts] = useState<Record<keyof ShortcutSettings, boolean>>({
     togglePanel: false,
     screenshot: false,
@@ -872,9 +874,15 @@ export function SettingsWorkspace({
           </Tabs.Panel>
 
           <Tabs.Panel value="ai" pt="md">
+            <AiHelpModal opened={aiHelpModalOpened} onClose={() => setAiHelpModalOpened(false)} />
             <Stack gap="xl" maw={700}>
               <Box>
-                <Title order={4} mb="lg">通用大模型 (AI 识图) API 配置</Title>
+                <Group justify="space-between" mb="lg">
+                  <Title order={4}>通用大模型 (AI 识图) API 配置</Title>
+                  <Button variant="light" size="xs" leftSection={<HelpCircle size={14} />} onClick={() => setAiHelpModalOpened(true)}>
+                    配置说明 / 获取帮助
+                  </Button>
+                </Group>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
