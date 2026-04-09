@@ -414,9 +414,9 @@ export function SettingsWorkspace({
                 <Stack gap="lg">
                   {['视频版块', '图片版块', 'AI识别命名'].map((sectionTitle) => {
                     const keys: TemplateKey[] = sectionTitle === '视频版块'
-                      ? ['videoRegular', 'videoSpecial']
+                      ? ['videoRegular', 'videoSpecial', 'videoManual']
                       : sectionTitle === '图片版块'
-                      ? ['imageRegular', 'imageSpecial']
+                      ? ['imageRegular']
                       : ['aiImage'];
 
                     return (
