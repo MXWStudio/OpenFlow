@@ -335,7 +335,7 @@ export function buildTemplatePreview(template: TemplateToken[], producerName: st
       const omitHyphen =
         token.type === 'Date' &&
         prev?.type === 'CustomText' &&
-        (prev.value === 'RS' || prev.value === 'RSQ');
+        index - 1 === 0;
 
       const next = omitHyphen ? `${parts.pop() || ''}${value}` : value;
       return omitHyphen ? [...parts, next] : [...parts, value];
