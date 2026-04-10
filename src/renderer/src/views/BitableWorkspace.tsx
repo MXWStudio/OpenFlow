@@ -218,17 +218,6 @@ export function BitableWorkspace() {
     }
   }
 
-  async function handleDeleteRow(id: number) {
-    if (!confirm('确定要删除这条记录吗？')) return;
-    try {
-      await window.electronAPI.db.deleteImportedData(id);
-      setData(prev => prev.filter(r => r.id !== id));
-      notify('green', '删除成功' );
-    } catch (error) {
-      notify('red', '删除失败' );
-    }
-  }
-
   async function handleClearAll() {
     if (!confirm('确定要清空所有数据吗？此操作不可恢复！')) return;
     try {
@@ -270,18 +259,6 @@ export function BitableWorkspace() {
         header: key,
         cell: EditableCell,
       })
-    );
-
-    cols.push(
-      colHelper.display({
-        id: 'actions',
-        header: '操作',
-        cell: (info) => (
-          <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteRow(info.row.original.id)}>
-            <Trash2 size={16} />
-          </ActionIcon>
-        ),
-      }) as any
     );
 
     return cols;
@@ -455,7 +432,17 @@ export function BitableWorkspace() {
                   />
                 </Group>
                 <Box style={{ overflowX: 'auto', flex: 1 }}>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders>
+                  <style>
+                    {`
+                      .no-selection-bg ::selection {
+                        background-color: #f1f3f5;
+                      }
+                      .no-selection-bg *::selection {
+                        background-color: #f1f3f5;
+                      }
+                    `}
+                  </style>
+                  <Table className="no-selection-bg" striped highlightOnHover withTableBorder withColumnBorders>
                   <Table.Thead>
                     {table.getHeaderGroups().map((headerGroup) => (
                       <Table.Tr key={headerGroup.id}>
