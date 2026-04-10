@@ -249,9 +249,22 @@ export default function App() {
         : [];
       setProjectsList(projects);
       setJsonFileName(result.fileName ? result.fileName.replace(/\.json$/i, '') : '');
-      if (result.producerName) {
-        setProducerName(result.producerName);
-        setUserInfo((prev) => ({ ...prev, name: result.producerName as string }));
+      if (result.producerName || result.department || result.email) {
+        if (result.producerName) {
+          setProducerName(result.producerName as string);
+        }
+        setUserInfo((prev) => {
+          const newUserInfo = {
+            ...prev,
+            ...(result.producerName ? { name: result.producerName as string } : {}),
+            ...(result.department ? { department: result.department as string } : {}),
+            ...(result.email ? { email: result.email as string } : {}),
+          };
+          if (window.electronAPI && window.electronAPI.store) {
+            window.electronAPI.store.set('userInfo', newUserInfo);
+          }
+          return newUserInfo;
+        });
       }
       const sizeSet = new Set<string>();
       projects.forEach((project) => project.sizes.forEach((size) => sizeSet.add(size)));

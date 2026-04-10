@@ -926,6 +926,8 @@ ipcMain.handle('dialog:openJson', async () => {
   const projects: ProjectItem[] = []
   let projectName = ''
   let producerName = ''
+  let department = ''
+  let email = ''
   let sizes: string[] = []
 
   const norm = (s: string) => (s || '').replace(/[xX×-]/g, '*')
@@ -934,6 +936,8 @@ ipcMain.handle('dialog:openJson', async () => {
     if (rawData.length > 0) {
       const firstItem = rawData[0]
       producerName = firstItem['制作人'] || firstItem['producerName'] || firstItem['producer'] || ''
+      department = firstItem['部门'] || firstItem['department'] || ''
+      email = firstItem['邮箱'] || firstItem['email'] || ''
     }
 
     for (const item of rawData) {
@@ -977,9 +981,11 @@ ipcMain.handle('dialog:openJson', async () => {
       projects.push({ projectName: projectName || '未命名项目', sizes })
     }
     producerName = rawData['制作人'] || rawData['producerName'] || rawData['producer'] || ''
+    department = rawData['部门'] || rawData['department'] || ''
+    email = rawData['邮箱'] || rawData['email'] || ''
   }
 
-  return { projectName, producerName, sizes, projects, rawData, fileName }
+  return { projectName, producerName, department, email, sizes, projects, rawData, fileName }
 })
 
 /**
