@@ -17,7 +17,7 @@ import {
   Menu,
 } from '@mantine/core';
 import { notify } from '../utils/notify';
-import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search } from 'lucide-react';
+import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -93,6 +93,7 @@ interface ExcelFileRecord {
 }
 
 export function BitableWorkspace() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>('table');
   const [data, setData] = useState<ImportRecord[]>([]);
   const [fileList, setFileList] = useState<ExcelFileRecord[]>([]);
@@ -338,11 +339,39 @@ export function BitableWorkspace() {
 
 
   return (
-    <Flex h="100%" direction="row" bg="#f7f9fc" gap="md" p="xl">
+    <Flex h="100%" direction="row" bg="#f7f9fc" gap="md" p="xl" style={{ position: 'relative' }}>
+      {!isSidebarOpen && (
+        <ActionIcon
+          variant="default"
+          size="lg"
+          radius="md"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            zIndex: 10,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            borderTopLeftRadius: 0,
+            borderBottomLeftRadius: 0,
+            borderLeft: 'none',
+          }}
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <ChevronRight size={20} />
+        </ActionIcon>
+      )}
+
       {/* Left Panel: File List */}
-      <Card radius="md" p="md" withBorder shadow="sm" style={{ width: '300px', display: 'flex', flexDirection: 'column' }}>
-        <Title order={4} mb="md">导入历史</Title>
-        <Button fullWidth leftSection={<Upload size={16} />} onClick={handleImport} loading={loading} mb="md">
+      {isSidebarOpen && (
+        <Card radius="md" p="md" withBorder shadow="sm" style={{ width: '300px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <Group justify="space-between" mb="md">
+            <Title order={4}>导入历史</Title>
+            <ActionIcon variant="subtle" color="gray" onClick={() => setIsSidebarOpen(false)}>
+              <ChevronLeft size={20} />
+            </ActionIcon>
+          </Group>
+          <Button fullWidth leftSection={<Upload size={16} />} onClick={handleImport} loading={loading} mb="md">
           导入 Excel 报表
         </Button>
         <ScrollArea style={{ flex: 1 }}>
@@ -398,7 +427,8 @@ export function BitableWorkspace() {
             清空所有记录
           </Button>
         )}
-      </Card>
+        </Card>
+      )}
 
       {/* Right Panel: Content Area */}
       <Card radius="md" p={0} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} withBorder shadow="sm">
