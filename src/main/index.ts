@@ -847,15 +847,22 @@ ipcMain.handle('fs:cleanupOldExcels', async () => {
     const now = Date.now()
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
-    let deletedCount = 0
-    for (const file of files) {
-      const filePath = join(backupDir, file)
-      const stat = await fs.stat(filePath)
-      if (now - stat.mtimeMs > THIRTY_DAYS_MS) {
-        await fs.remove(filePath)
-        deletedCount++
-      }
-    }
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const filePath = join(backupDir, file)
+        try {
+          const stat = await fs.stat(filePath)
+          if (now - stat.mtimeMs > THIRTY_DAYS_MS) {
+            await fs.remove(filePath)
+            return true
+          }
+        } catch (error) {
+          console.error(`Error processing file ${file} for cleanup:`, error)
+        }
+        return false
+      })
+    )
+    const deletedCount = results.filter(Boolean).length
     console.log(`Cleaned up ${deletedCount} old Excel files.`)
     return true
   } catch (error) {
