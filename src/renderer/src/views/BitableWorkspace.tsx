@@ -17,7 +17,7 @@ import {
   Menu,
 } from '@mantine/core';
 import { notify } from '../utils/notify';
-import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, Trash2, Save, BarChart3, TableProperties, ExternalLink, MoreVertical, FileSpreadsheet, Search, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -230,6 +230,34 @@ export function BitableWorkspace() {
       notify('green', '已清空所有数据' );
     } catch (error) {
       notify('red', '清空失败' );
+    }
+  }
+
+  async function handleCopyData() {
+    if (filteredData.length === 0) {
+      notify('yellow', '无数据', '当前没有可复制的数据');
+      return;
+    }
+
+    try {
+      const keys = new Set<string>();
+      data.forEach(item => Object.keys(item.row_data).forEach(k => keys.add(k)));
+      const columns = Array.from(keys);
+
+      const tsvData = filteredData.map(row => {
+        return columns.map(col => {
+          const val = row.row_data[col];
+          let strVal = val !== undefined && val !== null ? String(val) : '';
+          // 将制表符和换行符替换为空格，避免破坏 TSV 格式
+          strVal = strVal.replace(/\t|\n|\r/g, ' ');
+          return strVal;
+        }).join('\t');
+      }).join('\n');
+
+      await navigator.clipboard.writeText(tsvData);
+      notify('green', '复制成功', '数据已复制到剪贴板。');
+    } catch (error) {
+      notify('red', '复制失败', error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -460,6 +488,13 @@ export function BitableWorkspace() {
                     onChange={(e) => setSearchQuery(e.currentTarget.value)}
                     style={{ width: '300px' }}
                   />
+                  <Button
+                    variant="light"
+                    leftSection={<Copy size={16} />}
+                    onClick={handleCopyData}
+                  >
+                    复制数据
+                  </Button>
                 </Group>
                 <Box style={{ overflowX: 'auto', flex: 1 }}>
                   <style>
