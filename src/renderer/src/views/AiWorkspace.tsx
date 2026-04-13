@@ -72,17 +72,44 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
   };
 
   const callAiApi = async (base64Image: string): Promise<{ element: string, category: string }> => {
-    const config = apiKeys.aiIntegration;
-    if (!config?.apiBaseUrl || !config?.apiKey || !config?.modelName) {
-      throw new Error('未配置完整的 AI API 参数，请先前往设置中心配置');
+    const config = apiKeys.aiIntegration || {} as any;
+
+    // Smart fallback logic
+    let apiKey = config.apiKey || apiKeys.geminiKey;
+    let apiBaseUrl = config.apiBaseUrl;
+    let modelName = config.modelName;
+
+    if (!apiKey) {
+      throw new Error('未配置 AI API Key，请先前往设置中心配置');
     }
 
+    // Auto-detect based on key if base URL or model is missing
+    if (!apiBaseUrl || !modelName) {
+      if (apiKey.startsWith('AIza')) {
+        // Google Gemini format
+        apiBaseUrl = apiBaseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai';
+        modelName = modelName || 'gemini-1.5-flash';
+      } else if (apiKey.startsWith('sk-')) {
+        // Aliyun / Qwen format (or OpenAI format)
+        // Assuming Aliyun DashScope as default Chinese fallback if it looks like a standard sk- key
+        // You can change this if needed, but it provides a good "dumb" fallback for Chinese users.
+        apiBaseUrl = apiBaseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+        modelName = modelName || 'qwen-vl-plus';
+      } else {
+        // Generic fallback, assume Gemini
+        apiBaseUrl = apiBaseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai';
+        modelName = modelName || 'gemini-1.5-flash';
+      }
+    }
+
+    const systemPrompt = config.systemPrompt || '请识别图片，提取“画面元素”和“游戏品类”，并严格按照“画面元素-游戏品类”的格式返回，不要包含其他任何文本。例如：橡皮人-射击';
+
     const payload = {
-      model: config.modelName,
+      model: modelName,
       messages: [
         {
           role: 'system',
-          content: config.systemPrompt || '请识别图片，提取“画面元素”和“游戏品类”，并严格按照“画面元素-游戏品类”的格式返回，不要包含其他任何文本。例如：橡皮人-射击'
+          content: systemPrompt
         },
         {
           role: 'user',
@@ -96,11 +123,11 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
       temperature: 0.1
     };
 
-    const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
+    const response = await fetch(`${apiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify(payload)
     });
