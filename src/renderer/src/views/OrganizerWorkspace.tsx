@@ -232,13 +232,13 @@ export function OrganizerWorkspace({
           px={30}
           h={102}
           style={{
-            borderBottom: '1px solid #eef3f8',
-            background: 'rgba(255,255,255,0.28)',
+            borderBottom: '1px solid var(--mantine-color-default-border)',
+            background: "var(--mantine-color-default)",
           }}
         >
           <Stack gap="xs">
-            <Title order={2} size="h3" c="#22324c" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <FolderSearch size={24} color="#4f8dff" />
+            <Title order={2} size="h3" c="var(--mantine-color-text)" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <FolderSearch size={24} color="var(--mantine-color-blue-filled)" />
               素材自动整理
             </Title>
             <Text c="dimmed" size="sm">
@@ -263,8 +263,8 @@ export function OrganizerWorkspace({
                 {/* 左侧 60% 系统状态 */}
                 <Box style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
                   <Group gap={8} mb="lg">
-                    <FolderSearch size={14} color="#d7e0eb" />
-                    <Text fw={800} size="lg" c="#8ea2c1">
+                    <FolderSearch size={14} color="var(--mantine-color-dimmed)" />
+                    <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
                       系统状态
                     </Text>
                   </Group>
@@ -275,7 +275,7 @@ export function OrganizerWorkspace({
                     style={{
                       background:
                         'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
-                      border: '1px solid #edf2f7',
+                      border: '1px solid var(--mantine-color-default-border)',
                       boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
                       overflow: 'hidden',
                     }}
@@ -288,7 +288,7 @@ export function OrganizerWorkspace({
                             h={8}
                             style={{
                               borderRadius: 999,
-                              background: hasOrganized ? '#34d399' : isScanning || isOrganizing ? '#60a5fa' : '#94a3b8',
+                              background: hasOrganized ? 'var(--mantine-color-green-filled)' : isScanning || isOrganizing ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-dimmed)',
                             }}
                           />
                           <Badge
@@ -301,11 +301,11 @@ export function OrganizerWorkspace({
                           </Badge>
                         </Group>
 
-                        <Title order={1} c="#0f284d" mb={12} style={{ fontSize: 32, lineHeight: 1.02 }}>
+                        <Title order={1} c="var(--mantine-color-text)" mb={12} style={{ fontSize: 32, lineHeight: 1.02 }}>
                           {statusTitle}
                         </Title>
 
-                        <Text c="#64748b" size="md" fw={500}>
+                        <Text c="var(--mantine-color-dimmed)" size="md" fw={500}>
                           {statusDescription}
                         </Text>
 
@@ -345,11 +345,11 @@ export function OrganizerWorkspace({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: '#ffffff',
+                          background: 'var(--mantine-color-default)',
                           flexShrink: 0
                         }}
                       >
-                        <FileText size={36} color="#d6dee9" />
+                        <FileText size={36} color="var(--mantine-color-dimmed)" />
                       </Paper>
                     </Group>
                   </Paper>
@@ -358,8 +358,8 @@ export function OrganizerWorkspace({
                 {/* 右侧 40% 快捷操作 */}
                 <Box style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
                    <Group gap={8} mb="lg">
-                    <FolderSearch size={14} color="#d7e0eb" opacity={0} />
-                    <Text fw={800} size="lg" c="#8ea2c1">
+                    <FolderSearch size={14} color="var(--mantine-color-dimmed)" opacity={0} />
+                    <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
                       快捷操作
                     </Text>
                   </Group>
@@ -368,8 +368,8 @@ export function OrganizerWorkspace({
                     p={22}
                     h="100%"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.8)',
-                      border: '1px solid #edf2f7',
+                      background: "var(--mantine-color-default)",
+                      border: '1px solid var(--mantine-color-default-border)',
                       overflow: 'hidden',
                     }}
                   >
@@ -497,15 +497,15 @@ export function OrganizerWorkspace({
             >
               <Group justify="space-between" mb="md">
                 <Group gap={8}>
-                  <FolderSync size={14} color="#d7e0eb" />
-                  <Text fw={800} size="lg" c="#8ea2c1">
+                  <FolderSync size={14} color="var(--mantine-color-dimmed)" />
+                  <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
                     待整理素材
                   </Text>
                 </Group>
               </Group>
 
               {files.length === 0 ? (
-                <Flex h={200} align="center" justify="center" direction="column" gap="md" c="dimmed" style={{ backgroundColor: '#f9fbff', borderRadius: 24, border: '2px dashed #cad7e8' }}>
+                <Flex h={200} align="center" justify="center" direction="column" gap="md" c="dimmed" style={{ backgroundColor: 'var(--mantine-color-default)', borderRadius: 24, border: '2px dashed var(--mantine-color-default-border)' }}>
                   <FolderSearch size={48} opacity={0.3} />
                   <Text>未发现匹配的素材，请确认源目录配置或重新扫描</Text>
                   {(!organizerSourceDir || !organizerDestDir) && (
@@ -534,11 +534,11 @@ export function OrganizerWorkspace({
                             size="md"
                           />
 
-                          <Box w={64} h={64} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Box w={64} h={64} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--mantine-color-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             {isVideo ? (
-                              <PlayCircle size={32} color="#94a3b8" />
+                              <PlayCircle size={32} color="var(--mantine-color-dimmed)" />
                             ) : (
-                               <Image src={`asset://${file.filePath}`} width="100%" height="100%" fit="cover" fallbackSrc={<ImageIcon size={32} color="#94a3b8" />} />
+                               <Image src={`asset://${file.filePath}`} width="100%" height="100%" fit="cover" fallbackSrc={<ImageIcon size={32} color="var(--mantine-color-dimmed)" />} />
                             )}
                           </Box>
 
@@ -601,8 +601,8 @@ export function OrganizerWorkspace({
           position: 'absolute',
           right: 28,
           bottom: 24,
-          background: 'rgba(255,255,255,0.96)',
-          border: '1px solid #e8eef5',
+          background: "var(--mantine-color-default)",
+          border: '1px solid var(--mantine-color-default-border)',
           boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
           zIndex: 100,
         }}
@@ -619,7 +619,7 @@ export function OrganizerWorkspace({
               root: {
                 height: 58,
                 paddingInline: 32,
-                background: '#111a34',
+                background: 'var(--mantine-color-dark-8)',
                 fontSize: 18,
                 fontWeight: 900,
                 boxShadow: '0 12px 28px rgba(17, 26, 52, 0.2)',
@@ -640,7 +640,7 @@ export function OrganizerWorkspace({
               root: {
                 height: 58,
                 paddingInline: 32,
-                background: '#19c37d',
+                background: 'var(--mantine-color-green-filled)',
                 fontSize: 18,
                 fontWeight: 900,
                 boxShadow: '0 12px 28px rgba(25, 195, 125, 0.22)',

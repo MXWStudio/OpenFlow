@@ -228,7 +228,7 @@ export function FormatProcessor() {
     : [{ value: '', label: '保持原格式' }, { value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }];
 
   return (
-    <Flex h="100%" direction="column" bg="#f7f9fc" p={24} gap="lg">
+    <Flex h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
       <Group justify="space-between">
          <Box>
             <Title order={3} c="#1d2230">格式处理</Title>
@@ -313,7 +313,7 @@ export function FormatProcessor() {
                   fw={500}
                 />
                 {config.resize.enabled && (
-                  <Card withBorder radius="md" p="sm" bg="gray.0">
+                  <Card withBorder radius="md" p="sm" bg="var(--mantine-color-default)">
                     <Select
                       label="调整方式"
                       size="sm"
@@ -355,7 +355,7 @@ export function FormatProcessor() {
               {/* 质量压缩 */}
               <Box>
                 <Text fw={500} size="sm" mb="xs">输出质量压缩</Text>
-                <Card withBorder radius="md" p="sm" bg="gray.0">
+                <Card withBorder radius="md" p="sm" bg="var(--mantine-color-default)">
                   <NumberInput
                     description="1-100，越小体积越小，质量越低"
                     size="sm"

@@ -387,12 +387,12 @@ export default function App() {
   }
 
   return (
-    <Flex h="100vh" style={{ background: '#f7f9fc', overflow: 'hidden' }}>
+    <Flex h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
       <Box
         w={92}
         style={{
-          background: '#1d2230',
-          color: '#d5deed',
+          background: 'var(--mantine-color-dark-8)',
+          color: 'var(--mantine-color-dark-0)',
           boxShadow: '4px 0 24px rgba(15, 23, 42, 0.16)',
           zIndex: 20,
         }}
@@ -409,7 +409,7 @@ export default function App() {
                 height: 6,
                 transform: 'translateX(-50%)',
                 borderRadius: 999,
-                background: 'linear-gradient(90deg, #fb923c 0%, #f472b6 50%, #818cf8 100%)',
+                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-pink-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
               }}
             />
           </Box>
@@ -421,7 +421,7 @@ export default function App() {
                 root: {
                   width: 48,
                   height: 48,
-                  color: '#b4c0d4',
+                  color: 'var(--mantine-color-dimmed)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -436,7 +436,7 @@ export default function App() {
                 root: {
                   width: 48,
                   height: 48,
-                  color: '#b4c0d4',
+                  color: 'var(--mantine-color-dimmed)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -447,7 +447,7 @@ export default function App() {
             </ActionIcon>
           </Stack>
 
-          <Box my={4} w={46} h={1} bg="rgba(255,255,255,0.1)" />
+          <Box my={4} w={46} h={1} bg="'var(--mantine-color-default)'" />
 
           <Stack gap={10} align="center" mt={18}>
             {navItems.map((item) => {
@@ -466,7 +466,7 @@ export default function App() {
                     borderRadius: 20,
                     cursor: 'pointer',
                     background: active ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
-                    color: active ? '#e2eeff' : '#a8b5c9',
+                    color: active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -487,7 +487,7 @@ export default function App() {
                         height: 30,
                         transform: 'translateY(-50%)',
                         borderRadius: 999,
-                        background: '#4f8dff',
+                        background: 'var(--mantine-color-blue-filled)',
                       }}
                     />
                   )}
@@ -511,7 +511,7 @@ export default function App() {
                   root: {
                     width: 46,
                     height: 46,
-                    color: isNotificationCenterOpened ? '#e2eeff' : '#a8b5c9',
+                    color: isNotificationCenterOpened ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
                     background: isNotificationCenterOpened ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
@@ -530,7 +530,7 @@ export default function App() {
                 root: {
                   width: 46,
                   height: 46,
-                  color: activeView === 'settings' ? '#e2eeff' : '#a8b5c9',
+                  color: activeView === 'settings' ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
                   background: activeView === 'settings' ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
                   display: 'flex',
                   alignItems: 'center',
@@ -671,7 +671,7 @@ export default function App() {
                   mt={6}
                   style={{
                     borderRadius: 999,
-                    background: ['green', 'teal'].includes(item.color) ? '#34d399' : ['red', 'pink'].includes(item.color) ? '#f87171' : ['orange', 'yellow'].includes(item.color) ? '#fbbf24' : '#60a5fa',
+                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : ['red', 'pink'].includes(item.color) ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
                     flexShrink: 0
                   }}
                 />
