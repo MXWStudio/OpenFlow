@@ -82,8 +82,8 @@ interface DailyWorkspaceProps {
 }
 
 const cardStyle = {
-  borderColor: '#e9eef6',
-  background: '#ffffff',
+  borderColor: 'var(--mantine-color-default-border)',
+  background: 'var(--mantine-color-default)',
   boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
 } as const;
 
@@ -91,15 +91,15 @@ const iconButtonStyle = {
   root: {
     width: 34,
     height: 34,
-    color: '#94a3b8',
+    color: 'var(--mantine-color-dimmed)',
   },
 } as const;
 
 function SectionTitle({ children, dragHandleProps }: { children: React.ReactNode, dragHandleProps?: any }) {
   return (
     <Group gap={8} mb="md" {...dragHandleProps} style={{ cursor: dragHandleProps ? 'grab' : 'default' }}>
-      <GripVertical size={14} color="#d7e0eb" />
-      <Text fw={800} size="lg" c="#8ea2c1">
+      <GripVertical size={14} color="var(--mantine-color-dimmed)" />
+      <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
         {children}
       </Text>
     </Group>
@@ -123,10 +123,10 @@ function SizeButton({
       styles={{
         root: {
           height: 48,
-          background: active ? '#111c37' : '#ffffff',
-          color: active ? '#ffffff' : '#31425f',
-          border: active ? '1px solid #111c37' : '1px solid #d9e3ee',
-          boxShadow: active ? '0 10px 22px rgba(17, 28, 55, 0.14)' : '0 6px 18px rgba(148, 163, 184, 0.08)',
+          background: active ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default)',
+          color: active ? 'var(--mantine-color-white)' : 'var(--mantine-color-text)',
+          border: active ? '1px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)',
+          boxShadow: active ? '0 10px 22px rgba(0, 0, 0, 0.14)' : '0 6px 18px rgba(0, 0, 0, 0.08)',
           fontSize: 15,
           fontWeight: 800,
           paddingInline: 12,
@@ -269,12 +269,12 @@ export function DailyWorkspace({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-    <Flex h="100%" style={{ background: 'linear-gradient(180deg, #f6f8fc 0%, #f8fbff 100%)' }}>
+    <Flex h="100%" style={{ background: 'var(--mantine-color-body)' }}>
       <Box
         w={362}
         style={{
-          borderRight: '1px solid #e7edf5',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(250,252,255,0.96) 100%)',
+          borderRight: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-default)',
           backdropFilter: 'blur(10px)',
         }}
       >
@@ -283,12 +283,12 @@ export function DailyWorkspace({
             px={28}
             h={102}
             style={{
-              borderBottom: '1px solid #eef3f8',
+              borderBottom: '1px solid var(--mantine-color-default-border)',
             }}
           >
             <Group gap={12}>
-              <LayoutGrid size={18} color="#475569" />
-              <Title order={2} size="h3" c="#22324c">
+              <LayoutGrid size={18} color="var(--mantine-color-dimmed)" />
+              <Title order={2} size="h3" c="var(--mantine-color-text)">
                 工作区面板库
               </Title>
             </Group>
@@ -311,9 +311,9 @@ export function DailyWorkspace({
                     styles={{
                       input: {
                         height: 50,
-                        background: '#f6f8fc',
-                        border: '1px solid #dbe4ef',
-                        color: '#94a3b8',
+                        background: 'var(--mantine-color-default)',
+                        border: '1px solid var(--mantine-color-default-border)',
+                        color: 'var(--mantine-color-dimmed)',
                         fontSize: 15,
                       },
                     }}
@@ -328,9 +328,9 @@ export function DailyWorkspace({
                     styles={{
                       root: {
                         height: 50,
-                        background: '#ffffff',
-                        border: '1px solid #dbe4ef',
-                        color: '#22324c',
+                        background: 'var(--mantine-color-default)',
+                        border: '1px solid var(--mantine-color-default-border)',
+                        color: 'var(--mantine-color-text)',
                         fontWeight: 900,
                         boxShadow: '0 10px 26px rgba(15, 23, 42, 0.05)',
                       },
@@ -355,8 +355,8 @@ export function DailyWorkspace({
                   styles={{
                     root: {
                       height: 62,
-                      background: '#111a34',
-                      color: '#ffffff',
+                      background: 'var(--mantine-primary-color-filled)',
+                      color: 'var(--mantine-color-white)',
                       fontSize: 18,
                       fontWeight: 900,
                       boxShadow: '0 18px 32px rgba(17, 26, 52, 0.24)',
@@ -375,7 +375,7 @@ export function DailyWorkspace({
                 <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>尺寸预览</SectionTitle>
                 <Stack gap="lg">
                   <Box>
-                    <Text size="sm" fw={800} c="#8ea2c1" mb={12}>
+                    <Text size="sm" fw={800} c="var(--mantine-color-dimmed)" mb={12}>
                       横版 & 方形
                     </Text>
                     <SimpleGrid cols={2} spacing="sm">
@@ -391,7 +391,7 @@ export function DailyWorkspace({
                   </Box>
 
                   <Box>
-                    <Text size="sm" fw={800} c="#8ea2c1" mb={12}>
+                    <Text size="sm" fw={800} c="var(--mantine-color-dimmed)" mb={12}>
                       竖版
                     </Text>
                     <SimpleGrid cols={2} spacing="sm">
@@ -425,11 +425,11 @@ export function DailyWorkspace({
             px={30}
             h={102}
             style={{
-              borderBottom: '1px solid #eef3f8',
-              background: 'rgba(255,255,255,0.28)',
+              borderBottom: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-default)',
             }}
           >
-            <Title order={2} size="h3" c="#22324c">
+            <Title order={2} size="h3" c="var(--mantine-color-text)">
               主视图
             </Title>
             <Group gap={10}>
@@ -440,8 +440,8 @@ export function DailyWorkspace({
                 <History size={18} />
               </ActionIcon>
               <Group gap={6}>
-                <Globe size={18} color="#94a3b8" />
-                <Text c="#64748b" fw={800}>
+                <Globe size={18} color="var(--mantine-color-dimmed)" />
+                <Text c="var(--mantine-color-dimmed)" fw={800}>
                   中文
                 </Text>
               </Group>
@@ -565,9 +565,9 @@ export function DailyWorkspace({
                   style={{
                     height: '100%',
                     background:
-                      'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
-                    border: '1px solid #edf2f7',
-                    boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                      'var(--mantine-color-default)',
+                    border: '1px solid var(--mantine-color-default-border)',
+                    boxShadow: 'none',
                   }}
                 >
                   <Group justify="space-between" wrap="nowrap" align="center" h="100%">
@@ -578,7 +578,7 @@ export function DailyWorkspace({
                           h={8}
                           style={{
                             borderRadius: 999,
-                            background: hasIssues ? '#f59e0b' : '#34d399',
+                            background: hasIssues ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-green-filled)',
                           }}
                         />
                         <Badge
@@ -591,11 +591,11 @@ export function DailyWorkspace({
                         </Badge>
                       </Group>
 
-                      <Title order={2} c="#0f284d" mb={8} style={{ fontSize: 32, lineHeight: 1.1 }}>
+                      <Title order={2} c="var(--mantine-color-text)" mb={8} style={{ fontSize: 32, lineHeight: 1.1 }}>
                         {statusTitle}
                       </Title>
 
-                      <Text c="#64748b" size="md" fw={500}>
+                      <Text c="var(--mantine-color-dimmed)" size="md" fw={500}>
                         {statusDescription}
                       </Text>
                     </Box>
@@ -610,10 +610,10 @@ export function DailyWorkspace({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: '#ffffff',
+                        background: 'var(--mantine-color-default)',
                       }}
                     >
-                      <FileText size={28} color="#d6dee9" />
+                      <FileText size={28} color="var(--mantine-color-dimmed)" />
                     </Paper>
                   </Group>
                 </Paper>
@@ -658,8 +658,8 @@ export function DailyWorkspace({
                   radius={24}
                   styles={{
                     root: {
-                      border: folderPaths.length > 0 ? 'none' : '2px dashed #cad7e8',
-                      background: folderPaths.length > 0 ? 'transparent' : '#f9fbff',
+                      border: folderPaths.length > 0 ? 'none' : '2px dashed var(--mantine-color-default-border)',
+                      background: folderPaths.length > 0 ? 'transparent' : 'var(--mantine-color-default)',
                       height: 'calc(100% - 38px)',
                       display: 'flex',
                       alignItems: folderPaths.length > 0 ? 'flex-start' : 'center',
@@ -684,8 +684,8 @@ export function DailyWorkspace({
                             radius={18}
                             p="sm"
                             style={{
-                              borderColor: '#e2e8f0',
-                              background: '#fbfdff',
+                              borderColor: 'var(--mantine-color-default-border)',
+                              background: 'var(--mantine-color-default)',
                             }}
                           >
                             <Group justify="space-between" wrap="nowrap">
@@ -694,7 +694,7 @@ export function DailyWorkspace({
                                   <FolderOpen size={16} />
                                 </ThemeIcon>
                                 <Stack gap={2} style={{ minWidth: 0, overflow: 'hidden' }}>
-                                  <Text truncate c="#334155" fw={800} size="sm">
+                                  <Text truncate c="var(--mantine-color-text)" fw={800} size="sm">
                                     {path.includes('\\') ? path.split('\\').pop() : path.split('/').pop()}
                                   </Text>
                                   <Text truncate c="dimmed" size="xs">
@@ -720,10 +720,10 @@ export function DailyWorkspace({
                   ) : (
                     <Flex direction="column" align="center" justify="center" gap="sm">
                       <ThemeIcon variant="transparent" color="gray" size={42}>
-                        <UploadCloud size={28} color="#98a8bf" />
+                        <UploadCloud size={28} color="var(--mantine-color-dimmed)" />
                       </ThemeIcon>
-                      <Text size="sm" c="#7185a3" ta="center">
-                        拖拽或 <Text span c="#2563eb" fw={800}>点击</Text>
+                      <Text size="sm" c="var(--mantine-color-dimmed)" ta="center">
+                        拖拽或 <Text span c="var(--mantine-color-blue-filled)" fw={800}>点击</Text>
                       </Text>
                     </Flex>
                   )}
@@ -752,9 +752,9 @@ export function DailyWorkspace({
                   px={22}
                   py={10}
                   style={{
-                    borderTop: '1px solid #eef3f8',
-                    borderBottom: '1px solid #eef3f8',
-                    background: '#fbfdff',
+                    borderTop: '1px solid var(--mantine-color-default-border)',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                    background: 'var(--mantine-color-default)',
                   }}
                 >
                   <Button
@@ -765,7 +765,7 @@ export function DailyWorkspace({
                     styles={{
                       root: {
                         paddingInline: 0,
-                        color: '#51637d',
+                        color: 'var(--mantine-color-text)',
                         fontWeight: 800,
                       },
                     }}
@@ -783,18 +783,18 @@ export function DailyWorkspace({
                       variant="separated"
                       styles={{
                         item: {
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #eef3f8',
+                          backgroundColor: 'var(--mantine-color-default)',
+                          border: '1px solid var(--mantine-color-default-border)',
                           borderRadius: 8,
                           marginBottom: 8,
                           '&[data-active]': {
-                            borderColor: '#dbe4ef',
+                            borderColor: 'var(--mantine-primary-color-filled)',
                           }
                         },
                         control: {
                           padding: '12px 22px',
                           '&:hover': {
-                            backgroundColor: '#f8fbff',
+                            backgroundColor: 'var(--mantine-color-default-hover)',
                           }
                         },
                         panel: {
@@ -810,8 +810,8 @@ export function DailyWorkspace({
                           <Accordion.Control>
                             <Group justify="space-between">
                               <Group gap="sm">
-                                <FolderOpen size={18} color={group.hasError ? '#ef4444' : '#8ea2c1'} />
-                                <Text fw={800} c={group.hasError ? '#ef4444' : '#334155'}>
+                                <FolderOpen size={18} color={group.hasError ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-dimmed)'} />
+                                <Text fw={800} c={group.hasError ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-text)'}>
                                   {group.folderName}
                                 </Text>
                                 <Badge color={group.hasError ? 'red' : 'teal'} variant="light" size="sm">
@@ -827,17 +827,17 @@ export function DailyWorkspace({
                               verticalSpacing="sm"
                               styles={{
                                 thead: {
-                                  background: '#ffffff',
+                                  background: 'var(--mantine-color-default)',
                                 },
                                 th: {
-                                  color: '#8ea2c1',
+                                  color: 'var(--mantine-color-dimmed)',
                                   fontSize: 13,
                                   fontWeight: 800,
-                                  borderBottom: '1px solid #eef3f8',
+                                  borderBottom: '1px solid var(--mantine-color-default-border)',
                                 },
                                 td: {
                                   borderTop: '1px solid #f1f5f9',
-                                  color: '#334155',
+                                  color: 'var(--mantine-color-text)',
                                   fontSize: 14,
                                 },
                                 tr: {
@@ -857,16 +857,16 @@ export function DailyWorkspace({
                                 {group.rows.map((row, index) => (
                                   <Table.Tr key={`${row.fileName}-${index}`}>
                                     <Table.Td>
-                                      <Text fw={800} c="#22324c">
+                                      <Text fw={800} c="var(--mantine-color-text)">
                                         {row.fileName}
                                         {row.ext}
                                       </Text>
                                     </Table.Td>
                                     <Table.Td>
-                                      <Text c="#8ea2c1">{row.ext}</Text>
+                                      <Text c="var(--mantine-color-dimmed)">{row.ext}</Text>
                                     </Table.Td>
                                     <Table.Td>
-                                      <Text c="#8ea2c1">
+                                      <Text c="var(--mantine-color-dimmed)">
                                         {row.actualWidth && row.actualHeight
                                           ? `${row.actualWidth}×${row.actualHeight}`
                                           : formatBytes(row.fileSize)}
@@ -904,8 +904,8 @@ export function DailyWorkspace({
             position: 'absolute',
             right: 28,
             bottom: 24,
-            background: 'rgba(255,255,255,0.96)',
-            border: '1px solid #e8eef5',
+            background: 'var(--mantine-color-default)',
+            border: '1px solid var(--mantine-color-default-border)',
             boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
           }}
         >
@@ -921,7 +921,7 @@ export function DailyWorkspace({
                 root: {
                   height: 58,
                   paddingInline: 32,
-                  background: '#111a34',
+                  background: 'var(--mantine-primary-color-filled)',
                   fontSize: 18,
                   fontWeight: 900,
                   boxShadow: '0 12px 28px rgba(17, 26, 52, 0.2)',
@@ -942,7 +942,7 @@ export function DailyWorkspace({
                 root: {
                   height: 58,
                   paddingInline: 32,
-                  background: '#19c37d',
+                  background: 'var(--mantine-color-green-filled)',
                   fontSize: 18,
                   fontWeight: 900,
                   boxShadow: '0 12px 28px rgba(25, 195, 125, 0.22)',

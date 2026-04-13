@@ -339,7 +339,7 @@ export function BitableWorkspace() {
 
 
   return (
-    <Flex h="100%" direction="row" bg="#f7f9fc" gap="md" p="xl" style={{ position: 'relative' }}>
+    <Flex h="100%" direction="row" bg="var(--mantine-color-body)" gap="md" p="xl" style={{ position: 'relative' }}>
       {!isSidebarOpen && (
         <ActionIcon
           variant="default"
@@ -387,15 +387,15 @@ export function BitableWorkspace() {
                   withBorder
                   style={{
                     cursor: 'pointer',
-                    borderColor: selectedBatch === file.batch_id ? '#339af0' : undefined,
-                    backgroundColor: selectedBatch === file.batch_id ? '#e7f5ff' : undefined
+                    borderColor: selectedBatch === file.batch_id ? 'var(--mantine-primary-color-filled)' : undefined,
+                    backgroundColor: selectedBatch === file.batch_id ? 'var(--mantine-primary-color-light)' : undefined
                   }}
                   onClick={() => setSelectedBatch(file.batch_id)}
                   onDoubleClick={() => handleOpenFile(file.saved_path)}
                 >
                   <Group justify="space-between" wrap="nowrap">
                     <Group gap="xs" style={{ overflow: 'hidden', flex: 1 }}>
-                      <FileSpreadsheet size={16} color="#20c997" />
+                      <FileSpreadsheet size={16} color="var(--mantine-color-teal-filled)" />
                       <Text size="sm" truncate fw={500} title={file.file_name}>{file.file_name}</Text>
                     </Group>
                     <Menu position="bottom-end" shadow="sm">
@@ -433,7 +433,7 @@ export function BitableWorkspace() {
       {/* Right Panel: Content Area */}
       <Card radius="md" p={0} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} withBorder shadow="sm">
         <Box p="md" pb={0}>
-          <Title order={2} c="#1d2230" mb="md">个人素材产能统计与可视化看板</Title>
+          <Title order={2} c="var(--mantine-color-text)" mb="md">个人素材产能统计与可视化看板</Title>
         </Box>
         <Tabs value={activeTab} onChange={setActiveTab} style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0 }}>
           <Tabs.List px="md">
@@ -465,10 +465,10 @@ export function BitableWorkspace() {
                   <style>
                     {`
                       .no-selection-bg ::selection {
-                        background-color: #f1f3f5;
+                        background-color: var(--mantine-color-default-hover);
                       }
                       .no-selection-bg *::selection {
-                        background-color: #f1f3f5;
+                        background-color: var(--mantine-color-default-hover);
                       }
                     `}
                   </style>
@@ -561,7 +561,7 @@ export function BitableWorkspace() {
                                         <XAxis dataKey="name" />
                                         <YAxis />
                                         <RechartsTooltip />
-                                        <Bar dataKey="value" fill="#4f8dff" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="value" fill="var(--mantine-color-blue-filled)" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             ) : (

@@ -195,7 +195,7 @@ export function SettingsWorkspace({
       <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
         <Group justify="space-between">
           <Group>
-            <Settings size={24} color="#4f8dff" />
+            <Settings size={24} color="var(--mantine-color-blue-filled)" />
             <Title order={3}>设置中心</Title>
           </Group>
         </Group>

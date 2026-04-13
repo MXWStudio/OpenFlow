@@ -192,8 +192,8 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
   };
 
   return (
-    <Flex h="100%" direction="column" bg="#f7f9fc" style={{ position: 'relative' }}>
-      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', backgroundColor: '#fff' }}>
+    <Flex h="100%" direction="column" bg="var(--mantine-color-body)" style={{ position: 'relative' }}>
+      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', backgroundColor: 'var(--mantine-color-body)' }}>
         <Group justify="space-between">
           <Group>
             <ThemeIcon size="lg" radius="md" variant="light" color="violet">
@@ -215,7 +215,7 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--mantine-color-body)',
               border: '2px dashed var(--mantine-color-default-border)',
               borderRadius: '16px',
               transition: 'border-color 0.2s ease',
@@ -234,7 +234,7 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
               accept={IMAGE_MIME_TYPE}
               style={{
                 padding: '24px',
-                backgroundColor: '#fff',
+                backgroundColor: 'var(--mantine-color-body)',
                 border: '2px dashed var(--mantine-color-default-border)',
                 borderRadius: '12px',
                 cursor: 'pointer'
@@ -247,7 +247,7 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
             </Dropzone>
 
             {images.map(img => (
-              <Card key={img.id} withBorder radius="md" p="sm" bg="#fff">
+              <Card key={img.id} withBorder radius="md" p="sm" bg="var(--mantine-color-body)">
                 <Group wrap="nowrap" justify="space-between">
                   <Group wrap="nowrap">
                     <Image src={img.previewUrl} w={64} h={64} radius="md" fit="cover" />
@@ -282,8 +282,8 @@ export function AiWorkspace({ workflowSettings, apiKeys, producerName }: AiWorks
           position: 'absolute',
           right: 28,
           bottom: 24,
-          background: 'rgba(255,255,255,0.96)',
-          border: '1px solid #e8eef5',
+          background: "var(--mantine-color-default)",
+          border: '1px solid var(--mantine-color-default-border)',
           boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
         }}
       >
