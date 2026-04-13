@@ -1,6 +1,6 @@
 {
   "name": "openflow-studio",
-  "version": "2.2.0",
+  "version": "2.4.0",
   "description": "OpenFlow Studio — AIGC 广告生产力工作流工具",
   "author": "mxw86",
   "private": true,
