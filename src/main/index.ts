@@ -1172,8 +1172,6 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
   const rootPath = result.filePaths[0]
 
   // 每个项目下除尺寸文件夹外，固定创建的 4 个素材分类文件夹（与尺寸文件夹同级）
-  const FIXED_FOLDERS = ['截屏素材', '录屏素材', '奇觅生成', '模糊处理']
-
   try {
     await Promise.all(
       list.map(async (project) => {
@@ -1203,9 +1201,12 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
 })
 
 /** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
+/** 各种特殊固定文件夹名称 */
+const FIXED_FOLDERS = ['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '即梦生成']
+/** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
 const SIZE_FOLDER_REGEX = /^\d+[xX-]\d+$/
 /** 这些文件夹为原始物料目录，不参与尺寸识别，必须忽略 */
-const SKIP_DIRS_READ_SIZE = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
+const SKIP_DIRS_READ_SIZE = new Set([...FIXED_FOLDERS, '_Assets'])
 
 /**
  * fs:readProjectSizes
@@ -1253,7 +1254,7 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
 })
 
 /** 校验时必须跳过的目录：仅对「纯数字尺寸」文件夹内的媒体做校验，不读取物料目录 */
-const SKIP_DIRS_VALIDATION = new Set(['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '_Assets'])
+const SKIP_DIRS_VALIDATION = new Set([...FIXED_FOLDERS, '_Assets'])
 
 /**
  * 收集可参与校验的媒体文件：仅从「纯数字尺寸」文件夹及其子目录（且排除物料目录）内读取。
@@ -1456,18 +1457,99 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   // 记录每个文件夹和媒体类型独立的序号
   const sequenceCounters: Record<string, number> = {}
 
+  // 1. 先收集所有项目根目录（基于 ValidationResult 中的文件路径）
+  const projectRoots = new Set<string>()
+  for (const file of files as ValidationResult[]) {
+    if (!file.filePath || file.status === 'missing') continue
+    // 文件路径通常是 ProjectRoot / SizeFolder / file.ext
+    // 所以 dirname(dirname(filePath)) 即为 ProjectRoot
+    projectRoots.add(dirname(dirname(file.filePath)))
+  }
+
+  // 2. 静默处理 5 个特殊固定文件夹
+  // 规则：[父文件夹名称(即游戏名)][当前固定文件夹名]-[制作人缩写]-([序号]).[扩展名]
+  const producerAbbr = producer
+    ? pinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+    : ''
+
+  for (const root of projectRoots) {
+    const gameName = basename(root)
+    for (const fixedFolderName of FIXED_FOLDERS) {
+      const fixedFolderPath = join(root, fixedFolderName)
+      try {
+        const stat = await fs.stat(fixedFolderPath)
+        if (stat.isDirectory()) {
+          // 获取文件夹内容，并利用现有的 dirCache 优化查询
+          const existingFiles = await getDirEntries(fixedFolderPath)
+          const names = Array.from(existingFiles)
+          const fixedSequenceCounters: Record<string, number> = {}
+
+          for (const name of names) {
+            const fullPath = join(fixedFolderPath, name)
+            const fileStat = await fs.stat(fullPath)
+            if (fileStat.isFile()) {
+              const ext = extname(name).toLowerCase()
+              const isImage = IMAGE_EXTS.has(ext)
+              const isVideo = VIDEO_EXTS.has(ext)
+
+              if (!isImage && !isVideo) continue // 静默跳过非图片/视频
+
+              const mediaType = isImage ? 'image' : 'video'
+              const seqKey = `${fixedFolderPath}_${mediaType}`
+              if (!fixedSequenceCounters[seqKey]) {
+                fixedSequenceCounters[seqKey] = 1
+              }
+              const currentSequence = fixedSequenceCounters[seqKey]
+
+              // 小火车截屏素材-MXW-(1).jpg
+              const newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`
+              let newFileName = `${newBaseName}${ext}`
+
+              // 冲突处理：追加数字后缀（特殊文件夹的异常/冲突也默默处理，不报错）
+              let collisionCounter = 1
+              while (existingFiles.has(newFileName) && join(fixedFolderPath, newFileName) !== fullPath) {
+                newFileName = `${newBaseName}_${collisionCounter}${ext}`
+                collisionCounter++
+              }
+
+              const newFilePath = join(fixedFolderPath, newFileName)
+
+              if (fullPath !== newFilePath) {
+                try {
+                  await fs.rename(fullPath, newFilePath)
+                  existingFiles.delete(name)
+                  existingFiles.add(newFileName)
+                } catch (e) {
+                  // 即使出错也默默跳过
+                }
+              }
+
+              fixedSequenceCounters[seqKey]++
+            }
+          }
+        }
+      } catch (e) {
+        // 固定文件夹不存在或读取失败，默默跳过
+      }
+    }
+  }
+
+  // 3. 处理正常的分辨率文件夹
   for (const file of files as ValidationResult[]) {
     if (!file.filePath || file.status === 'missing') continue
 
-    // 优先使用 file.workspaceProjectName (被拖入的工作区文件夹名)，后备使用全局 projectName
-    const currentProjectName = file.workspaceProjectName || projectName || ''
+    const dir = dirname(file.filePath)
+    // 动态读取上一级目录作为游戏名称
+    const gameName = basename(dirname(dir))
+
+    // 覆盖原本逻辑中的 projectName
+    const currentProjectName = gameName || projectName || ''
     const isSpecial = isSpecialEnabled || currentProjectName.includes('创意比特') || currentProjectName.includes('（创意比特）') || currentProjectName.includes('(创意比特)')
     const cleanProjectName = currentProjectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '')
 
     const originalExt = file.ext || extname(file.filePath)
     const originalBaseName = file.fileName
     const sizeStr = `${file.actualWidth}x${file.actualHeight}`
-    const dir = dirname(file.filePath)
 
     const isImage = IMAGE_EXTS.has(originalExt.toLowerCase())
     const isVideo = VIDEO_EXTS.has(originalExt.toLowerCase())
