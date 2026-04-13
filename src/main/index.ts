@@ -1457,6 +1457,18 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   // 记录每个文件夹和媒体类型独立的序号
   const sequenceCounters: Record<string, number> = {}
 
+  // 准备并发重命名的任务队列
+  type RenameTask = {
+    oldPath: string;
+    newPath: string;
+    dir: string;
+    oldName: string;
+    newName: string;
+    onSuccess?: () => void;
+    onError?: (err: any) => void;
+  }
+  const renameTasks: RenameTask[] = []
+
   // 1. 先收集所有项目根目录（基于 ValidationResult 中的文件路径）
   const projectRoots = new Set<string>()
   for (const file of files as ValidationResult[]) {
@@ -1484,10 +1496,20 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
           const names = Array.from(existingFiles)
           const fixedSequenceCounters: Record<string, number> = {}
 
-          for (const name of names) {
+          // 并行获取文件 stat
+          const statPromises = names.map(async (name) => {
             const fullPath = join(fixedFolderPath, name)
-            const fileStat = await fs.stat(fullPath)
-            if (fileStat.isFile()) {
+            try {
+              const fileStat = await fs.stat(fullPath)
+              return { name, fullPath, isFile: fileStat.isFile() }
+            } catch {
+              return { name, fullPath, isFile: false }
+            }
+          })
+          const fileStats = await Promise.all(statPromises)
+
+          for (const { name, fullPath, isFile } of fileStats) {
+            if (isFile) {
               const ext = extname(name).toLowerCase()
               const isImage = IMAGE_EXTS.has(ext)
               const isVideo = VIDEO_EXTS.has(ext)
@@ -1514,14 +1536,22 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
 
               const newFilePath = join(fixedFolderPath, newFileName)
 
+              if (join(fixedFolderPath, newFileName) !== fullPath) {
+                existingFiles.add(newFileName)
+              }
+
               if (fullPath !== newFilePath) {
-                try {
-                  await fs.rename(fullPath, newFilePath)
-                  existingFiles.delete(name)
-                  existingFiles.add(newFileName)
-                } catch (e) {
-                  // 即使出错也默默跳过
-                }
+                renameTasks.push({
+                  oldPath: fullPath,
+                  newPath: newFilePath,
+                  dir: fixedFolderPath,
+                  oldName: name,
+                  newName: newFileName,
+                  onSuccess: () => {
+                    existingFiles.delete(name)
+                    existingFiles.add(newFileName)
+                  }
+                })
               }
 
               fixedSequenceCounters[seqKey]++
@@ -1576,10 +1606,6 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     }
     const currentSequence = sequenceCounters[sequenceKey]
 
-    const producerAbbr = producer
-      ? pinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
-      : ''
-
     const vars: Record<string, string> = {
       ProjectName: currentProjectName || 'Project',
       CleanProjectName: cleanProjectName || 'Project',
@@ -1604,21 +1630,54 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     }
     const newFilePath = join(dir, newFileName)
 
-    try {
-      await fs.rename(file.filePath, newFilePath)
-      existingFiles.delete(basename(file.filePath))
+    // 预先占位，防止后续循环中名字冲突
+    if (join(dir, newFileName) !== file.filePath) {
       existingFiles.add(newFileName)
-      results.push({ oldFileName: file.fileName, newFileName, success: true })
-      sequenceCounters[sequenceKey]++ // 仅在成功时累加系列号
-    } catch (err) {
-      results.push({
-        oldFileName: file.fileName,
-        newFileName,
-        success: false,
-        error: String(err),
+    }
+
+    // 先计算序号，不管是否成功都自增以保证不跳号（这满足了不跳号的要求）
+    // 或者只在确保无冲突时排号
+    sequenceCounters[sequenceKey]++
+
+    const resultObj: RenameResult = { oldFileName: file.fileName, newFileName, success: true }
+    results.push(resultObj)
+
+    if (file.filePath !== newFilePath) {
+      renameTasks.push({
+        oldPath: file.filePath,
+        newPath: newFilePath,
+        dir,
+        oldName: basename(file.filePath),
+        newName: newFileName,
+        onSuccess: () => {
+          existingFiles.delete(basename(file.filePath!))
+        },
+        onError: (err) => {
+          resultObj.success = false
+          resultObj.error = String(err)
+        }
       })
     }
   }
+
+  // 4. 并发执行所有重命名任务
+  await Promise.all(
+    renameTasks.map(async (task) => {
+      if (task.oldPath === task.newPath) {
+        // 如果名字相同不需要改，但如果是 normal 文件夹，需要记录成功
+        if (task.onSuccess) task.onSuccess()
+        return
+      }
+      try {
+        await fs.rename(task.oldPath, task.newPath)
+        if (task.onSuccess) task.onSuccess()
+      } catch (err) {
+        if (task.onError) {
+          task.onError(err)
+        }
+      }
+    })
+  )
 
   return results
 })
