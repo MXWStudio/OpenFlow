@@ -92,7 +92,7 @@ import { useMantineColorScheme } from '@mantine/core';
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>('daily');
-  const { setColorScheme } = useMantineColorScheme();
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
   const [isAppReady, setIsAppReady] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -391,8 +391,7 @@ export default function App() {
       <Box
         w={92}
         style={{
-          background: 'var(--mantine-color-dark-8)',
-          color: 'var(--mantine-color-dark-0)',
+          background: colorScheme === 'dark' ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
           boxShadow: '4px 0 24px rgba(15, 23, 42, 0.16)',
           zIndex: 20,
         }}
