@@ -17,6 +17,7 @@ import {
   ThemeIcon,
   ActionIcon,
   Tooltip,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
 import { notify } from '../utils/notify';
@@ -47,6 +48,7 @@ interface ScannedFile {
 export function OrganizerWorkspace({
   isQimiEnabled,
   onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
+  const { colorScheme } = useMantineColorScheme();
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
@@ -273,10 +275,11 @@ export function OrganizerWorkspace({
                     p={30}
                     h="100%"
                     style={{
-                      background:
-                        'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
+                      background: colorScheme === 'dark'
+                        ? 'radial-gradient(circle at 50% 50%, var(--mantine-color-dark-6) 0%, var(--mantine-color-dark-8) 100%)'
+                        : 'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
                       border: '1px solid var(--mantine-color-default-border)',
-                      boxShadow: 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                      boxShadow: colorScheme === 'dark' ? 'inset 0 0 48px rgba(255, 255, 255, 0.02)' : 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
                       overflow: 'hidden',
                     }}
                   >

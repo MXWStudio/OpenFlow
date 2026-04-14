@@ -211,30 +211,35 @@ export function SettingsWorkspace({
           styles={{
             root: { width: '100%' },
             list: { width: 220, borderRight: '1px solid var(--mantine-color-default-border)', paddingRight: 16, gap: 8 },
-            tab: { padding: '12px 16px', fontWeight: 500, borderRadius: 8 },
+            tab: { padding: '12px 16px', fontWeight: 500, borderRadius: 8, color: 'var(--mantine-color-text)' },
             panel: { paddingLeft: 32, paddingRight: 32, paddingBottom: 32, overflowY: 'auto' }
           }}
         >
+          <style>{`
+            .mantine-Tabs-tab[data-active] {
+              color: white !important;
+            }
+          `}</style>
           <Tabs.List>
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="xs" px="xs">核心配置</Text>
+            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="xs" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>核心配置</Text>
             <Tabs.Tab value="system" leftSection={<MonitorPlay size={18} />}>常规</Tabs.Tab>
             <Tabs.Tab value="account" leftSection={<User size={18} />}>账户</Tabs.Tab>
             <Tabs.Tab value="workspace" leftSection={<HardDrive size={18} />}>工作区</Tabs.Tab>
             <Tabs.Tab value="templates" leftSection={<Workflow size={18} />}>命名模板</Tabs.Tab>
 
-                        <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">工具与增强</Text>
+                        <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>工具与增强</Text>
             <Tabs.Tab value="screenshot-control" leftSection={<MousePointer size={18} />}>截图控制</Tabs.Tab>
             <Tabs.Tab value="screenshot-output" leftSection={<Download size={18} />}>截图输出</Tabs.Tab>
             <Tabs.Tab value="screenshot-pin" leftSection={<Layers size={18} />}>截图贴图</Tabs.Tab>
 
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">高级设定</Text>
+            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>高级设定</Text>
 
             <Tabs.Tab value="shortcuts" leftSection={<Keyboard size={18} />}>快捷键</Tabs.Tab>
             <Tabs.Tab value="processing" leftSection={<Cpu size={18} />}>处理引擎</Tabs.Tab>
             <Tabs.Tab value="ai" leftSection={<Bot size={18} />}>AI 集成</Tabs.Tab>
             <Tabs.Tab value="data" leftSection={<BarChart3 size={18} />}>数据看板</Tabs.Tab>
 
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" mt="md" px="xs">其他</Text>
+            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>其他</Text>
             <Tabs.Tab value="about" leftSection={<Info size={18} />}>关于</Tabs.Tab>
           </Tabs.List>
 
