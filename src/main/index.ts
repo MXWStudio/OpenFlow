@@ -942,9 +942,23 @@ ipcMain.handle('dialog:openJson', async () => {
   if (Array.isArray(rawData)) {
     if (rawData.length > 0) {
       const firstItem = rawData[0]
-      producerName = firstItem['制作人'] || firstItem['producerName'] || firstItem['producer'] || ''
-      department = firstItem['部门'] || firstItem['department'] || ''
-      email = firstItem['邮箱'] || firstItem['email'] || ''
+      producerName =
+        (firstItem['其他信息'] && firstItem['其他信息']['制作人']) ||
+        firstItem['制作人'] ||
+        firstItem['producerName'] ||
+        firstItem['producer_name'] ||
+        firstItem['producer'] ||
+        ''
+      department =
+        (firstItem['其他信息'] && firstItem['其他信息']['部门']) ||
+        firstItem['部门'] ||
+        firstItem['department'] ||
+        ''
+      email =
+        (firstItem['其他信息'] && firstItem['其他信息']['邮箱']) ||
+        firstItem['邮箱'] ||
+        firstItem['email'] ||
+        ''
     }
 
     for (const item of rawData) {
@@ -987,9 +1001,23 @@ ipcMain.handle('dialog:openJson', async () => {
     if (projectName || sizes.length) {
       projects.push({ projectName: projectName || '未命名项目', sizes })
     }
-    producerName = rawData['制作人'] || rawData['producerName'] || rawData['producer'] || ''
-    department = rawData['部门'] || rawData['department'] || ''
-    email = rawData['邮箱'] || rawData['email'] || ''
+    producerName =
+      (rawData['其他信息'] && rawData['其他信息']['制作人']) ||
+      rawData['制作人'] ||
+      rawData['producerName'] ||
+      rawData['producer_name'] ||
+      rawData['producer'] ||
+      ''
+    department =
+      (rawData['其他信息'] && rawData['其他信息']['部门']) ||
+      rawData['部门'] ||
+      rawData['department'] ||
+      ''
+    email =
+      (rawData['其他信息'] && rawData['其他信息']['邮箱']) ||
+      rawData['邮箱'] ||
+      rawData['email'] ||
+      ''
   }
 
   return { projectName, producerName, department, email, sizes, projects, rawData, fileName }
