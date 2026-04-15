@@ -255,11 +255,10 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
   screenshotShortcut: 'CommandOrControl+Shift+A',
   renameTemplates: {
     videoRegular: [
-      { type: 'CustomText', value: 'RS' },
+      { type: 'CustomText', value: 'RSQM' },
       { type: 'Date' },
       { type: 'ProjectName' },
       { type: 'Producer' },
-      { type: 'CustomText', value: '奇作' },
       { type: 'AspectRatio' },
       { type: 'Sequence' },
     ],
