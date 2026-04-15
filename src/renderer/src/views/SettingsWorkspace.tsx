@@ -157,32 +157,70 @@ export function SettingsWorkspace({
     checkShortcut(key, value);
   };
 
-  const handleSaveSettings = async () => {
-    if (!window.electronAPI) return;
+  // Skip the first render to prevent auto-saving the initial state back
+  const isInitialRender = React.useRef(true);
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    await window.electronAPI.store.set('userInfo', userInfo);
-    await window.electronAPI.store.set('workflow', workflowSettings);
-    await window.electronAPI.store.set('apiKeys', apiKeys);
-    await window.electronAPI.store.set('systemSettings', systemSettings);
-    await window.electronAPI.store.set('workspaceSettings', workspaceSettings);
-    await window.electronAPI.store.set('shortcutSettings', shortcutSettings);
-    await window.electronAPI.store.set('processingSettings', processingSettings);
-    await window.electronAPI.store.set('dataStatsSettings', dataStatsSettings);
-    await window.electronAPI.store.set('screenshotSettings', screenshotSettings);
+  // Ref to track if we need to show notification
+  const [saveIndicatorVisible, setSaveIndicatorVisible] = useState(false);
 
-    // Legacy settings (need to keep for backwards compatibility if parts of app depend on it)
-    await window.electronAPI.store.set('screenshotShortcut', shortcutSettings.screenshot);
-    await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
-    await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
-
-    // Apply system level settings
-    if (window.electronAPI.ipcRenderer) {
-      window.electronAPI.ipcRenderer.invoke('settings:applySystem', systemSettings);
-      window.electronAPI.ipcRenderer.invoke('shortcut:update', shortcutSettings);
+  // Auto-save effect
+  useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
     }
 
-    notify('green', '设置已保存', '所有配置已成功更新');
-  };
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (!window.electronAPI) return;
+
+      await window.electronAPI.store.set('userInfo', userInfo);
+      await window.electronAPI.store.set('workflow', workflowSettings);
+      await window.electronAPI.store.set('apiKeys', apiKeys);
+      await window.electronAPI.store.set('systemSettings', systemSettings);
+      await window.electronAPI.store.set('workspaceSettings', workspaceSettings);
+      await window.electronAPI.store.set('shortcutSettings', shortcutSettings);
+      await window.electronAPI.store.set('processingSettings', processingSettings);
+      await window.electronAPI.store.set('dataStatsSettings', dataStatsSettings);
+      await window.electronAPI.store.set('screenshotSettings', screenshotSettings);
+
+      // Legacy settings for backwards compatibility
+      await window.electronAPI.store.set('screenshotShortcut', shortcutSettings.screenshot);
+      await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
+      await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
+
+      // Apply system level settings
+      if (window.electronAPI.ipcRenderer) {
+        window.electronAPI.ipcRenderer.invoke('settings:applySystem', systemSettings);
+        window.electronAPI.ipcRenderer.invoke('shortcut:update', shortcutSettings);
+      }
+
+      // Show save indicator briefly
+      setSaveIndicatorVisible(true);
+      setTimeout(() => setSaveIndicatorVisible(false), 2000);
+
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [
+    userInfo,
+    workflowSettings,
+    apiKeys,
+    systemSettings,
+    workspaceSettings,
+    shortcutSettings,
+    processingSettings,
+    dataStatsSettings,
+    screenshotSettings
+  ]);
 
   const selectFolder = async (setter: (val: string) => void) => {
     if (!window.electronAPI?.dialog) return;
@@ -1016,19 +1054,38 @@ export function SettingsWorkspace({
         </Tabs>
       </Flex>
 
-      <Box
-        p="md"
-        style={{
-          borderTop: '1px solid var(--mantine-color-default-border)',
-          backgroundColor: 'var(--mantine-color-body)',
-        }}
-      >
-        <Group justify="flex-end">
-          <Button leftSection={<Save size={16} />} onClick={handleSaveSettings}>
-            保存设置
-          </Button>
-        </Group>
-      </Box>
+      {saveIndicatorVisible && (
+        <Box
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            right: 24,
+            backgroundColor: 'var(--mantine-color-green-filled)',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            zIndex: 100,
+            animation: 'fadeInOut 2s ease-in-out forwards',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 14,
+            fontWeight: 500
+          }}
+        >
+          <Save size={16} />
+          <span>已自动保存</span>
+          <style>{`
+            @keyframes fadeInOut {
+              0% { opacity: 0; transform: translateY(10px); }
+              15% { opacity: 1; transform: translateY(0); }
+              85% { opacity: 1; transform: translateY(0); }
+              100% { opacity: 0; transform: translateY(-10px); }
+            }
+          `}</style>
+        </Box>
+      )}
     </Flex>
   );
 }

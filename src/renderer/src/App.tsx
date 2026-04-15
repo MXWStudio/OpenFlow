@@ -179,20 +179,20 @@ export default function App() {
       }
       if (config.workflow && typeof config.workflow === 'object') {
         const stored = config.workflow as Partial<WorkflowSettings>;
-        setWorkflowSettings({
-          defaultOutputDir: stored.defaultOutputDir ?? '',
-          renameTemplates: stored.renameTemplates ?? DEFAULT_WORKFLOW.renameTemplates,
-          organizerSourceDir: stored.organizerSourceDir ?? DEFAULT_WORKFLOW.organizerSourceDir,
-          organizerDestDir: stored.organizerDestDir ?? DEFAULT_WORKFLOW.organizerDestDir,
-          organizerFormats: stored.organizerFormats ?? DEFAULT_WORKFLOW.organizerFormats,
-          screenshotShortcut: stored.screenshotShortcut ?? DEFAULT_WORKFLOW.screenshotShortcut,
-        });
-      }
-      if (config.renameTemplates) {
-        setWorkflowSettings((prev) => ({ ...prev, renameTemplates: config.renameTemplates as WorkflowSettings['renameTemplates'] }));
-      }
-      if (typeof config.defaultOutputDir === 'string') {
-        setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
+        setWorkflowSettings((prev) => ({
+          ...prev,
+          ...stored,
+          renameTemplates: stored.renameTemplates || prev.renameTemplates,
+          organizerFormats: stored.organizerFormats || prev.organizerFormats,
+        }));
+      } else {
+        // Fallback for older config format
+        if (config.renameTemplates) {
+          setWorkflowSettings((prev) => ({ ...prev, renameTemplates: config.renameTemplates as WorkflowSettings['renameTemplates'] }));
+        }
+        if (typeof config.defaultOutputDir === 'string') {
+          setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
+        }
       }
       if (config.apiKeys && typeof config.apiKeys === 'object') {
         const stored = config.apiKeys as Record<string, string>;
