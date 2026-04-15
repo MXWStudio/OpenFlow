@@ -1020,6 +1020,14 @@ ipcMain.handle('dialog:openJson', async () => {
       ''
   }
 
+  // Fallback for producerName: attempt to extract from filename (e.g., 20260415-孟祥伟数据表.json -> 孟祥伟)
+  if (!producerName) {
+    const match = fileName.match(/-(.*?)(数据表|需求|需求表|工作表)?\.json$/i)
+    if (match && match[1]) {
+      producerName = match[1].trim()
+    }
+  }
+
   return { projectName, producerName, department, email, sizes, projects, rawData, fileName }
 })
 
@@ -1551,7 +1559,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
               }
               const currentSequence = fixedSequenceCounters[seqKey]
 
-              // 小火车截屏素材-MXW-(1).jpg
+              // 小火车截屏素材-XXX-(1).jpg
               const newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`
               let newFileName = `${newBaseName}${ext}`
 
