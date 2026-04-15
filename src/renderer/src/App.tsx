@@ -107,7 +107,6 @@ export default function App() {
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
   const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
   const [jsonFileName, setJsonFileName] = useState('');
-  const [producerName, setProducerName] = useState('MXW');
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([]);
@@ -142,7 +141,7 @@ export default function App() {
   const avatarSrc = useMemo(
     () =>
       createAvatar(dylan, {
-        seed: userInfo.name || 'MXW',
+        seed: userInfo.name || '',
         backgroundColor: ['b6e3f4', 'c0aede', 'd1d4f9', 'ffdfbf'],
       }).toDataUri(),
     [userInfo.name],
@@ -175,7 +174,6 @@ export default function App() {
         const stored = config.userInfo as Record<string, string>;
         const next = { name: stored.name ?? '', department: stored.department ?? '', email: stored.email ?? '' };
         setUserInfo(next);
-        if (next.name) setProducerName(next.name);
       }
       if (config.workflow && typeof config.workflow === 'object') {
         const stored = config.workflow as Partial<WorkflowSettings>;
@@ -250,9 +248,6 @@ export default function App() {
       setProjectsList(projects);
       setJsonFileName(result.fileName ? result.fileName.replace(/\.json$/i, '') : '');
       if (result.producerName || result.department || result.email) {
-        if (result.producerName) {
-          setProducerName(result.producerName as string);
-        }
         setUserInfo((prev) => {
           const newUserInfo = {
             ...prev,
@@ -349,7 +344,7 @@ export default function App() {
       const storedTemplates = await window.electronAPI.store.get<WorkflowSettings['renameTemplates']>('renameTemplates');
       const templates = storedTemplates || workflowSettings.renameTemplates;
       const validFiles = validationResults.filter((item) => item.status === 'valid');
-      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, producerName, isSpecialEnabled, isManualEnabled);
+      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, userInfo.name, isSpecialEnabled, isManualEnabled);
       const successCount = results.filter((item) => item.success).length;
       const failed = results.filter((item) => !item.success);
       if (failed.length === 0) notify('green', '重命名完成', `${successCount} 个文件`);
@@ -622,14 +617,14 @@ export default function App() {
             setDataStatsSettings={setDataStatsSettings}
             screenshotSettings={screenshotSettings}
             setScreenshotSettings={setScreenshotSettings}
-            producerName={producerName}
+            producerName={userInfo.name}
           />
         ) : activeView === 'bitable' ? (
           <BitableWorkspace />
         ) : activeView === 'format' ? (
           <FormatProcessor />
         ) : activeView === 'ai' ? (
-          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={producerName} />
+          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={userInfo.name} />
         ) : activeView === 'dictionary' ? (
           <GameDictionaryWorkspace />
         ) : (

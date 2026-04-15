@@ -316,7 +316,7 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
 export function buildTemplatePreview(template: TemplateToken[], producerName: string): string {
   const producerAbbr = producerName
     ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
-    : 'MXW';
+    : '';
 
   const sampleValues: Record<TokenType, string> = {
     ProjectName: '示例项目',
