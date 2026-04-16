@@ -1,0 +1,30 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - octobot
+  categories:
+    - title: ✨ 核心新特性 (Core Features)
+      labels:
+        - enhancement
+        - feature
+    - title: 🎨 交互与体验优化 (UI/UX Improvements)
+      labels:
+        - ui
+        - ux
+        - design
+    - title: ⚡ 性能与架构优化 (Performance & Architecture)
+      labels:
+        - performance
+        - refactor
+        - architecture
+    - title: 🐛 稳定性与修复 (Bug Fixes)
+      labels:
+        - bug
+        - fix
+    - title: 🔧 维护与依赖 (Maintenance & Dependencies)
+      labels:
+        - dependencies
+        - chore
+        - docs
