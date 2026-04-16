@@ -1560,14 +1560,15 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
               const currentSequence = fixedSequenceCounters[seqKey]
 
               // 小火车截屏素材-XXX-(1).jpg
-              const newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`
+              let newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`
               let newFileName = `${newBaseName}${ext}`
 
-              // 冲突处理：追加数字后缀（特殊文件夹的异常/冲突也默默处理，不报错）
-              let collisionCounter = 1
+              // 冲突处理：顺延寻找可用序号
+              let localSeq = currentSequence
               while (existingFiles.has(newFileName) && join(fixedFolderPath, newFileName) !== fullPath) {
-                newFileName = `${newBaseName}_${collisionCounter}${ext}`
-                collisionCounter++
+                localSeq++
+                newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${localSeq})`
+                newFileName = `${newBaseName}${ext}`
               }
 
               const newFilePath = join(fixedFolderPath, newFileName)
@@ -1590,7 +1591,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
                 })
               }
 
-              fixedSequenceCounters[seqKey]++
+              fixedSequenceCounters[seqKey] = localSeq + 1
             }
           }
         }
@@ -1653,16 +1654,18 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
       OriginalName: originalBaseName
     }
 
-    const newBaseName = applyNewTemplate(targetTemplate, vars)
+    let newBaseName = applyNewTemplate(targetTemplate, vars)
 
     const existingFiles = await getDirEntries(dir)
     let newFileName = `${newBaseName}${finalExt}`
 
-    // 冲突处理：追加数字后缀
-    let collisionCounter = 1
+    // 冲突处理：顺延寻找可用序号
+    let localSeq = currentSequence
     while (existingFiles.has(newFileName) && join(dir, newFileName) !== file.filePath) {
-      newFileName = `${newBaseName}_${collisionCounter}${finalExt}`
-      collisionCounter++
+      localSeq++
+      vars.Sequence = `(${localSeq})`
+      newBaseName = applyNewTemplate(targetTemplate, vars)
+      newFileName = `${newBaseName}${finalExt}`
     }
     const newFilePath = join(dir, newFileName)
 
@@ -1672,8 +1675,8 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     }
 
     // 先计算序号，不管是否成功都自增以保证不跳号（这满足了不跳号的要求）
-    // 或者只在确保无冲突时排号
-    sequenceCounters[sequenceKey]++
+    // 更新序列计数器，以便下一个文件从新的最大序号开始计算
+    sequenceCounters[sequenceKey] = localSeq + 1
 
     const resultObj: RenameResult = { oldFileName: file.fileName, newFileName, success: true }
     results.push(resultObj)
@@ -1754,14 +1757,22 @@ ipcMain.handle('fs:renameAiBatch', async (_, { filePath, templates, producerName
     }
   }
 
-  const newBaseName = applyNewTemplate(templates, finalVars)
+  let newBaseName = applyNewTemplate(templates, finalVars)
   const existingFiles = await getDirEntries(dir)
   let newFileName = `${newBaseName}${originalExt}`
 
+  // 冲突处理：顺延寻找可用序号（解析名字末尾的序号进行自增，如果没有序号则加一个序号）
   let collisionCounter = 1
   while (existingFiles.has(newFileName) && join(dir, newFileName) !== filePath) {
-    newFileName = `${newBaseName}_${collisionCounter}${originalExt}`
-    collisionCounter++
+    const match = newBaseName.match(/\((\d+)\)$/)
+    if (match) {
+      const seq = parseInt(match[1], 10) + 1
+      newBaseName = newBaseName.replace(/\(\d+\)$/, `(${seq})`)
+    } else {
+      newBaseName = `${newBaseName}-(${collisionCounter})`
+      collisionCounter++
+    }
+    newFileName = `${newBaseName}${originalExt}`
   }
   const newFilePath = join(dir, newFileName)
 
