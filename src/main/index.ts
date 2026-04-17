@@ -1613,9 +1613,6 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
             }
           }
         }
-      } catch (e) {
-        // 固定文件夹不存在或读取失败，默默跳过
-      }
     }
   }
 
