@@ -1224,7 +1224,7 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
         }
 
         for (const name of FIXED_FOLDERS) {
-          dirPromises.push(fs.ensureDir(join(projectRoot, name)))
+          dirPromises.push(fs.ensureDir(join(projectRoot, `${project.projectName}-${name}`)))
         }
 
         await Promise.all(dirPromises)
@@ -1272,7 +1272,7 @@ ipcMain.handle('fs:readProjectSizes', async (_, folderPaths: string[]) => {
       continue
     }
     const statPromises = names.map(async (name) => {
-      if (SKIP_DIRS_READ_SIZE.has(name)) return
+      if (SKIP_DIRS_READ_SIZE.has(name) || FIXED_FOLDERS.some(f => name.endsWith(`-${f}`))) return
       if (!SIZE_FOLDER_REGEX.test(name)) return
       const full = join(dir, name)
       try {
@@ -1319,11 +1319,12 @@ async function collectMediaFiles(
     }
 
     if (stat.isDirectory()) {
+      const isFixedOrAssets = SKIP_DIRS_VALIDATION.has(name) || FIXED_FOLDERS.some(f => name.endsWith(`-${f}`))
       if (isRoot) {
-        if (SKIP_DIRS_VALIDATION.has(name) || !SIZE_FOLDER_REGEX.test(name)) continue
+        if (isFixedOrAssets || !SIZE_FOLDER_REGEX.test(name)) continue
         await collectMediaFiles(fullPath, fileList, false)
       } else {
-        if (SKIP_DIRS_VALIDATION.has(name)) continue
+        if (isFixedOrAssets) continue
         await collectMediaFiles(fullPath, fileList, false)
       }
       continue
@@ -1523,10 +1524,27 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   for (const root of projectRoots) {
     const gameName = basename(root)
     for (const fixedFolderName of FIXED_FOLDERS) {
-      const fixedFolderPath = join(root, fixedFolderName)
+      // Check for the new prefixed folder format or fallback to the old format for backward compatibility
+      let fixedFolderPath = join(root, `${gameName}-${fixedFolderName}`)
+      let stat: fs.Stats | null = null
+
       try {
-        const stat = await fs.stat(fixedFolderPath)
-        if (stat.isDirectory()) {
+        stat = await fs.stat(fixedFolderPath)
+      } catch (e) {
+        // Fallback to legacy exact name
+        fixedFolderPath = join(root, fixedFolderName)
+        try {
+          stat = await fs.stat(fixedFolderPath)
+        } catch (e2) {
+          // Both don't exist, ignore
+        }
+      }
+
+      if (stat && stat.isDirectory()) {
+          // If it's the 录屏素材 folder, skip renaming its files
+          if (fixedFolderName === '录屏素材') {
+            continue
+          }
           // 获取文件夹内容，并利用现有的 dirCache 优化查询
           const existingFiles = await getDirEntries(fixedFolderPath)
           const names = Array.from(existingFiles)
