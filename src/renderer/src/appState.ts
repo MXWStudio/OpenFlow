@@ -175,6 +175,10 @@ export const PRESET_SIZES = [
   '1080*1620',
   '160*160',
   '512*512',
+  '780*800',
+  '240*180',
+  '1080*1880',
+  '2160*1080',
 ];
 
 export const TOKEN_OPTIONS: Array<{ value: TokenType; label: string }> = [
