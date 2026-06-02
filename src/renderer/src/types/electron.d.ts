@@ -17,6 +17,9 @@ export interface ValidationResult {
   duration?: number
   status: ValidationStatus
   targetSize?: string
+  requiredQuantity?: number
+  actualQuantity?: number
+  missingCount?: number
   error?: string
 }
 
@@ -32,7 +35,24 @@ export interface RenameResult {
 export interface InitFoldersResult {
   success: boolean
   destPath: string
+  createdPaths?: string[]
   error?: string
+}
+
+export interface RequirementDetail {
+  resolution: string
+  requiredQuantity?: number
+  positionType?: string
+  sizeLimit?: string
+}
+
+export interface RequirementProject {
+  projectName: string
+  sizes: string[]
+  requirements?: RequirementDetail[]
+  fullName?: string
+  producerName?: string
+  materialType?: string
 }
 
 /** 历史记录条目 */
@@ -80,8 +100,13 @@ export interface AppConfig {
 export interface ParsedRequirementJson {
   projectName: string
   producerName?: string
+  department?: string
+  email?: string
   sizes: string[]
-  rawData: Record<string, unknown>
+  projects?: RequirementProject[]
+  rawData: unknown
+  fileName?: string
+  warnings?: string[]
 }
 
 /** window.electronAPI 接口全量定义 */
@@ -127,7 +152,7 @@ export interface ElectronAPI {
      * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）
      */
     initFolders: (
-      projectsData: Array<{ projectName: string; sizes: string[] }>
+      projectsData: RequirementProject[]
     ) => Promise<InitFoldersResult>
 
     /**
@@ -142,8 +167,11 @@ export interface ElectronAPI {
      */
     startValidation: (
       folderPath: string,
-      targetSizes: string[]
+      targetSizes: Array<string | RequirementDetail>
     ) => Promise<ValidationResult[]>
+
+    /** 将单个素材文件移到系统废纸篓 */
+    trashFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
 
     /**
      * 根据模板批量重命名文件

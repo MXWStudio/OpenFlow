@@ -42,6 +42,13 @@ import {
 } from 'lucide-react';
 import { formatBytes, type ValidationResult } from '../appState';
 import { StatusBadge } from '../StatusBadge';
+import {
+  buildValidationPresentation,
+  canTrashValidationRow,
+  getValidationRowReason,
+  getValidationRowKind,
+  type ValidationPresentationGroup,
+} from '../validationPresentation';
 
 interface DailyWorkspaceProps {
   jsonFileName: string;
@@ -72,6 +79,7 @@ interface DailyWorkspaceProps {
   onRemoveFolder: (path: string) => void;
   onValidate: () => void;
   onRename: () => void;
+  onTrashValidationFile: (row: ValidationResult) => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
   onDropPaths: (paths: string[]) => void;
@@ -180,6 +188,7 @@ export function DailyWorkspace({
   onRemoveFolder,
   onValidate,
   onRename,
+  onTrashValidationFile,
   onOpenSettings,
   onOpenHistory,
   onDropPaths,
@@ -188,31 +197,24 @@ export function DailyWorkspace({
   layoutRight,
   onLayoutChange,
 }: DailyWorkspaceProps) {
-  const previewRows = validationResults;
-
-  const groupedPreviewRows = useMemo(() => {
-    const groups: Record<string, { folderName: string; rows: typeof previewRows; hasError: boolean }> = {};
-    for (const row of previewRows) {
-      if (!groups[row.folderName]) {
-        groups[row.folderName] = { folderName: row.folderName, rows: [], hasError: false };
-      }
-      groups[row.folderName].rows.push(row);
-      if (row.status !== 'valid') {
-        groups[row.folderName].hasError = true;
-      }
-    }
-    return Object.values(groups).sort((a, b) => {
-      if (a.hasError === b.hasError) return 0;
-      return a.hasError ? -1 : 1;
-    });
-  }, [previewRows]);
+  const validationPresentation = useMemo(
+    () => buildValidationPresentation(validationResults),
+    [validationResults],
+  );
+  const groupedPreviewRows = validationPresentation.groups;
+  const validationSummary = validationPresentation.summary;
+  const missingTotal = validationSummary.missingTotal;
+  const blockingIssueCount = validationSummary.blockingCount;
 
   const [accordionValue, setAccordionValue] = useState<string[]>([]);
+  const [expandedPassedGroups, setExpandedPassedGroups] = useState<string[]>([]);
 
   useEffect(() => {
-    const errorFolders = groupedPreviewRows.filter(g => g.hasError).map(g => g.folderName);
-    if (errorFolders.length > 0) {
-      setAccordionValue(errorFolders);
+    const actionFolders = groupedPreviewRows
+      .filter((group) => group.actionRows.length > 0)
+      .map((group) => group.folderName);
+    if (actionFolders.length > 0) {
+      setAccordionValue(actionFolders);
     } else {
       setAccordionValue([]);
     }
@@ -222,8 +224,12 @@ export function DailyWorkspace({
 
   const statusLabel = isValidating
     ? '校验进行中'
-    : hasIssues
+    : hasIssues && blockingIssueCount > 0
       ? '校验异常'
+      : hasIssues && missingTotal > 0
+        ? '数量不足'
+        : hasIssues && validationSummary.extraCount > 0
+          ? '有额外素材'
       : hasValidated
         ? '校验通过'
         : hasFinishedRenaming
@@ -232,8 +238,12 @@ export function DailyWorkspace({
 
   const statusTitle = isValidating
     ? '正在校验。'
-    : hasIssues
+    : hasIssues && blockingIssueCount > 0
       ? '存在异常。'
+      : hasIssues && missingTotal > 0
+        ? '数量不足。'
+        : hasIssues && validationSummary.extraCount > 0
+          ? '发现额外素材。'
       : hasValidated
         ? '校验完成。'
         : hasFinishedRenaming
@@ -242,11 +252,94 @@ export function DailyWorkspace({
 
   const statusDescription = isValidating
     ? '系统正在分析素材尺寸和文件状态，请稍候。'
-    : hasIssues
-      ? '请先处理异常素材，再执行重命名流程。'
-      : hasFinishedRenaming
-        ? '所有的素材已成功重命名。'
-        : '工作区已初始化。将素材拖入上方区域以开始自动化流程。';
+    : hasIssues && blockingIssueCount > 0
+      ? '请先处理尺寸错误或读取失败的素材。'
+    : hasIssues && missingTotal > 0
+        ? `数量不足，共缺 ${missingTotal} 张。可补齐后重验，也可先重命名已有素材。`
+        : hasIssues && validationSummary.extraCount > 0
+          ? `${validationSummary.extraCount} 项素材不在需求表中，不会参与重命名。`
+        : hasFinishedRenaming
+          ? '所有的素材已成功重命名。'
+          : '工作区已初始化。将素材拖入上方区域以开始自动化流程。';
+
+  function getRowTitle(row: ValidationResult) {
+    if (row.status !== 'missing') return `${row.fileName}${row.ext}`;
+    const targetSize = row.targetSize || row.fileName.replace(/^\[缺失]\s*/, '');
+    const missingCount = row.missingCount || 1;
+    return `${targetSize} 缺 ${missingCount} 张`;
+  }
+
+  function getRowMeta(row: ValidationResult) {
+    return getValidationRowReason(row);
+  }
+
+  function getGroupIconColor(group: ValidationPresentationGroup) {
+    if (group.hasBlockingIssues) return 'var(--mantine-color-red-filled)';
+    if (group.hasMissingIssues) return 'var(--mantine-color-orange-filled)';
+    if (group.hasExtraIssues) return 'var(--mantine-color-blue-filled)';
+    return 'var(--mantine-color-dimmed)';
+  }
+
+  function isPassedGroupExpanded(folderName: string) {
+    return expandedPassedGroups.includes(folderName);
+  }
+
+  function togglePassedGroup(folderName: string) {
+    setExpandedPassedGroups((current) =>
+      current.includes(folderName)
+        ? current.filter((name) => name !== folderName)
+        : [...current, folderName],
+    );
+  }
+
+  function renderValidationRows(rows: ValidationResult[], options: { mutedPassed?: boolean; showActions?: boolean } = {}) {
+    return rows.map((row, index) => (
+      <Table.Tr key={`${row.fileName}-${row.targetSize || ''}-${index}`}>
+        <Table.Td>
+          <Text fw={row.status === 'valid' && options.mutedPassed ? 650 : 800} c="var(--mantine-color-text)">
+            {getRowTitle(row)}
+          </Text>
+        </Table.Td>
+        <Table.Td>
+          <Text c="var(--mantine-color-dimmed)">{getRowMeta(row)}</Text>
+        </Table.Td>
+        <Table.Td>
+          <Text c="var(--mantine-color-dimmed)">
+            {row.actualWidth && row.actualHeight
+              ? `${row.actualWidth}×${row.actualHeight}`
+              : formatBytes(row.fileSize)}
+          </Text>
+        </Table.Td>
+        <Table.Td style={{ textAlign: 'right' }}>
+          <StatusBadge
+            result={row}
+            kind={getValidationRowKind(row)}
+            muted={options.mutedPassed && row.status === 'valid'}
+          />
+        </Table.Td>
+        {options.showActions && (
+          <Table.Td style={{ textAlign: 'right' }}>
+            {canTrashValidationRow(row) && (
+              <Button
+                variant="subtle"
+                color="red"
+                size="xs"
+                leftSection={<Trash2 size={14} />}
+                onClick={() => onTrashValidationFile(row)}
+                styles={{
+                  root: {
+                    fontWeight: 800,
+                  },
+                }}
+              >
+                移到废纸篓
+              </Button>
+            )}
+          </Table.Td>
+        )}
+      </Table.Tr>
+    ));
+  }
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -746,6 +839,35 @@ export function DailyWorkspace({
               >
                 <Box p={22} pb={10}>
                   <SectionTitle dragHandleProps={dragProvided.dragHandleProps}>素材详情</SectionTitle>
+                  {validationSummary.totalCount > 0 && (
+                    <Group gap="xs" mt={-4} mb="xs" wrap="wrap">
+                      {blockingIssueCount > 0 && (
+                        <Badge color="red" variant="light" radius="sm">
+                          需处理 {blockingIssueCount} 项
+                        </Badge>
+                      )}
+                      {missingTotal > 0 && (
+                        <Badge color="orange" variant="light" radius="sm">
+                          缺 {missingTotal} 张
+                        </Badge>
+                      )}
+                      {validationSummary.extraCount > 0 && (
+                        <Badge color="blue" variant="light" radius="sm">
+                          非需求 {validationSummary.extraCount} 项
+                        </Badge>
+                      )}
+                      {validationSummary.passedCount > 0 && (
+                        <Badge color="teal" variant="light" radius="sm">
+                          已通过 {validationSummary.passedCount} 项
+                        </Badge>
+                      )}
+                      {validationSummary.hasMissingOnlyIssues && validationSummary.canRenamePassedFiles && (
+                        <Badge color="blue" variant="light" radius="sm">
+                          可先重命名已有素材
+                        </Badge>
+                      )}
+                    </Group>
+                  )}
                 </Box>
 
                 <Box
@@ -770,7 +892,7 @@ export function DailyWorkspace({
                       },
                     }}
                   >
-                    隐藏详情
+                    {isTableExpanded ? '收起详情' : '查看详情'}
                   </Button>
                 </Box>
 
@@ -810,75 +932,155 @@ export function DailyWorkspace({
                           <Accordion.Control>
                             <Group justify="space-between">
                               <Group gap="sm">
-                                <FolderOpen size={18} color={group.hasError ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-dimmed)'} />
-                                <Text fw={800} c={group.hasError ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-text)'}>
+                                <FolderOpen size={18} color={getGroupIconColor(group)} />
+                                <Text
+                                  fw={800}
+                                  c={group.hasBlockingIssues ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-text)'}
+                                >
                                   {group.folderName}
                                 </Text>
-                                <Badge color={group.hasError ? 'red' : 'teal'} variant="light" size="sm">
-                                  {group.rows.length} 项
-                                </Badge>
+                                {group.blockingCount > 0 && (
+                                  <Badge color="red" variant="light" size="sm">
+                                    需处理 {group.blockingCount}
+                                  </Badge>
+                                )}
+                                {group.missingTotal > 0 && (
+                                  <Badge color="orange" variant="light" size="sm">
+                                    缺 {group.missingTotal} 张
+                                  </Badge>
+                                )}
+                                {group.extraCount > 0 && (
+                                  <Badge color="blue" variant="light" size="sm">
+                                    非需求 {group.extraCount}
+                                  </Badge>
+                                )}
+                                {group.passedCount > 0 && (
+                                  <Badge color="teal" variant="light" size="sm">
+                                    已通过 {group.passedCount}
+                                  </Badge>
+                                )}
                               </Group>
                             </Group>
                           </Accordion.Control>
                           <Accordion.Panel>
-                            <Table
-                              highlightOnHover
-                              horizontalSpacing="xl"
-                              verticalSpacing="sm"
-                              styles={{
-                                thead: {
-                                  background: 'var(--mantine-color-default)',
-                                },
-                                th: {
-                                  color: 'var(--mantine-color-dimmed)',
-                                  fontSize: 13,
-                                  fontWeight: 800,
-                                  borderBottom: '1px solid var(--mantine-color-default-border)',
-                                },
-                                td: {
-                                  borderTop: '1px solid #f1f5f9',
-                                  color: 'var(--mantine-color-text)',
-                                  fontSize: 14,
-                                },
-                                tr: {
-                                  transition: 'background-color 120ms ease',
-                                },
-                              }}
-                            >
-                              <Table.Thead>
-                                <Table.Tr>
-                                  <Table.Th>文件名</Table.Th>
-                                  <Table.Th>扩展名</Table.Th>
-                                  <Table.Th>大小</Table.Th>
-                                  <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
-                                </Table.Tr>
-                              </Table.Thead>
-                              <Table.Tbody>
-                                {group.rows.map((row, index) => (
-                                  <Table.Tr key={`${row.fileName}-${index}`}>
-                                    <Table.Td>
-                                      <Text fw={800} c="var(--mantine-color-text)">
-                                        {row.fileName}
-                                        {row.ext}
-                                      </Text>
-                                    </Table.Td>
-                                    <Table.Td>
-                                      <Text c="var(--mantine-color-dimmed)">{row.ext}</Text>
-                                    </Table.Td>
-                                    <Table.Td>
-                                      <Text c="var(--mantine-color-dimmed)">
-                                        {row.actualWidth && row.actualHeight
-                                          ? `${row.actualWidth}×${row.actualHeight}`
-                                          : formatBytes(row.fileSize)}
-                                      </Text>
-                                    </Table.Td>
-                                    <Table.Td style={{ textAlign: 'right' }}>
-                                      <StatusBadge result={row} />
-                                    </Table.Td>
+                            {group.actionRows.length > 0 ? (
+                              <Table
+                                highlightOnHover
+                                horizontalSpacing="xl"
+                                verticalSpacing="sm"
+                                styles={{
+                                  thead: {
+                                    background: 'var(--mantine-color-default)',
+                                  },
+                                  th: {
+                                    color: 'var(--mantine-color-dimmed)',
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                                  },
+                                  td: {
+                                    borderTop: '1px solid #f1f5f9',
+                                    color: 'var(--mantine-color-text)',
+                                    fontSize: 14,
+                                  },
+                                  tr: {
+                                    transition: 'background-color 120ms ease',
+                                  },
+                                }}
+                              >
+                                <Table.Thead>
+                                  <Table.Tr>
+                                    <Table.Th>需要处理</Table.Th>
+                                    <Table.Th>原因 / 建议</Table.Th>
+                                    <Table.Th>大小</Table.Th>
+                                    <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
+                                    <Table.Th style={{ textAlign: 'right' }}>操作</Table.Th>
                                   </Table.Tr>
-                                ))}
-                              </Table.Tbody>
-                            </Table>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                  {renderValidationRows(group.actionRows, { showActions: true })}
+                                </Table.Tbody>
+                              </Table>
+                            ) : (
+                              <Paper
+                                withBorder
+                                radius={12}
+                                p="md"
+                                style={{
+                                  borderColor: 'var(--mantine-color-default-border)',
+                                  background: 'var(--mantine-color-default)',
+                                }}
+                              >
+                                <Group gap="sm">
+                                  <CheckCircle2 size={18} color="var(--mantine-color-teal-filled)" />
+                                  <Text fw={800} c="var(--mantine-color-text)">
+                                    没有需要处理的问题
+                                  </Text>
+                                  <Text c="var(--mantine-color-dimmed)">
+                                    已通过 {group.passedCount} 项素材。
+                                  </Text>
+                                </Group>
+                              </Paper>
+                            )}
+
+                            {group.passedRows.length > 0 && (
+                              <Box mt="sm">
+                                <Button
+                                  variant="subtle"
+                                  color="gray"
+                                  size="xs"
+                                  leftSection={isPassedGroupExpanded(group.folderName) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  onClick={() => togglePassedGroup(group.folderName)}
+                                  styles={{
+                                    root: {
+                                      paddingInline: 0,
+                                      color: 'var(--mantine-color-dimmed)',
+                                      fontWeight: 800,
+                                    },
+                                  }}
+                                >
+                                  {isPassedGroupExpanded(group.folderName)
+                                    ? '收起已通过素材'
+                                    : `查看已通过 ${group.passedCount} 项`}
+                                </Button>
+                                <Collapse in={isPassedGroupExpanded(group.folderName)}>
+                                  <Table
+                                    highlightOnHover
+                                    horizontalSpacing="xl"
+                                    verticalSpacing="sm"
+                                    mt="xs"
+                                    styles={{
+                                      thead: {
+                                        background: 'var(--mantine-color-default)',
+                                      },
+                                      th: {
+                                        color: 'var(--mantine-color-dimmed)',
+                                        fontSize: 13,
+                                        fontWeight: 800,
+                                        borderBottom: '1px solid var(--mantine-color-default-border)',
+                                      },
+                                      td: {
+                                        borderTop: '1px solid #f1f5f9',
+                                        color: 'var(--mantine-color-text)',
+                                        fontSize: 14,
+                                      },
+                                    }}
+                                  >
+                                    <Table.Thead>
+                                      <Table.Tr>
+                                        <Table.Th>已通过素材</Table.Th>
+                                        <Table.Th>原因 / 建议</Table.Th>
+                                        <Table.Th>大小</Table.Th>
+                                        <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
+                                      </Table.Tr>
+                                    </Table.Thead>
+                                    <Table.Tbody>
+                                      {renderValidationRows(group.passedRows, { mutedPassed: true })}
+                                    </Table.Tbody>
+                                  </Table>
+                                </Collapse>
+                              </Box>
+                            )}
                           </Accordion.Panel>
                         </Accordion.Item>
                       ))}

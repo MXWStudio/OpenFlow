@@ -65,6 +65,8 @@ import {
   type ApiKeys,
   type HistoryEntry,
   type NotificationHistoryEntry,
+  type RequirementDetail,
+  type RequirementProject,
   type TemplateKey,
   type TokenType,
   type UserInfo,
@@ -78,6 +80,7 @@ import {
   type ScreenshotSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
+import { buildValidationPresentation } from './validationPresentation';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
@@ -105,7 +108,7 @@ export default function App() {
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [lastRenamedPaths, setLastRenamedPaths] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
-  const [projectsList, setProjectsList] = useState<Array<{ projectName: string; sizes: string[] }>>([]);
+  const [projectsList, setProjectsList] = useState<RequirementProject[]>([]);
   const [jsonFileName, setJsonFileName] = useState('');
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [historyOpened, setHistoryOpened] = useState(false);
@@ -126,8 +129,19 @@ export default function App() {
   const dragCounter = useRef(0);
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
-  const hasIssues = hasValidated && validationResults.some((item) => item.status !== 'valid');
-  const canRename = hasValidated && validationResults.length > 0 && !hasIssues;
+  const validationPresentation = useMemo(
+    () => buildValidationPresentation(validationResults),
+    [validationResults],
+  );
+  const hasIssues = hasValidated && (
+    validationPresentation.summary.hasBlockingIssues ||
+    validationPresentation.summary.hasMissingIssues ||
+    validationPresentation.summary.hasExtraIssues
+  );
+  const hasBlockingIssues = hasValidated && validationPresentation.summary.hasBlockingIssues;
+  const hasMissingIssues = hasValidated && validationPresentation.summary.hasMissingIssues;
+  const hasExtraIssues = hasValidated && validationPresentation.summary.hasExtraIssues;
+  const canRename = hasValidated && validationPresentation.summary.canRenamePassedFiles;
 
   const allDisplaySizes = useMemo(() => dedupeStrings([...PRESET_SIZES, ...selectedSizes]), [selectedSizes]);
   const horizontalSizes = useMemo(
@@ -237,13 +251,56 @@ export default function App() {
     setHasValidated(false);
   }
 
+  function getPathBaseName(path: string): string {
+    const sep = path.includes('\\') ? '\\' : '/';
+    return path.substring(path.lastIndexOf(sep) + 1);
+  }
+
+  function looseProjectName(value: string): string {
+    return value
+      .replace(/[<>:"/\\|?*\s]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+  }
+
+  function findProjectForFolder(folderPath: string): RequirementProject | undefined {
+    const folderName = getPathBaseName(folderPath);
+    const looseFolderName = looseProjectName(folderName);
+    return projectsList.find((project) => {
+      const looseName = looseProjectName(project.projectName);
+      return looseFolderName === looseName || looseFolderName.includes(looseName) || looseName.includes(looseFolderName);
+    });
+  }
+
+  function getValidationTargetsForFolder(folderPath: string): Array<string | RequirementDetail> {
+    const project = projectsList.length === 1 ? projectsList[0] : findProjectForFolder(folderPath);
+    if (!project) return selectedSizes;
+
+    const selectedSizeSet = new Set(selectedSizes);
+    const requirements = (project?.requirements || []).filter((item) => selectedSizeSet.has(item.resolution));
+
+    if (projectsList.length > 1) {
+      const projectSizeSet = new Set([
+        ...(project.sizes || []),
+        ...(project.requirements || []).map((item) => item.resolution),
+      ]);
+      const projectSizes = selectedSizes.filter((size) => projectSizeSet.has(size));
+      return requirements.length ? requirements : projectSizes;
+    }
+
+    const requirementSizeSet = new Set(requirements.map((item) => item.resolution));
+    const manualSizes = selectedSizes.filter((size) => !requirementSizeSet.has(size));
+    return [...requirements, ...manualSizes];
+  }
+
   async function handleChangeJson() {
     setIsChangingJson(true);
     try {
       const result = await window.electronAPI.dialog.openJson();
       if (!result) return;
       const projects = Array.isArray((result as { projects?: unknown[] }).projects)
-        ? ((result as { projects?: Array<{ projectName: string; sizes: string[] }> }).projects || [])
+        ? ((result as { projects?: RequirementProject[] }).projects || [])
         : [];
       setProjectsList(projects);
       setJsonFileName(result.fileName ? result.fileName.replace(/\.json$/i, '') : '');
@@ -262,10 +319,16 @@ export default function App() {
         });
       }
       const sizeSet = new Set<string>();
-      projects.forEach((project) => project.sizes.forEach((size) => sizeSet.add(size)));
+      projects.forEach((project) => {
+        project.sizes.forEach((size) => sizeSet.add(size));
+        (project.requirements || []).forEach((item) => sizeSet.add(item.resolution));
+      });
       (result.sizes || []).forEach((size) => sizeSet.add(size));
       if (sizeSet.size) setSelectedSizes([...sizeSet]);
       notify('green', '需求表已更新', result.fileName ?? undefined);
+      if (result.warnings && result.warnings.length > 0) {
+        notify('orange', '需求表有提示', result.warnings.slice(0, 2).join('；'));
+      }
     } catch {
       notify('red', '读取失败', '请检查 JSON 文件格式后重试。');
     } finally {
@@ -299,8 +362,9 @@ export default function App() {
     }
     try {
       const result = await window.electronAPI.fs.initFolders(projectsList);
-      if (result.success) notify('green', '目录创建完成', result.destPath);
-      else notify('red', '目录创建失败', result.error);
+      if (result.success) {
+        notify('green', '目录创建完成', result.destPath);
+      } else notify('red', '目录创建失败', result.error);
     } catch {
       notify('red', '目录创建失败');
     }
@@ -316,18 +380,25 @@ export default function App() {
     try {
       const allResults: ValidationResult[] = [];
       for (const folderPath of folderPaths) {
-        const results = await window.electronAPI.fs.startValidation(folderPath, selectedSizes);
-        const sep = folderPath.includes('\\') ? '\\' : '/';
-        const projectName = folderPath.substring(folderPath.lastIndexOf(sep) + 1);
+        const results = await window.electronAPI.fs.startValidation(folderPath, getValidationTargetsForFolder(folderPath));
+        const projectName = getPathBaseName(folderPath);
         allResults.push(...results.map((item) => ({ ...item, workspaceProjectName: projectName })));
       }
       setValidationResults(allResults);
       setHasValidated(true);
-      const issues = allResults.filter((item) => item.status !== 'valid').length;
-      if (issues === 0) {
+      const presentation = buildValidationPresentation(allResults);
+      const { blockingCount, missingRowsCount, missingTotal, extraCount } = presentation.summary;
+      if (blockingCount === 0 && missingRowsCount === 0 && extraCount === 0) {
         notify('green', '校验通过', '全部素材符合要求。');
+      } else if (blockingCount === 0 && missingRowsCount > 0) {
+        const extraText = extraCount > 0 ? `另有 ${extraCount} 项非需求素材不会参与重命名。` : '';
+        notify('orange', '数量不足', `${missingRowsCount} 个尺寸缺素材，共缺 ${missingTotal} 张。可补齐后重验，也可先重命名已有素材。${extraText}`);
+        setIsTableExpanded(true);
+      } else if (blockingCount === 0) {
+        notify('blue', '发现非需求素材', `${extraCount} 项素材不在需求表中，不会参与重命名。`);
+        setIsTableExpanded(true);
       } else {
-        notify('red', '校验异常', `${issues} 项素材存在问题。`);
+        notify('red', '校验异常', `${blockingCount} 项素材存在尺寸或读取问题。`);
         setIsTableExpanded(true);
       }
     } catch {
@@ -338,12 +409,18 @@ export default function App() {
   }
 
   async function handleRename() {
-    if (!canRename) return notify('red', '无法执行重命名', '只有全部通过校验后才能继续。');
+    if (!canRename) return notify('red', '无法执行重命名', '请先处理尺寸错误或读取失败的素材。');
     setIsRenaming(true);
     try {
       const storedTemplates = await window.electronAPI.store.get<WorkflowSettings['renameTemplates']>('renameTemplates');
       const templates = storedTemplates || workflowSettings.renameTemplates;
       const validFiles = validationResults.filter((item) => item.status === 'valid');
+      if (hasMissingIssues && !hasBlockingIssues) {
+        notify('orange', '按现有素材重命名', '仍有数量缺口，本次只重命名已通过校验的素材。');
+      }
+      if (hasExtraIssues && !hasBlockingIssues) {
+        notify('blue', '跳过非需求素材', '额外尺寸素材不会参与本次重命名。');
+      }
       const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, userInfo.name, isSpecialEnabled, isManualEnabled);
       const successCount = results.filter((item) => item.success).length;
       const failed = results.filter((item) => !item.success);
@@ -365,6 +442,25 @@ export default function App() {
       notify('red', '重命名部分失败', '部分文件可能被占用或命名冲突。');
     } finally {
       setIsRenaming(false);
+    }
+  }
+
+  async function handleTrashValidationFile(row: ValidationResult) {
+    if (!row.filePath) return;
+    if (!window.electronAPI?.fs?.trashFile) {
+      notify('red', '删除失败', '请重启应用后再试。');
+      return;
+    }
+    try {
+      const result = await window.electronAPI.fs.trashFile(row.filePath);
+      if (!result.success) {
+        notify('red', '删除失败', result.error || '无法移动到废纸篓。');
+        return;
+      }
+      setValidationResults((prev) => prev.filter((item) => item.filePath !== row.filePath));
+      notify('green', '已移到废纸篓', `${row.fileName}${row.ext}`);
+    } catch {
+      notify('red', '删除失败', '无法移动到废纸篓。');
     }
   }
 
@@ -570,6 +666,7 @@ export default function App() {
             onRemoveFolder={(path) => { setFolderPaths((prev) => prev.filter((item) => item !== path)); resetValidationState(); }}
             onValidate={() => void handleValidate()}
             onRename={() => void handleRename()}
+            onTrashValidationFile={(row) => void handleTrashValidationFile(row)}
             onOpenSettings={() => setActiveView('settings')}
             onOpenHistory={() => setHistoryOpened(true)}
             onDropPaths={(paths) => void addFolders(dedupeStrings(paths))}

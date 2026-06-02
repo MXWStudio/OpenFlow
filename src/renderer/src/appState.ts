@@ -139,6 +139,22 @@ export interface HistoryEntry {
   timestamp: number;
 }
 
+export interface RequirementDetail {
+  resolution: string;
+  requiredQuantity?: number;
+  positionType?: string;
+  sizeLimit?: string;
+}
+
+export interface RequirementProject {
+  projectName: string;
+  sizes: string[];
+  requirements?: RequirementDetail[];
+  fullName?: string;
+  producerName?: string;
+  materialType?: string;
+}
+
 export interface GameMapping {
   id?: number;
   game_name: string;
@@ -159,6 +175,9 @@ export interface ValidationResult {
   duration?: number;
   status: 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error';
   targetSize?: string;
+  requiredQuantity?: number;
+  actualQuantity?: number;
+  missingCount?: number;
   error?: string;
   workspaceProjectName?: string;
 }
@@ -355,4 +374,3 @@ export function buildTemplatePreview(template: TemplateToken[], producerName: st
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }
-

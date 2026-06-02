@@ -3,6 +3,17 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
+const devCspPlugin = {
+  name: 'openflow-dev-csp',
+  apply: 'serve' as const,
+  transformIndexHtml(html: string) {
+    return html.replace(
+      "script-src 'self';",
+      "script-src 'self' 'unsafe-inline';"
+    )
+  },
+}
+
 export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
@@ -37,6 +48,7 @@ export default defineConfig({
       },
     },
     plugins: [
+      devCspPlugin,
       react(),
       tailwindcss(), // Tailwind v4 Vite 插件
     ],

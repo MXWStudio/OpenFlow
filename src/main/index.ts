@@ -33,6 +33,14 @@ import {
   deleteExcelFile,
   clearAllExcelFiles
 } from './utils/db'
+import {
+  getMissingRequirements,
+  normalizeResolution,
+  parseRequiredQuantity,
+  parseRequirementJson,
+  sanitizePathSegment,
+  type RequirementDetail,
+} from './requirements'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
@@ -141,6 +149,9 @@ interface ValidationResult {
   duration?: number
   status: 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
   targetSize?: string
+  requiredQuantity?: number
+  actualQuantity?: number
+  missingCount?: number
   /** 底层错误或说明，供前端展示 */
   error?: string
   workspaceProjectName?: string
@@ -906,16 +917,12 @@ ipcMain.handle('fs:saveImageToLocal', async (_, args: { dataUrl?: string; source
 interface ProjectItem {
   projectName: string
   sizes: string[]
+  requirements?: RequirementDetail[]
 }
 
 /**
  * dialog:openJson
- * 弹出系统文件选择框（仅限 .json），读取并智能解析内容。
- * 始终返回 projects 数组（多项目用于批量建目录），以及首项 projectName/sizes 兼容左侧单项目展示。
- *
- * 支持的 JSON 格式：
- *   1. 孟祥伟数据表：[{ "项目名称", "尺寸要求明细": [{ "分辨率": "1080*607" }] }] → 每行一个项目
- *   2. 标准对象：{ projectName, sizes } → 单项目
+ * 弹出系统文件选择框，读取并规范化新旧需求 JSON。
  */
 ipcMain.handle('dialog:openJson', async () => {
   const result = await dialog.showOpenDialog({
@@ -929,106 +936,7 @@ ipcMain.handle('dialog:openJson', async () => {
   const filePath = result.filePaths[0]
   const fileName = basename(filePath)
   const rawData = JSON.parse(await fs.readFile(filePath, 'utf-8'))
-
-  const projects: ProjectItem[] = []
-  let projectName = ''
-  let producerName = ''
-  let department = ''
-  let email = ''
-  let sizes: string[] = []
-
-  const norm = (s: string) => (s || '').replace(/[xX×-]/g, '*')
-
-  if (Array.isArray(rawData)) {
-    if (rawData.length > 0) {
-      const firstItem = rawData[0]
-      producerName =
-        (firstItem['其他信息'] && firstItem['其他信息']['制作人']) ||
-        firstItem['制作人'] ||
-        firstItem['producerName'] ||
-        firstItem['producer_name'] ||
-        firstItem['producer'] ||
-        ''
-      department =
-        (firstItem['其他信息'] && firstItem['其他信息']['部门']) ||
-        firstItem['部门'] ||
-        firstItem['department'] ||
-        ''
-      email =
-        (firstItem['其他信息'] && firstItem['其他信息']['邮箱']) ||
-        firstItem['邮箱'] ||
-        firstItem['email'] ||
-        ''
-    }
-
-    for (const item of rawData) {
-      const name =
-        (item['其他信息'] && item['其他信息']['项目名称']) ||
-        item['项目名称'] ||
-        item['projectName'] ||
-        item['project_name'] ||
-        item['name'] ||
-        ''
-      const sizeSet = new Set<string>()
-      const details = item['尺寸要求明细'] || item['sizes'] || []
-      if (Array.isArray(details)) {
-        for (const d of details) {
-          const res = d['分辨率'] || d['resolution'] || d['size'] || ''
-          if (res) sizeSet.add(norm(res))
-        }
-      }
-      if (name) projects.push({ projectName: name, sizes: [...sizeSet] })
-    }
-    if (projects.length > 0) {
-      projectName = projects[0].projectName
-      const firstSizes = new Set<string>()
-      for (const p of projects) p.sizes.forEach((s) => firstSizes.add(s))
-      sizes = [...firstSizes]
-    }
-  } else {
-    projectName =
-      rawData.projectName || rawData.project_name || rawData.name || ''
-    if (Array.isArray(rawData.sizes)) {
-      sizes = rawData.sizes.map((s: string) => norm(s))
-    } else if (Array.isArray(rawData.dimensions)) {
-      sizes = rawData.dimensions.map((s: string) => norm(s))
-    } else if (Array.isArray(rawData.requirements)) {
-      sizes = rawData.requirements.map(
-        (r: { width?: number; height?: number; size?: string }) =>
-          r.size ? norm(r.size) : `${r.width}*${r.height}`
-      )
-    }
-    if (projectName || sizes.length) {
-      projects.push({ projectName: projectName || '未命名项目', sizes })
-    }
-    producerName =
-      (rawData['其他信息'] && rawData['其他信息']['制作人']) ||
-      rawData['制作人'] ||
-      rawData['producerName'] ||
-      rawData['producer_name'] ||
-      rawData['producer'] ||
-      ''
-    department =
-      (rawData['其他信息'] && rawData['其他信息']['部门']) ||
-      rawData['部门'] ||
-      rawData['department'] ||
-      ''
-    email =
-      (rawData['其他信息'] && rawData['其他信息']['邮箱']) ||
-      rawData['邮箱'] ||
-      rawData['email'] ||
-      ''
-  }
-
-  // Fallback for producerName: attempt to extract from filename (e.g., 20260415-孟祥伟数据表.json -> 孟祥伟)
-  if (!producerName) {
-    const match = fileName.match(/-(.*?)(数据表|需求|需求表|工作表)?\.json$/i)
-    if (match && match[1]) {
-      producerName = match[1].trim()
-    }
-  }
-
-  return { projectName, producerName, department, email, sizes, projects, rawData, fileName }
+  return parseRequirementJson(rawData, fileName)
 })
 
 /**
@@ -1209,9 +1117,9 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
 
   // 每个项目下除尺寸文件夹外，固定创建的 4 个素材分类文件夹（与尺寸文件夹同级）
   try {
-    await Promise.all(
+    const createdPaths = await Promise.all(
       list.map(async (project) => {
-        const projectRoot = join(rootPath, project.projectName)
+        const projectRoot = join(rootPath, sanitizePathSegment(project.projectName))
         await fs.ensureDir(projectRoot)
 
         const dirPromises: Promise<void>[] = []
@@ -1228,9 +1136,10 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
         }
 
         await Promise.all(dirPromises)
+        return projectRoot
       })
     )
-    return { success: true, destPath: rootPath }
+    return { success: true, destPath: rootPath, createdPaths }
   } catch (error) {
     return { success: false, destPath: '', error: String(error) }
   }
@@ -1347,6 +1256,29 @@ async function collectMediaFiles(
   }
 }
 
+function normalizeValidationTargets(targetSizes: unknown): RequirementDetail[] {
+  const targets = Array.isArray(targetSizes) ? targetSizes : []
+  return targets.flatMap((target) => {
+    if (typeof target === 'string') {
+      const resolution = normalizeResolution(target)
+      return resolution ? [{ resolution, requiredQuantity: 1 }] : []
+    }
+
+    if (!target || typeof target !== 'object' || Array.isArray(target)) return []
+    const record = target as Record<string, unknown>
+    const resolution = normalizeResolution(record.resolution ?? record.size ?? record.targetSize)
+    if (!resolution) return []
+    return [{
+      resolution,
+      ...(parseRequiredQuantity(record.requiredQuantity ?? record.quantity ?? record.count) != null
+        ? { requiredQuantity: parseRequiredQuantity(record.requiredQuantity ?? record.quantity ?? record.count) }
+        : {}),
+      ...(typeof record.positionType === 'string' ? { positionType: record.positionType } : {}),
+      ...(typeof record.sizeLimit === 'string' ? { sizeLimit: record.sizeLimit } : {}),
+    }]
+  })
+}
+
 /**
  * fs:startValidation
  * 递归扫描文件夹内媒体文件，读取真实宽高，与目标尺寸对比并打标
@@ -1354,9 +1286,9 @@ async function collectMediaFiles(
 ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
   const results: ValidationResult[] = []
 
-  const targetSizeSet = new Set<string>(
-    (targetSizes as string[]).map((s) => s.replace(/[xX-]/g, '*'))
-  )
+  const targetRequirements = normalizeValidationTargets(targetSizes)
+  const targetSizeSet = new Set<string>(targetRequirements.map((item) => item.resolution))
+  const validCountBySize = new Map<string, number>()
 
   const fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[] = []
   await collectMediaFiles(folderPath, fileList, true)
@@ -1398,6 +1330,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
       }
 
       if (targetSizeSet.has(actualSizeKey)) {
+        validCountBySize.set(actualSizeKey, (validCountBySize.get(actualSizeKey) ?? 0) + 1)
         results.push({
           fileName,
           filePath,
@@ -1420,7 +1353,7 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
           actualHeight,
           duration,
           status: 'mismatch',
-          error: '尺寸不符（当前尺寸未在左侧勾选）',
+          error: '实际尺寸不符合需求尺寸',
         })
       }
     } catch (err) {
@@ -1439,29 +1372,44 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
     }
   }
 
-  // 补充 missing：目标尺寸在本次文件夹中没有任何匹配文件
-  for (const targetSize of targetSizes as string[]) {
-    const normalized = targetSize.replace(/[xX-]/g, '*')
-    const hasMatch = results.some(
-      (r) => r.status === 'valid' && `${r.actualWidth}*${r.actualHeight}` === normalized
-    )
-    if (!hasMatch) {
-      results.push({
-        fileName: `[缺失] ${targetSize}`,
-        filePath: '',
-        folderName: '-',
-        ext: '',
-        fileSize: 0,
-        actualWidth: 0,
-        actualHeight: 0,
-        status: 'missing',
-        targetSize,
-        error: '该尺寸在文件夹中无对应文件',
-      })
-    }
+  // 补充 missing：目标尺寸数量不足，旧尺寸数组会按每个尺寸至少 1 个素材处理。
+  for (const missing of getMissingRequirements(targetRequirements, validCountBySize)) {
+    results.push({
+      fileName: `[缺失] ${missing.resolution}`,
+      filePath: '',
+      folderName: '-',
+      ext: '',
+      fileSize: 0,
+      actualWidth: 0,
+      actualHeight: 0,
+      status: 'missing',
+      targetSize: missing.resolution,
+      requiredQuantity: missing.requiredQuantity,
+      actualQuantity: missing.actualQuantity,
+      missingCount: missing.missingCount,
+      error: `数量不足：需要 ${missing.requiredQuantity} 个，当前 ${missing.actualQuantity} 个，缺 ${missing.missingCount} 个`,
+    })
   }
 
   return results
+})
+
+ipcMain.handle('fs:trashFile', async (_, filePath: string) => {
+  if (!filePath || typeof filePath !== 'string') {
+    return { success: false, error: '文件路径为空' }
+  }
+
+  try {
+    const stat = await fs.stat(filePath)
+    if (!stat.isFile()) {
+      return { success: false, error: '只能删除文件' }
+    }
+    await shell.trashItem(filePath)
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { success: false, error: message }
+  }
 })
 
 /**
@@ -1578,14 +1526,14 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
               const currentSequence = fixedSequenceCounters[seqKey]
 
               // 小火车截屏素材-XXX-(1).jpg
-              let newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`
+              let newBaseName = sanitizePathSegment(`${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`)
               let newFileName = `${newBaseName}${ext}`
 
               // 冲突处理：顺延寻找可用序号
               let localSeq = currentSequence
               while (existingFiles.has(newFileName) && join(fixedFolderPath, newFileName) !== fullPath) {
                 localSeq++
-                newBaseName = `${gameName}${fixedFolderName}-${producerAbbr}-(${localSeq})`
+                newBaseName = sanitizePathSegment(`${gameName}${fixedFolderName}-${producerAbbr}-(${localSeq})`)
                 newFileName = `${newBaseName}${ext}`
               }
 
@@ -1659,17 +1607,17 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     const currentSequence = sequenceCounters[sequenceKey]
 
     const vars: Record<string, string> = {
-      ProjectName: currentProjectName || 'Project',
-      CleanProjectName: cleanProjectName || 'Project',
+      ProjectName: sanitizePathSegment(currentProjectName || 'Project', 'Project'),
+      CleanProjectName: sanitizePathSegment(cleanProjectName || 'Project', 'Project'),
       Date: today,
-      Producer: producerAbbr,
+      Producer: sanitizePathSegment(producerAbbr, 'Producer'),
       Resolution: sizeStr,
       AspectRatio: aspectRatio,
       Sequence: `(${currentSequence})`,
-      OriginalName: originalBaseName
+      OriginalName: sanitizePathSegment(originalBaseName, 'Original')
     }
 
-    let newBaseName = applyNewTemplate(targetTemplate, vars)
+    let newBaseName = sanitizePathSegment(applyNewTemplate(targetTemplate, vars), 'Untitled')
 
     const existingFiles = await getDirEntries(dir)
     let newFileName = `${newBaseName}${finalExt}`
@@ -1679,7 +1627,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
     while (existingFiles.has(newFileName) && join(dir, newFileName) !== file.filePath) {
       localSeq++
       vars.Sequence = `(${localSeq})`
-      newBaseName = applyNewTemplate(targetTemplate, vars)
+      newBaseName = sanitizePathSegment(applyNewTemplate(targetTemplate, vars), 'Untitled')
       newFileName = `${newBaseName}${finalExt}`
     }
     const newFilePath = join(dir, newFileName)

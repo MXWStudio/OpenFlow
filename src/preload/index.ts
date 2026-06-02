@@ -56,7 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('fs:saveImageToLocal', args),
 
     /** 批量初始化项目目录结构（主进程内弹窗选择目标总目录） */
-    initFolders: (projectsData: Array<{ projectName: string; sizes: string[] }>) =>
+    initFolders: (projectsData: Array<{ projectName: string; sizes: string[]; requirements?: unknown[] }>) =>
       ipcRenderer.invoke('fs:initFolders', projectsData),
 
     /** 读取若干文件夹下的一级子目录名，识别尺寸格式（如 720x1280）并返回规范化尺寸数组 */
@@ -64,8 +64,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('fs:readProjectSizes', folderPaths),
 
     /** 开始素材校验 */
-    startValidation: (folderPath: string, targetSizes: string[]) =>
+    startValidation: (folderPath: string, targetSizes: Array<string | { resolution: string; requiredQuantity?: number }>) =>
       ipcRenderer.invoke('fs:startValidation', { folderPath, targetSizes }),
+
+    /** 将单个素材文件移到系统废纸篓 */
+    trashFile: (filePath: string) =>
+      ipcRenderer.invoke('fs:trashFile', filePath),
 
     /** 执行批量重命名 */
     executeRename: (
