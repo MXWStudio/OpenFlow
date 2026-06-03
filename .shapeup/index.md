@@ -1,11 +1,8 @@
 # Shape Up Project Dashboard
 
-**Generated**: 2026-06-02
+**Generated**: 2026-06-03
 
 ## In Progress — Shaping
-
-### 003: dark-theme-alignment
-- Package: `003-dark-theme-alignment-framing/package.md`
 
 ### 004: cut-secondary-features
 - Frame: `004-cut-secondary-features-framing/frame.md`
@@ -18,3 +15,6 @@
 
 ### 002: validation-details
 - Decisions: `002-validation-details-shipped/decisions.md`
+
+### 003: dark-theme-alignment
+- Decisions: `003-dark-theme-alignment-shipped/decisions.md`

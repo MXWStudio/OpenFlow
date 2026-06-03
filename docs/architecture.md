@@ -67,3 +67,31 @@ This document records architectural patterns and constraints as shipped features
 - The left size selector still mixes JSON-required sizes and workspace-detected sizes. This can be shaped separately if it keeps causing confusion.
 - Renderer hot reload is not enough when main/preload IPC changes. Electron must be restarted for new IPC such as `fs:trashFile`.
 - Moving files to trash can fail because of OS permissions, locked files, or unusual volumes.
+
+## Night Dark Theme Alignment (2026-06-03)
+
+### Patterns Introduced
+
+- **Resolved theme rendering boundary**: Renderer components that branch on light/dark presentation use resolved color scheme state, not the raw saved `light | dark | auto` preference.
+- **Focused surface alignment**: Dark-mode fixes stay on the visible shell and page surfaces named by the frame instead of becoming a full app redesign.
+- **Theme helper coverage**: Small theme helpers can be covered with deterministic `node:test` cases while Mantine remains responsible for runtime OS color-scheme resolution.
+
+### Data Model Changes
+
+- None. The existing `SystemSettings.theme` values remain `light`, `dark`, and `auto`.
+
+### API Changes
+
+- None. Feature 003 changed renderer presentation only and did not touch IPC contracts.
+
+### Conventions Established
+
+- Use `useComputedColorScheme()` when a renderer component needs concrete visual theme state.
+- Keep `useMantineColorScheme()` for reading or updating the user's stored preference.
+- Do not add new top-right controls while fixing theme issues; this preserves the project UI guideline about notification overlap.
+- Prefer Mantine CSS variables and narrow local constants for themed surfaces before introducing global CSS overrides.
+
+### Known Limitations
+
+- The shipped scope covers the global sidebar and organizer first screen, not every low-frequency page with custom colors.
+- Some fixed body/global CSS may still exist outside the full-height app shell; future visual frames should handle those only if they become visible product issues.

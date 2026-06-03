@@ -3,7 +3,7 @@
 **Record ID**: 003  
 **Feature ID**: 003-dark-theme-alignment  
 **Created**: 2026-06-02  
-**Status**: Frame Go — approved 2026-06-02
+**Status**: Shipped — archived 2026-06-03
 
 ---
 
@@ -94,4 +94,4 @@ Small Batch（1 个会话）。
 
 ---
 
-## Status: Frame Go — approved 2026-06-02
+## Status: Shipped — archived 2026-06-03

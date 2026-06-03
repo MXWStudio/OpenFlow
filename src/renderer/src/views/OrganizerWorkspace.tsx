@@ -17,11 +17,12 @@ import {
   ThemeIcon,
   ActionIcon,
   Tooltip,
-  useMantineColorScheme,
+  useComputedColorScheme,
 } from '@mantine/core';
 import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
 import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
+import { isDarkColorScheme } from '../theme';
 
 interface OrganizerWorkspaceProps {
   isQimiEnabled: boolean;
@@ -48,7 +49,8 @@ interface ScannedFile {
 export function OrganizerWorkspace({
   isQimiEnabled,
   onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
-  const { colorScheme } = useMantineColorScheme();
+  const resolvedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
+  const isDarkTheme = isDarkColorScheme(resolvedColorScheme);
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
@@ -189,6 +191,12 @@ export function OrganizerWorkspace({
 
   const allSelected = files.length > 0 && files.every(f => f.selected);
   const indeterminate = files.some(f => f.selected) && !allSelected;
+  const cardShadow = isDarkTheme ? '0 18px 44px rgba(0, 0, 0, 0.22)' : '0 12px 30px rgba(15, 23, 42, 0.04)';
+  const floatingShadow = isDarkTheme ? '0 18px 44px rgba(0, 0, 0, 0.36)' : '0 16px 40px rgba(15, 23, 42, 0.12)';
+  const deepSurface = isDarkTheme ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-default)';
+  const statusSurface = isDarkTheme
+    ? 'linear-gradient(135deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-8) 100%)'
+    : 'linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 1) 100%)';
 
   const statusLabel = isScanning
     ? '正在扫描'
@@ -258,7 +266,7 @@ export function OrganizerWorkspace({
               shadow="sm"
               style={{
                 borderColor: 'var(--mantine-color-default-border)',
-                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
+                boxShadow: cardShadow,
               }}
             >
               <Group wrap="nowrap" align="stretch" gap={30}>
@@ -275,11 +283,9 @@ export function OrganizerWorkspace({
                     p={30}
                     h="100%"
                     style={{
-                      background: colorScheme === 'dark'
-                        ? 'radial-gradient(circle at 50% 50%, var(--mantine-color-dark-6) 0%, var(--mantine-color-dark-8) 100%)'
-                        : 'radial-gradient(circle at 50% 50%, rgba(239, 246, 255, 0.98) 0%, rgba(255,255,255,1) 56%, rgba(241,245,249,0.96) 100%)',
+                      background: statusSurface,
                       border: '1px solid var(--mantine-color-default-border)',
-                      boxShadow: colorScheme === 'dark' ? 'inset 0 0 48px rgba(255, 255, 255, 0.02)' : 'inset 0 0 48px rgba(191, 219, 254, 0.18)',
+                      boxShadow: isDarkTheme ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.02)' : 'inset 0 0 48px rgba(191, 219, 254, 0.16)',
                       overflow: 'hidden',
                     }}
                   >
@@ -348,7 +354,7 @@ export function OrganizerWorkspace({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: 'var(--mantine-color-default)',
+                          background: deepSurface,
                           flexShrink: 0
                         }}
                       >
@@ -371,7 +377,7 @@ export function OrganizerWorkspace({
                     p={22}
                     h="100%"
                     style={{
-                      background: "var(--mantine-color-default)",
+                      background: deepSurface,
                       border: '1px solid var(--mantine-color-default-border)',
                       overflow: 'hidden',
                     }}
@@ -495,7 +501,7 @@ export function OrganizerWorkspace({
               shadow="sm"
               style={{
                 borderColor: 'var(--mantine-color-default-border)',
-                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.04)',
+                boxShadow: cardShadow,
               }}
             >
               <Group justify="space-between" mb="md">
@@ -508,7 +514,7 @@ export function OrganizerWorkspace({
               </Group>
 
               {files.length === 0 ? (
-                <Flex h={200} align="center" justify="center" direction="column" gap="md" c="dimmed" style={{ backgroundColor: 'var(--mantine-color-default)', borderRadius: 24, border: '2px dashed var(--mantine-color-default-border)' }}>
+                <Flex h={200} align="center" justify="center" direction="column" gap="md" c="dimmed" style={{ backgroundColor: deepSurface, borderRadius: 24, border: '2px dashed var(--mantine-color-default-border)' }}>
                   <FolderSearch size={48} opacity={0.3} />
                   <Text>未发现匹配的素材，请确认源目录配置或重新扫描</Text>
                   {(!organizerSourceDir || !organizerDestDir) && (
@@ -604,16 +610,16 @@ export function OrganizerWorkspace({
           position: 'absolute',
           right: 28,
           bottom: 24,
-          background: "var(--mantine-color-default)",
+          background: deepSurface,
           border: '1px solid var(--mantine-color-default-border)',
-          boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
+          boxShadow: floatingShadow,
           zIndex: 100,
         }}
       >
         <Group gap={14}>
           <Button
             radius={18}
-            color="dark"
+            color="blue"
             size="lg"
             leftSection={<FolderSearch size={18} fill="currentColor" />}
             onClick={handleScan}
@@ -622,10 +628,10 @@ export function OrganizerWorkspace({
               root: {
                 height: 58,
                 paddingInline: 32,
-                background: 'var(--mantine-color-dark-8)',
+                background: 'var(--mantine-primary-color-filled)',
                 fontSize: 18,
                 fontWeight: 900,
-                boxShadow: '0 12px 28px rgba(17, 26, 52, 0.2)',
+                boxShadow: isDarkTheme ? '0 12px 28px rgba(34, 139, 230, 0.18)' : '0 12px 28px rgba(17, 26, 52, 0.2)',
               },
             }}
           >

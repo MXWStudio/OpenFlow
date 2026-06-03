@@ -23,6 +23,8 @@ import {
   ThemeIcon,
   Title,
   Tooltip,
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { notify } from './utils/notify';
 import { createAvatar } from '@dicebear/core';
@@ -87,15 +89,16 @@ import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
 import { AiWorkspace } from './views/AiWorkspace';
 import { GameDictionaryWorkspace } from './views/GameDictionaryWorkspace';
+import { isDarkColorScheme } from './theme';
 
 type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary' | 'settings';
-
-import { useMantineColorScheme } from '@mantine/core';
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>('daily');
-  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const { setColorScheme } = useMantineColorScheme();
+  const resolvedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
+  const isDarkTheme = isDarkColorScheme(resolvedColorScheme);
   const [isAppReady, setIsAppReady] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -477,13 +480,21 @@ export default function App() {
     return <Flex h="100vh" align="center" justify="center"><Text>Loading...</Text></Flex>;
   }
 
+  const sidebarActiveBackground = isDarkTheme
+    ? 'rgba(34, 139, 230, 0.18)'
+    : 'rgba(34, 139, 230, 0.12)';
+  const sidebarActiveColor = isDarkTheme
+    ? 'var(--mantine-color-blue-1)'
+    : 'var(--mantine-color-blue-8)';
+
   return (
     <Flex h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
       <Box
         w={92}
         style={{
-          background: colorScheme === 'dark' ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
-          boxShadow: '4px 0 24px rgba(15, 23, 42, 0.16)',
+          background: isDarkTheme ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
+          borderRight: `1px solid ${isDarkTheme ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-3)'}`,
+          boxShadow: isDarkTheme ? '2px 0 18px rgba(0, 0, 0, 0.18)' : '4px 0 24px rgba(15, 23, 42, 0.12)',
           zIndex: 20,
         }}
       >
@@ -537,7 +548,7 @@ export default function App() {
             </ActionIcon>
           </Stack>
 
-          <Box my={4} w={46} h={1} bg="'var(--mantine-color-default)'" />
+          <Box my={4} w={46} h={1} style={{ background: 'var(--mantine-color-default-border)' }} />
 
           <Stack gap={10} align="center" mt={18}>
             {navItems.map((item) => {
@@ -555,8 +566,8 @@ export default function App() {
                     border: 'none',
                     borderRadius: 20,
                     cursor: 'pointer',
-                    background: active ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
-                    color: active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
+                    background: active ? sidebarActiveBackground : 'transparent',
+                    color: active ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -601,8 +612,8 @@ export default function App() {
                   root: {
                     width: 46,
                     height: 46,
-                    color: isNotificationCenterOpened ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
-                    background: isNotificationCenterOpened ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
+                    color: isNotificationCenterOpened ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
+                    background: isNotificationCenterOpened ? sidebarActiveBackground : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -620,8 +631,8 @@ export default function App() {
                 root: {
                   width: 46,
                   height: 46,
-                  color: activeView === 'settings' ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
-                  background: activeView === 'settings' ? 'rgba(46, 88, 168, 0.34)' : 'transparent',
+                  color: activeView === 'settings' ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
+                  background: activeView === 'settings' ? sidebarActiveBackground : 'transparent',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -4,7 +4,7 @@
 **Created**: 2026-06-02  
 **Frame**: [frame.md](./frame.md)  
 **Appetite**: Small Batch (1 session)  
-**Status**: Shaping
+**Status**: Shipped — archived 2026-06-03
 
 ---
 
@@ -126,4 +126,4 @@ OpenFlow 的外观主题默认是“跟随系统”，但夜晚或系统深色�
 
 ---
 
-## Status: Shaping
+## Status: Shipped — archived 2026-06-03
