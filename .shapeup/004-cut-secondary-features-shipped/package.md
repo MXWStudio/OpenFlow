@@ -1,9 +1,9 @@
 # Package: 次要功能砍范围
 
-**Feature ID**: 004-cut-secondary-features  
-**Created**: 2026-06-02  
-**Frame**: [frame.md](./frame.md)  
-**Status**: Shaping
+**Feature ID**: 004-cut-secondary-features
+**Created**: 2026-06-02
+**Frame**: [frame.md](./frame.md)
+**Status**: Shipped — archived 2026-06-03
 
 ---
 
@@ -31,18 +31,21 @@ Medium Batch（2-3 个会话）。
 | R5 | 存量用户数据不主动删除：旧 SQLite 文件、Excel 备份、游戏库图片、旧配置键只是不再读取和写入 | Must-have |
 | R6 | 类型、默认状态和依赖包要跟随收窄，避免删除 UI 后仍背着无用模块 | Must-have |
 | R7 | 格式处理、日常需求数据表/JSON 导入、002 校验详情改进不属于本次砍范围 | Out |
+| R8 | 基础功能必须有明确保护清单和验证门槛；任何砍功能改动如果破坏基础功能，就不能合入 | Must-have |
 
 ## Solution
 
 采用“产品表面退出 + 运行时能力下线 + 状态与依赖收窄”的减法路线。先让用户再也无法从 UI、快捷键或托盘进入四条次要功能线，再移除对应 IPC/preload/类型/依赖。旧数据留在磁盘上，不在这个 appetite 内做删除、导出或迁移。
 
+基础功能保护优先于砍功能本身。Build 阶段应先列出并保护核心 IPC、核心视图和核心状态，再做删除；每完成一个删除面，都要重新跑类型检查和 retired-surface 搜索，确认主流程仍然可达。
+
 ### Element: Renderer Navigation Retirement
 
-**What**: 收窄主界面的可达页面，只保留日常、整理、格式处理、设置和消息中心。  
-**Where**: `src/renderer/src/App.tsx`。  
-**Wiring**: `ViewKey` 不再包含 `ai`、`bitable`、`dictionary`；`navItems` 不再生成 AI 识图、表格、库按钮；视图分发不再渲染 `AiWorkspace`、`BitableWorkspace`、`GameDictionaryWorkspace`。  
-**Affected code**: `src/renderer/src/App.tsx` imports、`ViewKey`、`navItems`、conditional render branch。  
-**Complexity**: Low。  
+**What**: 收窄主界面的可达页面，只保留日常、整理、格式处理、设置和消息中心。
+**Where**: `src/renderer/src/App.tsx`。
+**Wiring**: `ViewKey` 不再包含 `ai`、`bitable`、`dictionary`；`navItems` 不再生成 AI 识图、表格、库按钮；视图分发不再渲染 `AiWorkspace`、`BitableWorkspace`、`GameDictionaryWorkspace`。
+**Affected code**: `src/renderer/src/App.tsx` imports、`ViewKey`、`navItems`、conditional render branch。
+**Complexity**: Low。
 **Status**: Validated.
 
 #### Place: Main App Shell
@@ -64,11 +67,11 @@ Medium Batch（2-3 个会话）。
 
 ### Element: Settings And App State Cleanup
 
-**What**: 移除被砍功能的配置表面，并让 App state 不再加载、保存或传递相关设置。  
-**Where**: `src/renderer/src/views/SettingsWorkspace.tsx`, `src/renderer/src/appState.ts`, `src/renderer/src/App.tsx`。  
-**Wiring**: 设置页保留常规、账户、工作区、命名模板、快捷键、处理引擎、关于；移除截图控制/输出/贴图、AI 集成、数据看板；快捷键只保留唤醒/隐藏主面板；命名模板不再展示 AI 识别命名模板。`App` 不再持有 `apiKeys`、`dataStatsSettings`、`screenshotSettings` 状态，也不再读取/保存这些旧配置键。  
-**Affected code**: `SettingsWorkspace` props、autosave effect、tabs、template sections；`appState` 的 `ApiKeys`、`ScreenshotSettings`、`DataStatsSettings`、截图相关 shortcut/processing fields、`aiImage` template and AI tokens；`App` state and props。  
-**Complexity**: Medium。  
+**What**: 移除被砍功能的配置表面，并让 App state 不再加载、保存或传递相关设置。
+**Where**: `src/renderer/src/views/SettingsWorkspace.tsx`, `src/renderer/src/appState.ts`, `src/renderer/src/App.tsx`。
+**Wiring**: 设置页保留常规、账户、工作区、命名模板、快捷键、处理引擎、关于；移除截图控制/输出/贴图、AI 集成、数据看板；快捷键只保留唤醒/隐藏主面板；命名模板不再展示 AI 识别命名模板。`App` 不再持有 `apiKeys`、`dataStatsSettings`、`screenshotSettings` 状态，也不再读取/保存这些旧配置键。
+**Affected code**: `SettingsWorkspace` props、autosave effect、tabs、template sections；`appState` 的 `ApiKeys`、`ScreenshotSettings`、`DataStatsSettings`、截图相关 shortcut/processing fields、`aiImage` template and AI tokens；`App` state and props。
+**Complexity**: Medium。
 **Status**: Validated.
 
 #### Place: Settings Workspace
@@ -93,11 +96,11 @@ Medium Batch（2-3 个会话）。
 
 ### Element: Screenshot And Pin Runtime Retirement
 
-**What**: Remove screenshot, copy/save screenshot, pin image, screenshot dev menu, and related renderer entries from runtime.  
-**Where**: `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `electron.vite.config.ts`, screenshot/pin renderer files.  
-**Wiring**: Main process no longer imports `desktopCapturer`, `screen`, or `clipboard`; no longer creates screenshot/pin BrowserWindows; no longer registers `screenshot:*` or `pin:*` channels; tray menu keeps open and exit only; global shortcut registration is narrowed to `togglePanel`. Preload no longer exposes `screenshot` or `pin`; Vite no longer builds `screenshot.html` and `pin.html`; screenshot/pin entry HTML, entry TSX, view components, and `screenshotUtils.ts` can be deleted after imports are removed.  
-**Affected code**: `startScreenshot`, `closeScreenshot`, `createPinWindow`, `pinFromClipboard`, screenshot/pin IPC handlers, tray menu items, `shortcut:update`, rollup input, `src/renderer/screenshot.html`, `src/renderer/pin.html`, `src/renderer/src/screenshot.tsx`, `src/renderer/src/pin.tsx`, `src/renderer/src/views/ScreenshotApp.tsx`, `src/renderer/src/views/PinApp.tsx`, `src/renderer/src/screenshotUtils.ts`.  
-**Complexity**: Medium。  
+**What**: Remove screenshot, copy/save screenshot, pin image, screenshot dev menu, and related renderer entries from runtime.
+**Where**: `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `electron.vite.config.ts`, screenshot/pin renderer files.
+**Wiring**: Main process no longer imports `desktopCapturer`, `screen`, or `clipboard`; no longer creates screenshot/pin BrowserWindows; no longer registers `screenshot:*` or `pin:*` channels; tray menu keeps open and exit only; global shortcut registration is narrowed to `togglePanel`. Preload no longer exposes `screenshot` or `pin`; Vite no longer builds `screenshot.html` and `pin.html`; screenshot/pin entry HTML, entry TSX, view components, and `screenshotUtils.ts` can be deleted after imports are removed.
+**Affected code**: `startScreenshot`, `closeScreenshot`, `createPinWindow`, `pinFromClipboard`, screenshot/pin IPC handlers, tray menu items, `shortcut:update`, rollup input, `src/renderer/screenshot.html`, `src/renderer/pin.html`, `src/renderer/src/screenshot.tsx`, `src/renderer/src/pin.tsx`, `src/renderer/src/views/ScreenshotApp.tsx`, `src/renderer/src/views/PinApp.tsx`, `src/renderer/src/screenshotUtils.ts`.
+**Complexity**: Medium。
 **Status**: Validated.
 
 #### Place: Main Process Runtime
@@ -118,11 +121,11 @@ Medium Batch（2-3 个会话）。
 
 ### Element: Data Table And Library Storage Retirement
 
-**What**: Remove the side data table and library storage flows, including their write paths from organizer.  
-**Where**: `src/main/index.ts`, `src/main/utils/db.ts`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `src/renderer/src/views/BitableWorkspace.tsx`, `src/renderer/src/views/GameDictionaryWorkspace.tsx`, `src/renderer/src/views/OrganizerWorkspace.tsx`。  
-**Wiring**: Delete Bitable and GameDictionary workspaces after App no longer imports them. Remove Excel import IPC and cleanup handlers. Remove SQLite db handlers and db module import. Remove game image local-save handler. Remove organizer card action that calls `fs.saveImageToLocal` and `db.insertGameMapping`. Existing `productivity.db`, imported Excel backups, and `game_dictionary_images` remain on disk but no runtime path reads or writes them.  
-**Affected code**: `dialog:importExcel`, `db:*ImportedData`, `db:*ExcelFile`, `db:*GameMapping`, `fs:cleanupOldExcels`, `fs:saveImageToLocal`, `BitableWorkspace`, `GameDictionaryWorkspace`, organizer `BookPlus` action, `src/main/utils/db.ts`.  
-**Complexity**: Medium。  
+**What**: Remove the side data table and library storage flows, including their write paths from organizer.
+**Where**: `src/main/index.ts`, `src/main/utils/db.ts`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `src/renderer/src/views/BitableWorkspace.tsx`, `src/renderer/src/views/GameDictionaryWorkspace.tsx`, `src/renderer/src/views/OrganizerWorkspace.tsx`。
+**Wiring**: Delete Bitable and GameDictionary workspaces after App no longer imports them. Remove Excel import IPC and cleanup handlers. Remove SQLite db handlers and db module import. Remove game image local-save handler. Remove organizer card action that calls `fs.saveImageToLocal` and `db.insertGameMapping`. Existing `productivity.db`, imported Excel backups, and `game_dictionary_images` remain on disk but no runtime path reads or writes them.
+**Affected code**: `dialog:importExcel`, `db:*ImportedData`, `db:*ExcelFile`, `db:*GameMapping`, `fs:cleanupOldExcels`, `fs:saveImageToLocal`, `BitableWorkspace`, `GameDictionaryWorkspace`, organizer `BookPlus` action, `src/main/utils/db.ts`.
+**Complexity**: Medium。
 **Status**: Validated.
 
 #### Place: Organizer Workspace
@@ -143,11 +146,11 @@ Medium Batch（2-3 个会话）。
 
 ### Element: Dependency And Type Surface Pruning
 
-**What**: Remove packages and type declarations that only served retired modules.  
-**Where**: `package.json`, `package-lock.json`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `src/renderer/src/appState.ts`。  
-**Wiring**: After deleting module imports, run `rg` to confirm no references remain before pruning dependencies. Candidate removals are `@tanstack/react-table`, `recharts`, `konva`, `react-konva`, `use-image`, `xlsx`, `sqlite3`, `@types/sqlite3`, and `@google/genai` if still unused. Keep `pinyin-pro` because normal rename still uses producer abbreviation in `src/main/index.ts`. Keep image/video processing dependencies used by validation and format handling.  
-**Affected code**: package manifests, preload exposed API, ElectronAPI declarations, app state defaults.  
-**Complexity**: Low。  
+**What**: Remove packages and type declarations that only served retired modules.
+**Where**: `package.json`, `package-lock.json`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`, `src/renderer/src/appState.ts`。
+**Wiring**: After deleting module imports, run `rg` to confirm no references remain before pruning dependencies. Candidate removals are `@tanstack/react-table`, `recharts`, `konva`, `react-konva`, `use-image`, `xlsx`, `sqlite3`, `@types/sqlite3`, and `@google/genai` if still unused. Keep `pinyin-pro` because normal rename still uses producer abbreviation in `src/main/index.ts`. Keep image/video processing dependencies used by validation and format handling.
+**Affected code**: package manifests, preload exposed API, ElectronAPI declarations, app state defaults.
+**Complexity**: Low。
 **Status**: Validated.
 
 #### Place: Build And Type Boundary
@@ -164,20 +167,65 @@ Medium Batch（2-3 个会话）。
 | `rg` reference checks | Static search | verifies deleted surfaces are absent | cleanup confidence |
 | package manifest update | Dependency change | removes unused packages | lockfile and install graph |
 
+### Element: Core Workflow Safety Gates
+
+**What**: 给 build 阶段设置不可绕过的基础功能保护清单。
+**Where**: `src/renderer/src/App.tsx`, `src/renderer/src/views/DailyWorkspace.tsx`, `src/renderer/src/views/OrganizerWorkspace.tsx`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/src/types/electron.d.ts`。
+**Wiring**: Retained flows must keep their renderer props, preload methods, ElectronAPI types, and main IPC handlers aligned. Any deletion that touches shared imports or state must be checked against this retained list before continuing.
+**Affected code**: `dialog:openJson`, `dialog:selectFolder`, `fs:initFolders`, `fs:readProjectSizes`, `fs:startValidation`, `fs:trashFile`, `fs:executeRename`, `fs:scanOrganizerFolder`, `fs:executeOrganize`, `fs:undoOrganize`, `fs:processFormat`, `store:*`, `shell:openPath`, `window:*`, `shortcut:update` for main-panel toggle only.
+**Complexity**: Medium。
+**Status**: Validated.
+
+#### Place: Retained Core Workflow
+
+**UI Affordances:**
+| Affordance | Type | Wires Out | Returns To |
+|------------|------|-----------|------------|
+| 导入需求表 | Button | `dialog.openJson` | `projectsList`, `selectedSizes`, user info |
+| 创建目录 | Button | `fs.initFolders` | output directory notification |
+| 添加素材目录 | Button/drop | `dialog.selectFolder`, `fs.readProjectSizes` | `folderPaths`, `selectedSizes` |
+| 开始校验 | Button | `fs.startValidation` | `validationResults`, validation presentation |
+| 执行重命名 | Button | `fs.executeRename` | rename history and reset state |
+| 整理扫描/转移/撤销 | Buttons | organizer IPC handlers | organizer preview/results |
+| 格式处理 | Workspace | `fs.processFormat` | processed file results |
+
+**Code Affordances:**
+| Affordance | Type | Wires Out | Returns To |
+|------------|------|-----------|------------|
+| `DailyWorkspace` props | Component contract | receives app state callbacks | daily production UI |
+| retained preload APIs | Context bridge | invokes retained IPC channels | renderer-safe backend access |
+| retained ElectronAPI types | Type contract | mirrors preload methods | compile-time protection |
+| retained main IPC handlers | Main process API | filesystem/media/store operations | app workflow results |
+
 ## Fit Check (R × Solution)
 
-| | Renderer Navigation | Settings/App State | Screenshot/Pin Runtime | Data/Library Storage | Dependency/Type Pruning |
-|---|---|---|---|---|---|
-| R0: retire four tool lines | yes | yes | yes | yes | yes |
-| R1: keep daily core flow | yes | yes | yes | yes | yes |
-| R2: remove visible entries/settings | yes | yes | yes | yes |  |
-| R3: remove runtime shortcuts/windows/API |  | yes | yes | yes | yes |
-| R4: remove organizer library write path |  |  |  | yes | yes |
-| R5: preserve old user data |  | yes | yes | yes |  |
-| R6: clean types/defaults/deps |  | yes | yes | yes | yes |
-| R7: format processing and daily JSON are out | yes | yes | yes | yes | yes |
+| | Renderer Navigation | Settings/App State | Screenshot/Pin Runtime | Data/Library Storage | Dependency/Type Pruning | Core Safety Gates |
+|---|---|---|---|---|---|---|
+| R0: retire four tool lines | yes | yes | yes | yes | yes |  |
+| R1: keep daily core flow | yes | yes | yes | yes | yes | yes |
+| R2: remove visible entries/settings | yes | yes | yes | yes |  |  |
+| R3: remove runtime shortcuts/windows/API |  | yes | yes | yes | yes | yes |
+| R4: remove organizer library write path |  |  |  | yes | yes | yes |
+| R5: preserve old user data |  | yes | yes | yes |  | yes |
+| R6: clean types/defaults/deps |  | yes | yes | yes | yes | yes |
+| R7: format processing and daily JSON are out | yes | yes | yes | yes | yes | yes |
+| R8: protect basic functions with gates |  | yes | yes | yes | yes | yes |
 
 Every in-scope requirement has at least one covering element. No gaps.
+
+## Basic Function Protection Gates
+
+Build cannot be considered complete unless all of these remain true:
+
+- **Daily intake remains intact**: `dialog.openJson` still reads and normalizes requirement JSON; imported project names, sizes, quantities, producer, department, and email still populate the daily workspace.
+- **Folder workflow remains intact**: `fs.initFolders`, `dialog.selectFolder`, and `fs.readProjectSizes` still support creating folders and adding素材目录 to the daily workspace.
+- **Validation remains intact**: `fs.startValidation` still returns valid, mismatch, missing, error, and format error rows with required quantity fields preserved.
+- **Rename remains intact**: `fs.executeRename` still receives retained templates and can rename validated image/video files; regular, special, and manual template modes remain.
+- **Organizer remains intact except library write**: `fs.scanOrganizerFolder`, `fs.executeOrganize`, and `fs.undoOrganize` still work; only the “添加到游戏库” action is removed.
+- **Format processing remains intact**: `FormatProcessor` and `fs.processFormat` are retained.
+- **Settings remain usable**: retained settings still persist through `store.set` and reload through `store.getAll`; removed settings are ignored, not required for startup.
+- **No startup crash from old config**: existing old keys such as `apiKeys`, `screenshotSettings`, `dataStatsSettings`, `screenshotShortcut`, and `aiImage` templates may exist in config but must not crash app boot.
+- **No destructive cleanup**: old SQLite files, Excel backups, game dictionary images, and old config keys are not deleted in this build.
 
 ## Rabbit Holes
 
@@ -187,12 +235,14 @@ Every in-scope requirement has at least one covering element. No gaps.
 - **SQLite data removal risk**: Declare destructive cleanup out of bounds. The build should remove imports, handlers, and dependencies, but should not delete `productivity.db`, Excel backups, or `game_dictionary_images`.
 - **Organizer can still write library data**: Patch the hole by removing the card-level “add to game library” action and its API calls, while leaving scan/organize behavior intact.
 - **Dependency pruning can overreach**: Patch the hole by pruning only after static reference checks. `pinyin-pro`, `sharp`, `image-size`, ffmpeg packages, and Mantine/lucide stay because retained flows use them.
+- **Shared preload/type cleanup can break basic functions**: Patch the hole by editing preload, ElectronAPI types, and main IPC as one contract. A retained IPC method cannot be removed from one layer unless it is removed from all layers by an explicit no-go decision, which this package does not make.
 
 ## No-Gos
 
 - **No deletion of user data**: Do not remove existing SQLite files, Excel backups, stored config keys, or game dictionary images.
 - **No daily workflow regression**: Do not change `dialog:openJson`, requirement normalization, folder creation, validation, rename, trash, or organize IPC behavior except where the organizer library side action is removed.
 - **No removal of FormatProcessor**: Format processing is not one of the four requested cuts.
+- **No broad dependency cleanup without proof**: Do not remove a dependency just because it looks related to a retired feature; remove it only after `rg` confirms no retained code imports it.
 - **No new replacement feature**: Do not add an archive viewer, data migration panel, or experimental hidden tools page in this appetite.
 - **No top-right button relocation**: Do not move removed actions into the app's top-right corner; keep remaining controls in the existing left nav/settings structure.
 - **No old desktop work**: Ignore deprecated old desktop code paths outside the current Electron app.
@@ -238,7 +288,8 @@ Every in-scope requirement has at least one covering element. No gaps.
 - Run `rg` checks for retired surfaces: `AiWorkspace`, `BitableWorkspace`, `GameDictionaryWorkspace`, `screenshot:`, `pin:`, `dialog:importExcel`, `fs:saveImageToLocal`, `db:getGameMappings`, `db:getExcelFiles`, and `fs:renameAiBatch`.
 - Smoke the retained app shell: daily view opens, settings opens, organizer opens, format processing opens, and no retired nav items appear.
 - Smoke the retained main flow enough to cover IPC boundaries: open JSON, add folder, validate, and ensure rename button state still derives from validation presentation.
+- Use the Basic Function Protection Gates above as the final acceptance checklist before Shape Up build completion.
 
 ---
 
-## Status: Shaping
+## Status: Shipped — archived 2026-06-03

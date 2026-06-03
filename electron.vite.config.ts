@@ -17,9 +17,7 @@ const devCspPlugin = {
 export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
-    plugins: [
-      externalizeDepsPlugin({ exclude: ['xlsx'] }),
-    ],
+    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -42,8 +40,6 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
-          screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
-          pin: resolve(__dirname, 'src/renderer/pin.html'),
         },
       },
     },

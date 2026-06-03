@@ -15,11 +15,10 @@ import {
   Badge,
   Paper,
   ThemeIcon,
-  ActionIcon,
   Tooltip,
   useComputedColorScheme,
 } from '@mantine/core';
-import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
+import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
 import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
 import { isDarkColorScheme } from '../theme';
@@ -243,7 +242,7 @@ export function OrganizerWorkspace({
           h={102}
           style={{
             borderBottom: '1px solid var(--mantine-color-default-border)',
-            background: "var(--mantine-color-default)",
+            background: 'var(--mantine-color-default)',
           }}
         >
           <Stack gap="xs">
@@ -559,33 +558,6 @@ export function OrganizerWorkspace({
                               <Badge variant="outline" color="gray">{formatBytes(file.size)}</Badge>
                             </Group>
                           </Stack>
-
-                          {!isVideo && (
-                            <Tooltip label="提取为主图并添加到游戏库">
-                              <ActionIcon
-                                variant="light"
-                                color="pink"
-                                size="lg"
-                                style={{ flexShrink: 0, marginRight: 8 }}
-                                onClick={async () => {
-                                  try {
-                                    const localPath = await window.electronAPI.fs.saveImageToLocal({ sourcePath: file.filePath });
-                                    await window.electronAPI.db.insertGameMapping({
-                                      game_name: file.gameName,
-                                      image_path: localPath,
-                                      aliases: []
-                                    });
-                                    notify('green', '成功', `已将 ${file.gameName} 添加到游戏库`);
-                                  } catch (error) {
-                                    console.error(error);
-                                    notify('red', '失败', '添加到游戏库失败');
-                                  }
-                                }}
-                              >
-                                <BookPlus size={18} />
-                              </ActionIcon>
-                            </Tooltip>
-                          )}
 
                           <Box style={{ textAlign: 'right', flexShrink: 0 }}>
                             <Text size="xs" c="dimmed">将移至</Text>

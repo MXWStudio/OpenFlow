@@ -80,17 +80,10 @@ export interface WorkflowPreset {
   scanSubfolders: boolean
 }
 
-/** API Keys 配置 */
-export interface ApiKeys {
-  gemini: string
-  stableDiffusion: string
-}
-
 /** 全局 App 配置（存储在 electron-store 中） */
 export interface AppConfig {
   userInfo: UserInfo
   workflow: WorkflowPreset
-  apiKeys: ApiKeys
   language: 'zh' | 'en' | 'ja'
   theme: 'dark' | 'light'
   history: HistoryEntry[]
@@ -120,33 +113,14 @@ export interface ElectronAPI {
   dialog: {
     /** 打开系统文件选择框，仅限 .json 文件 */
     openJson: () => Promise<ParsedRequirementJson | null>
-    /** 打开系统文件选择框，导入 Excel 数据 */
-    importExcel: () => Promise<{ fileName: string; data: any[] } | null>
     /** 打开文件夹选择框 */
     selectFolder: () => Promise<string | null>
     /** 导出错误日志到用户指定的文件路径 */
     exportLogs: () => Promise<{ success: boolean; path?: string }>
   }
 
-  /** 数据库相关 (SQLite) */
-  db: {
-    getImportedData: (batchId?: string) => Promise<any[]>
-    insertImportedData: (batchId: string, rowData: any) => Promise<number>
-    updateImportedData: (id: number, rowData: any) => Promise<boolean>
-    deleteImportedData: (id: number) => Promise<boolean>
-    deleteBatch: (batchId: string) => Promise<boolean>
-    clearAllImportedData: () => Promise<boolean>
-    getGameMappings: () => Promise<any[]>
-    insertGameMapping: (mapping: any) => Promise<number>
-    updateGameMapping: (id: number, mapping: any) => Promise<boolean>
-    deleteGameMapping: (id: number) => Promise<boolean>
-  }
-
   /** 文件系统相关 */
   fs: {
-    /** 保存图片到本地存储用于游戏库 */
-    saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) => Promise<string>
-
     /**
      * 批量在选定目录下创建多项目文件夹结构（主进程内弹窗选择目标总目录）
      * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）
@@ -201,6 +175,9 @@ export interface ElectronAPI {
 
     /** 执行素材转移 */
     executeOrganize: (files: any[], destDir: string, isQimiEnabled?: boolean) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
+
+    /** 撤销上一次素材转移 */
+    undoOrganize: () => Promise<{ success: boolean; message?: string; error?: string }>
 
     /** 批量格式处理 */
     processFormat: (files: any[], config: any) => Promise<{ success: boolean; results: any[]; error?: string }>

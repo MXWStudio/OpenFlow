@@ -6,23 +6,13 @@ import {
   Box,
   Button,
   Card,
-  Checkbox,
-  Code,
   Drawer,
   Flex,
   Group,
   Indicator,
-  PasswordInput,
-  ScrollArea,
-  Select,
-  SimpleGrid,
   Stack,
-  Tabs,
   Text,
-  TextInput,
-  ThemeIcon,
   Title,
-  Tooltip,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -32,45 +22,26 @@ import * as dylan from '@dicebear/dylan';
 import {
   Bell,
   CalendarDays,
-  Cpu,
-  History,
   Plus,
-  Save,
   Search,
   Settings,
-  Shield,
-  Sparkles,
-  TableProperties,
-  Trash2,
-  User,
   Workflow,
   FolderSearch,
-  Library,
 } from 'lucide-react';
 import {
-  buildTemplatePreview,
   dedupeStrings,
-  DEFAULT_API_KEYS,
   DEFAULT_USER_INFO,
   DEFAULT_WORKFLOW,
   formatHistoryTime,
-  getDirFromFilePath,
   PRESET_SIZES,
-  TEMPLATE_LABELS,
-  TOKEN_OPTIONS,
   DEFAULT_SYSTEM,
   DEFAULT_WORKSPACE,
   DEFAULT_SHORTCUTS,
   DEFAULT_PROCESSING,
-  DEFAULT_DATA_STATS,
-  DEFAULT_SCREENSHOT,
-  type ApiKeys,
   type HistoryEntry,
   type NotificationHistoryEntry,
   type RequirementDetail,
   type RequirementProject,
-  type TemplateKey,
-  type TokenType,
   type UserInfo,
   type ValidationResult,
   type WorkflowSettings,
@@ -78,20 +49,15 @@ import {
   type WorkspaceSettings,
   type ShortcutSettings,
   type ProcessingSettings,
-  type DataStatsSettings,
-  type ScreenshotSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { buildValidationPresentation } from './validationPresentation';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
-import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
-import { AiWorkspace } from './views/AiWorkspace';
-import { GameDictionaryWorkspace } from './views/GameDictionaryWorkspace';
 import { isDarkColorScheme } from './theme';
 
-type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary' | 'settings';
+type ViewKey = 'daily' | 'organizer' | 'format' | 'settings';
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
@@ -120,13 +86,10 @@ export default function App() {
   const [isNotificationCenterOpened, setIsNotificationCenterOpened] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
-  const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
   const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
-  const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
-  const [screenshotSettings, setScreenshotSettings] = useState<ScreenshotSettings>(DEFAULT_SCREENSHOT);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
   const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
   const dragCounter = useRef(0);
@@ -209,11 +172,6 @@ export default function App() {
           setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
         }
       }
-      if (config.apiKeys && typeof config.apiKeys === 'object') {
-        const stored = config.apiKeys as Record<string, string>;
-        setApiKeys({ geminiKey: stored.geminiKey ?? '', sdPath: stored.sdPath ?? '' });
-      }
-
       // Load newly added state types
       if (config.systemSettings) {
         const sys = config.systemSettings as SystemSettings;
@@ -224,13 +182,7 @@ export default function App() {
       }
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
-      else if (config.screenshotShortcut) {
-        // Migration from old single shortcut state
-        setShortcutSettings(prev => ({ ...prev, screenshot: config.screenshotShortcut as string }));
-      }
       if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
-      if (config.dataStatsSettings) setDataStatsSettings(config.dataStatsSettings as DataStatsSettings);
-      if (config.screenshotSettings) setScreenshotSettings(config.screenshotSettings as ScreenshotSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
@@ -471,9 +423,6 @@ export default function App() {
     { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
     { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
-    { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
-    { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
-    { key: 'dictionary', label: '库', icon: <Library size={20} />, color: 'pink' },
   ];
 
   if (!isAppReady) {
@@ -711,8 +660,6 @@ export default function App() {
             setUserInfo={setUserInfo}
             workflowSettings={workflowSettings}
             setWorkflowSettings={setWorkflowSettings}
-            apiKeys={apiKeys}
-            setApiKeys={setApiKeys}
             systemSettings={systemSettings}
             setSystemSettings={setSystemSettings}
             workspaceSettings={workspaceSettings}
@@ -721,34 +668,12 @@ export default function App() {
             setShortcutSettings={setShortcutSettings}
             processingSettings={processingSettings}
             setProcessingSettings={setProcessingSettings}
-            dataStatsSettings={dataStatsSettings}
-            setDataStatsSettings={setDataStatsSettings}
-            screenshotSettings={screenshotSettings}
-            setScreenshotSettings={setScreenshotSettings}
             producerName={userInfo.name}
           />
-        ) : activeView === 'bitable' ? (
-          <BitableWorkspace />
         ) : activeView === 'format' ? (
           <FormatProcessor />
-        ) : activeView === 'ai' ? (
-          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={userInfo.name} />
-        ) : activeView === 'dictionary' ? (
-          <GameDictionaryWorkspace />
         ) : (
-          <Flex h="100%" align="center" justify="center" p={40}>
-            <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>
-              <Stack gap="sm">
-                <Badge color="teal" variant="light" w="fit-content">
-                  多维表格
-                </Badge>
-                <Title order={2}>表格版块</Title>
-                <Text c="dimmed">
-                  原来的后端功能已经全部放到“日常”版块。这里先保留为新界面占位区，后续按你的设计继续细化。
-                </Text>
-              </Stack>
-            </Card>
-          </Flex>
+          <FormatProcessor />
         )}
       </Box>
 
