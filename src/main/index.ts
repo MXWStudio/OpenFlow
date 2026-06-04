@@ -10,12 +10,7 @@ import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import sizeOf from 'image-size'
 import ffmpeg from 'fluent-ffmpeg'
-import ffmpegStatic from 'ffmpeg-static'
-// @ts-expect-error 无类型包
-import ffprobeStatic from 'ffprobe-static'
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
-import { pinyin } from 'pinyin-pro'
-import sharp from 'sharp'
+import { pinyin as toPinyin } from 'pinyin-pro'
 import {
   getMissingRequirements,
   normalizeResolution,
@@ -31,22 +26,94 @@ app.disableHardwareAcceleration()
 
 let tray: Tray | null = null
 
-// 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
-let ffmpegPath = ffmpegInstaller.path || (ffmpegStatic as string)
-if (ffmpegPath) {
-  if (ffmpegPath.includes('app.asar')) {
-    ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked')
+function normalizeError(error: unknown): string {
+  if (error instanceof Error) {
+    return [error.name, error.message, error.stack].filter(Boolean).join('\n')
   }
-  ffmpeg.setFfmpegPath(ffmpegPath)
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
 }
 
-// 设置 ffprobe 路径，确保视频尺寸可读；打包后需从 app.asar.unpacked 加载
-if (ffprobeStatic?.path) {
-  let ffprobePath = ffprobeStatic.path as string
-  if (ffprobePath.includes('app.asar')) {
-    ffprobePath = ffprobePath.replace('app.asar', 'app.asar.unpacked')
+function showFatalError(title: string, error: unknown): void {
+  const detail = normalizeError(error)
+  console.error(title, detail)
+  dialog.showErrorBox(title, detail || '未知错误')
+}
+
+function isAutoUpdaterError(error: unknown): boolean {
+  const detail = normalizeError(error)
+  return detail.includes('github.com/MXWStudio/OpenFlow/releases/download') ||
+    detail.includes('Cannot download') ||
+    detail.includes('Auto Updater')
+}
+
+process.on('uncaughtException', (error) => {
+  showFatalError('OpenFlow Studio 启动失败', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  if (isAutoUpdaterError(reason)) {
+    console.warn('Auto Updater Background Error:', normalizeError(reason))
+    return
   }
-  ffmpeg.setFfprobePath(ffprobePath)
+  showFatalError('OpenFlow Studio 异步任务失败', reason)
+})
+
+function requireOptional<T>(moduleName: string): T | null {
+  try {
+    return require(moduleName) as T
+  } catch (error) {
+    console.warn(`Optional dependency unavailable: ${moduleName}`, normalizeError(error))
+    return null
+  }
+}
+
+function requireRuntimeDependency<T>(moduleName: string): T {
+  const dependency = requireOptional<T>(moduleName)
+  if (!dependency) {
+    throw new Error(`缺少运行依赖 ${moduleName}。请重新安装当前系统架构对应的 OpenFlow Studio 安装包。`)
+  }
+  return dependency
+}
+
+function unpackedPath(binaryPath: string): string {
+  return binaryPath.includes('app.asar')
+    ? binaryPath.replace('app.asar', 'app.asar.unpacked')
+    : binaryPath
+}
+
+type SharpModule = typeof import('sharp')
+
+let sharpModule: SharpModule | null = null
+
+function getSharp(): SharpModule {
+  if (!sharpModule) {
+    sharpModule = requireRuntimeDependency<SharpModule>('sharp')
+  }
+  return sharpModule
+}
+
+let ffmpegPathsConfigured = false
+
+function configureFfmpegPaths(): void {
+  if (ffmpegPathsConfigured) return
+  ffmpegPathsConfigured = true
+
+  const installer = requireOptional<{ path?: string }>('@ffmpeg-installer/ffmpeg')
+  const staticPath = requireOptional<string>('ffmpeg-static')
+  const ffmpegPath = installer?.path || staticPath
+  if (typeof ffmpegPath === 'string' && ffmpegPath) {
+    ffmpeg.setFfmpegPath(unpackedPath(ffmpegPath))
+  }
+
+  const ffprobeStatic = requireOptional<{ path?: string }>('ffprobe-static')
+  if (ffprobeStatic?.path) {
+    ffmpeg.setFfprobePath(unpackedPath(ffprobeStatic.path))
+  }
 }
 
 // ─── 轻量级 JSON 配置存储 ────────────────────────────────
@@ -155,6 +222,7 @@ const VIDEO_EXTS = new Set(['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.we
 function getVideoInfo(
   filePath: string
 ): Promise<{ width: number; height: number; duration: number }> {
+  configureFfmpegPaths()
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) return reject(err)
@@ -301,8 +369,9 @@ async function getTogglePanelShortcut(): Promise<string> {
 // ─── 自动更新 ────────────────────────────────────────────
 
 function setupAutoUpdater() {
-  // Check for updates
-  autoUpdater.checkForUpdatesAndNotify()
+  autoUpdater.on('error', (err) => {
+    console.error('Auto Updater Error:', err)
+  })
 
   autoUpdater.on('update-downloaded', async () => {
     const result = await dialog.showMessageBox({
@@ -317,8 +386,8 @@ function setupAutoUpdater() {
     }
   })
 
-  autoUpdater.on('error', (err) => {
-    console.error('Auto Updater Error:', err)
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.error('Auto Updater Check Error:', err)
   })
 }
 
@@ -396,6 +465,8 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+}).catch((error) => {
+  showFatalError('OpenFlow Studio 启动失败', error)
 })
 
 app.on('will-quit', () => {
@@ -566,6 +637,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
       let outFilePath = join(outDir, outFileName)
 
       if (isImage) {
+        const sharp = getSharp()
         let pipeline = sharp(file.filePath)
 
         // 1. Resize
@@ -593,6 +665,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
         existingFiles.add(outFileName)
         results.push({ id: file.id, success: true, targetPath: outFilePath })
       } else if (isVideo) {
+        configureFfmpegPaths()
         await new Promise((resolve, reject) => {
           let cmd = ffmpeg(file.filePath)
 
@@ -605,8 +678,8 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
           }
 
           if (config.quality) {
-            // ffmpeg video quality can be tricky. Using CRF (Constant Rate Factor) for typical formats
-            // mapping 1-100 to crf 51-0 (approximate). Lower CRF is better quality.
+            // ffmpeg video quality can be tricky. Using CRF (Constant Rate Factor) for typical formats.
+            // Convert 1-100 to crf 51-0 (approximate). Lower CRF is better quality.
             const crf = Math.floor(51 - (config.quality / 100) * 51)
             cmd = cmd.outputOptions([`-crf ${crf}`])
           }
@@ -1010,7 +1083,7 @@ ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, pr
   // 2. 静默处理 5 个特殊固定文件夹
   // 规则：[父文件夹名称(即游戏名)][当前固定文件夹名]-[制作人缩写]-([序号]).[扩展名]
   const producerAbbr = producer
-    ? pinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+    ? toPinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
     : ''
 
   for (const root of projectRoots) {

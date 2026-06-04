@@ -4,13 +4,12 @@ import {
   Badge,
   Box,
   Card,
+  Checkbox,
   Code,
   Divider,
   Flex,
   Group,
-  Radio,
   Select,
-  Slider,
   Stack,
   Switch,
   Tabs,
@@ -20,7 +19,6 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import {
-  Cpu,
   FolderSearch,
   HardDrive,
   Info,
@@ -39,7 +37,6 @@ import {
   DEFAULT_WORKFLOW,
   TEMPLATE_LABELS,
   TOKEN_OPTIONS,
-  type ProcessingSettings,
   type ShortcutSettings,
   type SystemSettings,
   type TemplateKey,
@@ -60,14 +57,20 @@ interface SettingsWorkspaceProps {
   setWorkspaceSettings: React.Dispatch<React.SetStateAction<WorkspaceSettings>>;
   shortcutSettings: ShortcutSettings;
   setShortcutSettings: React.Dispatch<React.SetStateAction<ShortcutSettings>>;
-  processingSettings: ProcessingSettings;
-  setProcessingSettings: React.Dispatch<React.SetStateAction<ProcessingSettings>>;
   producerName: string;
 }
 
 const templateSections: Array<{ title: string; keys: TemplateKey[] }> = [
   { title: '视频版块', keys: ['videoRegular', 'videoSpecial', 'videoManual'] },
   { title: '图片版块', keys: ['imageRegular', 'imageSpecial', 'imageManual'] },
+];
+
+const organizerFormatOptions = [
+  { label: 'JPG', value: 'jpg' },
+  { label: 'PNG', value: 'png' },
+  { label: 'WebP', value: 'webp' },
+  { label: 'MP4', value: 'mp4' },
+  { label: 'MOV', value: 'mov' },
 ];
 
 export function SettingsWorkspace({
@@ -81,8 +84,6 @@ export function SettingsWorkspace({
   setWorkspaceSettings,
   shortcutSettings,
   setShortcutSettings,
-  processingSettings,
-  setProcessingSettings,
   producerName,
 }: SettingsWorkspaceProps) {
   const { setColorScheme } = useMantineColorScheme();
@@ -127,10 +128,8 @@ export function SettingsWorkspace({
       await window.electronAPI.store.set('systemSettings', systemSettings);
       await window.electronAPI.store.set('workspaceSettings', workspaceSettings);
       await window.electronAPI.store.set('shortcutSettings', shortcutSettings);
-      await window.electronAPI.store.set('processingSettings', processingSettings);
 
       await window.electronAPI.store.set('renameTemplates', workflowSettings.renameTemplates);
-      await window.electronAPI.store.set('defaultOutputDir', workflowSettings.defaultOutputDir);
 
       if (window.electronAPI.ipcRenderer) {
         window.electronAPI.ipcRenderer.invoke('settings:applySystem', systemSettings);
@@ -152,7 +151,6 @@ export function SettingsWorkspace({
     systemSettings,
     workspaceSettings,
     shortcutSettings,
-    processingSettings,
   ]);
 
   const selectFolder = async (setter: (value: string) => void) => {
@@ -257,7 +255,6 @@ export function SettingsWorkspace({
 
             <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>高级设定</Text>
             <Tabs.Tab value="shortcuts" leftSection={<Keyboard size={18} />}>快捷键</Tabs.Tab>
-            <Tabs.Tab value="processing" leftSection={<Cpu size={18} />}>处理引擎</Tabs.Tab>
 
             <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>其他</Text>
             <Tabs.Tab value="about" leftSection={<Info size={18} />}>关于</Tabs.Tab>
@@ -288,23 +285,6 @@ export function SettingsWorkspace({
                         ]}
                       />
                     </Group>
-                    <Divider />
-                    <Group justify="space-between">
-                      <Box>
-                        <Text fw={500}>界面语言</Text>
-                        <Text size="sm" c="dimmed">切换软件的显示语言</Text>
-                      </Box>
-                      <Select
-                        w={150}
-                        value={systemSettings.language}
-                        onChange={(value) => setSystemSettings((prev) => ({ ...prev, language: (value || 'zh') as SystemSettings['language'] }))}
-                        data={[
-                          { label: '简体中文', value: 'zh' },
-                          { label: 'English', value: 'en' },
-                          { label: '日本語', value: 'ja' },
-                        ]}
-                      />
-                    </Group>
                   </Stack>
                 </Card>
               </Box>
@@ -332,17 +312,6 @@ export function SettingsWorkspace({
                       <Switch
                         checked={systemSettings.closeToTray}
                         onChange={(event) => setSystemSettings((prev) => ({ ...prev, closeToTray: event.currentTarget.checked }))}
-                      />
-                    </Group>
-                    <Divider />
-                    <Group justify="space-between">
-                      <Box>
-                        <Text fw={500}>自动检查更新</Text>
-                        <Text size="sm" c="dimmed">在后台自动静默下载新版本</Text>
-                      </Box>
-                      <Switch
-                        checked={systemSettings.autoUpdate}
-                        onChange={(event) => setSystemSettings((prev) => ({ ...prev, autoUpdate: event.currentTarget.checked }))}
                       />
                     </Group>
                   </Stack>
@@ -411,20 +380,20 @@ export function SettingsWorkspace({
               </Box>
 
               <Box>
-                <Title order={4} mb="lg">文件规则</Title>
+                <Title order={4} mb="lg">整理规则</Title>
                 <Card withBorder radius="md" p="lg">
-                  <Radio.Group
-                    name="duplicateAction"
-                    label="遇到同名文件的处理方式"
-                    value={workspaceSettings.duplicateAction}
-                    onChange={(value) => setWorkspaceSettings((prev) => ({ ...prev, duplicateAction: value as WorkspaceSettings['duplicateAction'] }))}
+                  <Checkbox.Group
+                    label="素材整理支持格式"
+                    description="一键扫描时只识别勾选的文件格式"
+                    value={workflowSettings.organizerFormats}
+                    onChange={(value) => setWorkflowSettings((prev) => ({ ...prev, organizerFormats: value }))}
                   >
-                    <Stack mt="xs">
-                      <Radio value="rename" label="自动重命名" />
-                      <Radio value="overwrite" label="直接覆盖" />
-                      <Radio value="skip" label="跳过" />
-                    </Stack>
-                  </Radio.Group>
+                    <Group mt="sm">
+                      {organizerFormatOptions.map((option) => (
+                        <Checkbox key={option.value} value={option.value} label={option.label} />
+                      ))}
+                    </Group>
+                  </Checkbox.Group>
                 </Card>
               </Box>
             </Stack>
@@ -527,66 +496,6 @@ export function SettingsWorkspace({
                     onChange={(event) => handleShortcutChange('togglePanel', event.currentTarget.value)}
                     error={shortcutConflicts.togglePanel ? '快捷键已被其他软件占用，请更换' : null}
                   />
-                </Card>
-              </Box>
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="processing" pt="md">
-            <Stack gap="xl" maw={700}>
-              <Box>
-                <Title order={4} mb="lg">图片引擎</Title>
-                <Card withBorder radius="md" p="lg">
-                  <Stack gap="md">
-                    <Select
-                      label="默认输出格式"
-                      value={processingSettings.imageFormat}
-                      onChange={(value) => setProcessingSettings((prev) => ({ ...prev, imageFormat: (value || 'original') as ProcessingSettings['imageFormat'] }))}
-                      data={[
-                        { label: '保留原格式', value: 'original' },
-                        { label: '统一转 WebP', value: 'webp' },
-                      ]}
-                    />
-                    <Box>
-                      <Text size="sm" fw={500} mb={4}>默认压缩质量 ({processingSettings.imageQuality}%)</Text>
-                      <Slider
-                        value={processingSettings.imageQuality}
-                        onChange={(value) => setProcessingSettings((prev) => ({ ...prev, imageQuality: value }))}
-                        min={10}
-                        max={100}
-                        step={1}
-                        marks={[
-                          { value: 50, label: '50%' },
-                          { value: 80, label: '80%' },
-                          { value: 100, label: '100%' },
-                        ]}
-                        mb="xl"
-                      />
-                    </Box>
-                  </Stack>
-                </Card>
-              </Box>
-
-              <Box>
-                <Title order={4} mb="lg">视频引擎</Title>
-                <Card withBorder radius="md" p="lg">
-                  <Stack gap="md">
-                    <Select
-                      label="默认导出压缩比"
-                      value={processingSettings.videoCompressRate}
-                      onChange={(value) => setProcessingSettings((prev) => ({ ...prev, videoCompressRate: (value || 'medium') as ProcessingSettings['videoCompressRate'] }))}
-                      data={[
-                        { label: '高画质', value: 'high' },
-                        { label: '中等画质', value: 'medium' },
-                        { label: '低画质', value: 'low' },
-                      ]}
-                    />
-                    <Switch
-                      label="是否剔除音轨"
-                      checked={processingSettings.videoRemoveAudio}
-                      onChange={(event) => setProcessingSettings((prev) => ({ ...prev, videoRemoveAudio: event.currentTarget.checked }))}
-                    />
-                  </Stack>
                 </Card>
               </Box>
             </Stack>

@@ -37,7 +37,6 @@ import {
   DEFAULT_SYSTEM,
   DEFAULT_WORKSPACE,
   DEFAULT_SHORTCUTS,
-  DEFAULT_PROCESSING,
   type HistoryEntry,
   type NotificationHistoryEntry,
   type RequirementDetail,
@@ -48,7 +47,6 @@ import {
   type SystemSettings,
   type WorkspaceSettings,
   type ShortcutSettings,
-  type ProcessingSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { buildValidationPresentation } from './validationPresentation';
@@ -89,7 +87,6 @@ export default function App() {
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
-  const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
   const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
   const dragCounter = useRef(0);
@@ -151,7 +148,7 @@ export default function App() {
     window.electronAPI.store.getAll().then((config) => {
       if (!config) return;
       if (config.userInfo && typeof config.userInfo === 'object') {
-        const stored = config.userInfo as Record<string, string>;
+        const stored = config.userInfo as Partial<UserInfo>;
         const next = { name: stored.name ?? '', department: stored.department ?? '', email: stored.email ?? '' };
         setUserInfo(next);
       }
@@ -168,11 +165,7 @@ export default function App() {
         if (config.renameTemplates) {
           setWorkflowSettings((prev) => ({ ...prev, renameTemplates: config.renameTemplates as WorkflowSettings['renameTemplates'] }));
         }
-        if (typeof config.defaultOutputDir === 'string') {
-          setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
-        }
       }
-      // Load newly added state types
       if (config.systemSettings) {
         const sys = config.systemSettings as SystemSettings;
         setSystemSettings(sys);
@@ -182,7 +175,6 @@ export default function App() {
       }
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
-      if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
@@ -386,7 +378,8 @@ export default function App() {
           const sep = p.includes('\\') ? '\\' : '/';
           return p.substring(p.lastIndexOf(sep) + 1);
         }).join(', ');
-        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
+        const historyStatus: HistoryEntry['status'] = failed.length === 0 ? 'success' : 'warning';
+        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: historyStatus, timestamp: Date.now() }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
         setLastRenamedPaths([...folderPaths]);
@@ -459,7 +452,7 @@ export default function App() {
                 height: 6,
                 transform: 'translateX(-50%)',
                 borderRadius: 999,
-                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-pink-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
+                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-red-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
               }}
             />
           </Box>
@@ -666,8 +659,6 @@ export default function App() {
             setWorkspaceSettings={setWorkspaceSettings}
             shortcutSettings={shortcutSettings}
             setShortcutSettings={setShortcutSettings}
-            processingSettings={processingSettings}
-            setProcessingSettings={setProcessingSettings}
             producerName={userInfo.name}
           />
         ) : activeView === 'format' ? (
@@ -698,7 +689,7 @@ export default function App() {
                   mt={6}
                   style={{
                     borderRadius: 999,
-                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : ['red', 'pink'].includes(item.color) ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
+                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : item.color === 'red' ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
                     flexShrink: 0
                   }}
                 />

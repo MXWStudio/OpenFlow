@@ -2,7 +2,7 @@ import React from 'react';
 import { notifications } from '@mantine/notifications';
 import { Box } from '@mantine/core';
 
-export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'teal' | 'grape' | 'pink' | 'yellow', title: string, message?: React.ReactNode, autoClose: number | boolean = 3000) {
+export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'teal' | 'grape' | 'yellow', title: string, message?: React.ReactNode, autoClose: number | boolean = 3000) {
   const id = Date.now().toString() + Math.random().toString();
 
   // Dispatch custom event to save notification history globally
@@ -24,7 +24,6 @@ export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'te
       case 'teal':
         return '#34d399';
       case 'red':
-      case 'pink':
         return '#f87171';
       case 'orange':
       case 'yellow':

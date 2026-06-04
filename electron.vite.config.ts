@@ -1,6 +1,5 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 const devCspPlugin = {
@@ -30,7 +29,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
   },
 
-  // ── 渲染进程配置（React + Tailwind v4） ─────────────────
+  // ── 渲染进程配置（React）────────────────────────────────
   renderer: {
     root: 'src/renderer',
     server: {
@@ -46,7 +45,6 @@ export default defineConfig({
     plugins: [
       devCspPlugin,
       react(),
-      tailwindcss(), // Tailwind v4 Vite 插件
     ],
     resolve: {
       alias: {

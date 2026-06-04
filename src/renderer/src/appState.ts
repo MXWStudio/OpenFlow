@@ -1,4 +1,4 @@
-import { pinyin } from 'pinyin-pro';
+import { pinyin as toPinyin } from 'pinyin-pro';
 import { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime } from './utils';
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
@@ -21,10 +21,7 @@ export interface TemplateToken {
 }
 
 export interface WorkflowSettings {
-  defaultOutputDir: string;
   renameTemplates: Record<TemplateKey, TemplateToken[]>;
-  organizerSourceDir: string;
-  organizerDestDir: string;
   organizerFormats: string[];
 }
 
@@ -44,27 +41,17 @@ export interface NotificationHistoryEntry {
 
 export interface SystemSettings {
   theme: 'light' | 'dark' | 'auto';
-  language: 'zh' | 'en' | 'ja';
   autoStart: boolean;
   closeToTray: boolean;
-  autoUpdate: boolean;
 }
 
 export interface WorkspaceSettings {
   sourceDir: string;
   destDir: string;
-  duplicateAction: 'rename' | 'overwrite' | 'skip';
 }
 
 export interface ShortcutSettings {
   togglePanel: string;
-}
-
-export interface ProcessingSettings {
-  imageFormat: 'original' | 'webp';
-  imageQuality: number;
-  videoCompressRate: 'high' | 'medium' | 'low';
-  videoRemoveAudio: boolean;
 }
 
 export interface HistoryEntry {
@@ -151,29 +138,17 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
 export const DEFAULT_SYSTEM: SystemSettings = {
   theme: 'auto',
-  language: 'zh',
   autoStart: false,
   closeToTray: true,
-  autoUpdate: true,
 };
 export const DEFAULT_WORKSPACE: WorkspaceSettings = {
   sourceDir: '',
   destDir: '',
-  duplicateAction: 'rename',
 };
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   togglePanel: 'CommandOrControl+Shift+Space',
 };
-export const DEFAULT_PROCESSING: ProcessingSettings = {
-  imageFormat: 'original',
-  imageQuality: 80,
-  videoCompressRate: 'medium',
-  videoRemoveAudio: false,
-};
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
-  defaultOutputDir: '',
-  organizerSourceDir: '',
-  organizerDestDir: '',
   organizerFormats: ['jpg', 'mp4'],
   renameTemplates: {
     videoRegular: [
@@ -231,7 +206,7 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
 
 export function buildTemplatePreview(template: TemplateToken[], producerName: string): string {
   const producerAbbr = producerName
-    ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+    ? toPinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
     : '';
 
   const sampleValues: Record<TokenType, string> = {

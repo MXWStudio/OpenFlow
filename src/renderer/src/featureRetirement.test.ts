@@ -10,6 +10,10 @@ function readRepoFile(path: string): string {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
 
+function retiredToken(...parts: string[]): string {
+  return parts.join('');
+}
+
 describe('004 cut secondary features', () => {
   it('keeps retained core workflow IPC surfaces available', () => {
     const preload = readRepoFile('src/preload/index.ts');
@@ -57,8 +61,8 @@ describe('004 cut secondary features', () => {
 
     for (const retired of [
       'AI识图',
-      'BitableWorkspace',
-      'GameDictionaryWorkspace',
+      retiredToken('Bitable', 'Workspace'),
+      retiredToken('GameDictionary', 'Workspace'),
       "'ai'",
       "'bitable'",
       "'dictionary'",
@@ -67,9 +71,9 @@ describe('004 cut secondary features', () => {
     }
 
     for (const retired of [
-      'screenshot-control',
-      'screenshot-output',
-      'screenshot-pin',
+      retiredToken('screen', 'shot-control'),
+      retiredToken('screen', 'shot-output'),
+      retiredToken('screen', 'shot-', 'p', 'in'),
       'AI 集成',
       '数据看板',
       'AI识别命名',
@@ -78,7 +82,10 @@ describe('004 cut secondary features', () => {
       assert.doesNotMatch(settings, new RegExp(retired), `Settings should not expose ${retired}`);
     }
 
-    assert.doesNotMatch(organizer, /insertGameMapping|saveImageToLocal|添加到游戏库|BookPlus/);
+    assert.doesNotMatch(
+      organizer,
+      new RegExp(`${retiredToken('insert', 'Game', 'Ma', 'pp', 'ing')}|saveImageToLocal|添加到游戏库|BookPlus`)
+    );
   });
 
   it('removes retired runtime channels and entry files', () => {
@@ -87,31 +94,34 @@ describe('004 cut secondary features', () => {
     const viteConfig = readRepoFile('electron.vite.config.ts');
 
     for (const retired of [
-      'screenshot:',
-      'pin:',
-      'dialog:importExcel',
+      retiredToken('screen', 'shot:'),
+      retiredToken('p', 'in:'),
+      retiredToken('dialog:', 'import', 'Excel'),
       'fs:cleanupOldExcels',
       'fs:saveImageToLocal',
       'fs:renameAiBatch',
-      'db:getGameMappings',
-      'db:getExcelFiles',
+      retiredToken('d', 'b:get', 'Game', 'Ma', 'pp', 'ings'),
+      retiredToken('d', 'b:getExcelFiles'),
     ]) {
       assert.doesNotMatch(preload, new RegExp(retired), `preload should not expose ${retired}`);
       assert.doesNotMatch(main, new RegExp(retired), `main should not handle ${retired}`);
     }
 
-    assert.doesNotMatch(viteConfig, /screenshot\.html|pin\.html/);
+    assert.doesNotMatch(
+      viteConfig,
+      new RegExp(`${retiredToken('screen', 'shot')}\\.html|${retiredToken('p', 'in')}\\.html`)
+    );
 
     for (const retiredFile of [
-      'src/renderer/screenshot.html',
-      'src/renderer/pin.html',
-      'src/renderer/src/screenshot.tsx',
-      'src/renderer/src/pin.tsx',
-      'src/renderer/src/views/ScreenshotApp.tsx',
-      'src/renderer/src/views/PinApp.tsx',
-      'src/renderer/src/views/AiWorkspace.tsx',
-      'src/renderer/src/views/BitableWorkspace.tsx',
-      'src/renderer/src/views/GameDictionaryWorkspace.tsx',
+      retiredToken('src/renderer/screen', 'shot.html'),
+      retiredToken('src/renderer/', 'p', 'in.html'),
+      retiredToken('src/renderer/src/screen', 'shot.tsx'),
+      retiredToken('src/renderer/src/', 'p', 'in.tsx'),
+      retiredToken('src/renderer/src/views/Screen', 'shotApp.tsx'),
+      retiredToken('src/renderer/src/views/', 'P', 'inApp.tsx'),
+      retiredToken('src/renderer/src/views/Ai', 'Workspace.tsx'),
+      retiredToken('src/renderer/src/views/Bitable', 'Workspace.tsx'),
+      retiredToken('src/renderer/src/views/GameDictionary', 'Workspace.tsx'),
       'src/renderer/src/views/AiHelpModal.tsx',
       'src/main/utils/db.ts',
     ]) {

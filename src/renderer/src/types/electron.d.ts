@@ -4,12 +4,13 @@
  */
 
 /** 校验结果状态 */
-export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error'
+export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
 
 /** 单个文件的校验结果 */
 export interface ValidationResult {
   fileName: string
   filePath: string
+  folderName: string
   ext: string
   fileSize: number
   actualWidth: number
@@ -57,12 +58,20 @@ export interface RequirementProject {
 
 /** 历史记录条目 */
 export interface HistoryEntry {
-  id: string
-  type: 'renamed' | 'validated' | 'imported'
-  projectName: string
-  fileCount: number
+  id: number
+  project: string
+  count: number
+  status: 'success' | 'warning' | 'error'
   timestamp: number
-  details?: string
+}
+
+/** 消息中心条目 */
+export interface NotificationHistoryEntry {
+  id: string
+  color: string
+  title: string
+  message?: string
+  timestamp: number
 }
 
 /** 用户账户信息 */
@@ -75,18 +84,40 @@ export interface UserInfo {
 
 /** 工作流预设配置 */
 export interface WorkflowPreset {
-  defaultOutputPath: string
-  renameTemplate: string
-  scanSubfolders: boolean
+  renameTemplates: Record<string, Array<{ type: string; value?: string }>>
+  organizerFormats: string[]
 }
 
-/** 全局 App 配置（存储在 electron-store 中） */
+/** 系统设置 */
+export interface SystemSettings {
+  theme: 'dark' | 'light' | 'auto'
+  autoStart: boolean
+  closeToTray: boolean
+}
+
+/** 素材整理路径设置 */
+export interface WorkspaceSettings {
+  sourceDir: string
+  destDir: string
+}
+
+/** 快捷键设置 */
+export interface ShortcutSettings {
+  togglePanel: string
+}
+
+/** 全局 App 配置（存储在本地 JSON 配置中） */
 export interface AppConfig {
   userInfo: UserInfo
   workflow: WorkflowPreset
-  language: 'zh' | 'en' | 'ja'
-  theme: 'dark' | 'light'
+  systemSettings: SystemSettings
+  workspaceSettings: WorkspaceSettings
+  shortcutSettings: ShortcutSettings
   history: HistoryEntry[]
+  notificationHistory: NotificationHistoryEntry[]
+  dailyLayoutLeft: string[]
+  dailyLayoutRight: string[]
+  renameTemplates?: WorkflowPreset['renameTemplates']
 }
 
 /** 解析的 JSON 需求文件结果 */
@@ -190,7 +221,7 @@ export interface ElectronAPI {
     /** 设置指定 key 的配置值 */
     set: (key: string, value: unknown) => Promise<void>
     /** 获取所有配置 */
-    getAll: () => Promise<Partial<AppConfig>>
+    getAll: () => Promise<Partial<AppConfig> & Record<string, unknown>>
     /** 删除指定配置项 */
     delete: (key: string) => Promise<void>
   }
@@ -205,6 +236,14 @@ export interface ElectronAPI {
   /** Shell 调用系统能力 */
   shell: {
     openPath: (path: string) => Promise<string>
+  }
+
+  /** 受限 IPC 桥接，用于当前设置页调用少量主进程通道 */
+  ipcRenderer: {
+    invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
+    send: (channel: string, ...args: unknown[]) => void
+    on: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => void
+    removeListener: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => void
   }
 }
 
