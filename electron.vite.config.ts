@@ -1,6 +1,5 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 const devCspPlugin = {
@@ -17,9 +16,7 @@ const devCspPlugin = {
 export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
-    plugins: [
-      externalizeDepsPlugin({ exclude: ['xlsx'] }),
-    ],
+    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -32,7 +29,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
   },
 
-  // ── 渲染进程配置（React + Tailwind v4） ─────────────────
+  // ── 渲染进程配置（React）────────────────────────────────
   renderer: {
     root: 'src/renderer',
     server: {
@@ -42,15 +39,12 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
-          screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
-          pin: resolve(__dirname, 'src/renderer/pin.html'),
         },
       },
     },
     plugins: [
       devCspPlugin,
       react(),
-      tailwindcss(), // Tailwind v4 Vite 插件
     ],
     resolve: {
       alias: {

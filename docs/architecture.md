@@ -95,3 +95,38 @@ This document records architectural patterns and constraints as shipped features
 
 - The shipped scope covers the global sidebar and organizer first screen, not every low-frequency page with custom colors.
 - Some fixed body/global CSS may still exist outside the full-height app shell; future visual frames should handle those only if they become visible product issues.
+
+## Secondary Tool Retirement (2026-06-03)
+
+### Patterns Introduced
+
+- **Runtime retirement over UI hiding**: Retired tools are removed from renderer routes, settings, preload APIs, main IPC handlers, tray/shortcut paths, Vite entries, and package dependencies instead of being hidden behind dead UI.
+- **Preserve data, remove access paths**: Old retired-feature data stays on disk while the current app stops reading and writing those runtime paths.
+- **Deletion contract tests**: `src/renderer/src/featureRetirement.test.ts` guards both retained core workflow IPC/preload surfaces and absence of retired feature surfaces.
+
+### Data Model Changes
+
+- **App state defaults**: Removed current-state defaults and types for AI keys, screenshot settings, data stats settings, AI image template tokens, screenshot-specific shortcuts, and screenshot-specific processing fields.
+- **Retired storage models**: Removed runtime use of SQLite-backed imported data, Excel files, and game mappings. Existing on-disk files are intentionally left in place.
+
+### API Changes
+
+- **Renderer routes**: App navigation now exposes daily, organizer, format processing, settings, and message center only.
+- **Preload API**: Removed `screenshot`, `pin`, `db`, `dialog.importExcel`, `fs.saveImageToLocal`, and `fs.cleanupOldExcels` surfaces.
+- **Main IPC**: Removed screenshot/pin IPC, Excel/table IPC, AI image rename IPC, game mapping IPC, game image save IPC, and retired tray/shortcut behavior.
+- **Build entries**: Removed screenshot and pin renderer entry points from Electron/Vite build input.
+- **Dependencies**: Removed retired-only AI SDK, table/charting, screenshot canvas, SQLite, and Excel parsing packages.
+
+### Conventions Established
+
+- Feature retirement must clean all owned runtime boundaries, not only visible navigation.
+- Old user data is not deleted during scope-reduction work unless a separate frame explicitly shapes an opt-in cleanup or export.
+- Before pruning dependencies, run static reference checks and keep only dependencies used by retained flows.
+- Retained daily, organizer, format, store, shell, and window IPC contracts must remain aligned across main, preload, and ElectronAPI types.
+- Do not move removed actions into top-right controls; keep remaining controls in established left-nav and settings patterns.
+
+### Known Limitations
+
+- Old SQLite files, Excel backups, game library images, and retired config keys may remain in user data directories without an in-app viewer.
+- `featureRetirement.test.ts` proves contract presence/absence, not full runtime success of every retained workflow.
+- `src/main/index.ts` remains a broad main-process module even after retired IPC removal; future work can modularize retained handlers by domain.

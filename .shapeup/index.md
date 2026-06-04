@@ -2,12 +2,6 @@
 
 **Generated**: 2026-06-03
 
-## In Progress — Shaping
-
-### 004: cut-secondary-features
-- Frame: `004-cut-secondary-features-framing/frame.md`
-- Package: `004-cut-secondary-features-framing/package.md`
-
 ## Completed — Shipped
 
 ### 001: core-workflow
@@ -18,3 +12,6 @@
 
 ### 003: dark-theme-alignment
 - Decisions: `003-dark-theme-alignment-shipped/decisions.md`
+
+### 004: cut-secondary-features
+- Decisions: `004-cut-secondary-features-shipped/decisions.md`

@@ -182,7 +182,7 @@ export function FormatProcessor() {
     setIsProcessing(true);
 
     // Check if user has chosen a custom format
-    // But what if it's processing a video and keeping original format?
+    // But what if it's processing a video and retaining original format?
     // Wait, the main issue is the `files` array missing properties or properties getting lost.
 
     // reset status

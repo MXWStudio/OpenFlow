@@ -1,9 +1,9 @@
-import { pinyin } from 'pinyin-pro';
+import { pinyin as toPinyin } from 'pinyin-pro';
 import { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime } from './utils';
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
 
-export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial' | 'aiImage' | 'videoManual' | 'imageManual';
+export type TemplateKey = 'videoRegular' | 'videoSpecial' | 'imageRegular' | 'imageSpecial' | 'videoManual' | 'imageManual';
 export type TokenType =
   | 'ProjectName'
   | 'CleanProjectName'
@@ -13,9 +13,7 @@ export type TokenType =
   | 'AspectRatio'
   | 'Sequence'
   | 'OriginalName'
-  | 'CustomText'
-  | 'AiElement'
-  | 'AiCategory';
+  | 'CustomText';
 
 export interface TemplateToken {
   type: TokenType;
@@ -23,31 +21,14 @@ export interface TemplateToken {
 }
 
 export interface WorkflowSettings {
-  defaultOutputDir: string;
   renameTemplates: Record<TemplateKey, TemplateToken[]>;
-  organizerSourceDir: string;
-  organizerDestDir: string;
   organizerFormats: string[];
-  screenshotShortcut: string;
 }
 
 export interface UserInfo {
   name: string;
   department: string;
   email: string;
-}
-
-export interface AiIntegrationSettings {
-  apiBaseUrl: string;
-  apiKey: string;
-  modelName: string;
-  systemPrompt: string;
-}
-
-export interface ApiKeys {
-  geminiKey: string;
-  sdPath: string;
-  aiIntegration?: AiIntegrationSettings;
 }
 
 export interface NotificationHistoryEntry {
@@ -58,77 +39,19 @@ export interface NotificationHistoryEntry {
   timestamp: number;
 }
 
-interface SystemSettings {
+export interface SystemSettings {
   theme: 'light' | 'dark' | 'auto';
-  language: 'zh' | 'en' | 'ja';
   autoStart: boolean;
   closeToTray: boolean;
-  autoUpdate: boolean;
 }
 
 export interface WorkspaceSettings {
   sourceDir: string;
   destDir: string;
-  duplicateAction: 'rename' | 'overwrite' | 'skip';
 }
 
 export interface ShortcutSettings {
   togglePanel: string;
-  screenshot: string;
-  screenshotAndCopy: string;
-  customScreenshot: string;
-  pinImage: string;
-  hideShowAllPins: string;
-  switchPinGroup: string;
-}
-
-
-export interface ScreenshotSettings {
-  // Output
-  imageQuality: number;
-  manualSaveName: string;
-  manualSaveRememberExtension: boolean;
-  quickSaveNotify: boolean;
-  quickSavePath: string;
-  autoSaveEnabled: boolean;
-  autoSavePath: string;
-  // Pin
-  pinShadow: boolean;
-  pinOpacity: number;
-  pinMaxWidth: number;
-  pinThumbWidth: number;
-  pinThumbHeight: number;
-}
-
-export const DEFAULT_SCREENSHOT: ScreenshotSettings = {
-  imageQuality: -1,
-  manualSaveName: '$yyyy-MM-dd$.png',
-  manualSaveRememberExtension: true,
-  quickSaveNotify: true,
-  quickSavePath: '~/Desktop/$yyyy-MM-dd$.png',
-  autoSaveEnabled: true,
-  autoSavePath: '~/Pictures/$yyyy-MM-dd$.png',
-  pinShadow: true,
-  pinOpacity: 100,
-  pinMaxWidth: 12000,
-  pinThumbWidth: 50,
-  pinThumbHeight: 50,
-};
-
-export interface ProcessingSettings {
-  imageFormat: 'original' | 'webp';
-  imageQuality: number;
-  videoCompressRate: 'high' | 'medium' | 'low';
-  videoRemoveAudio: boolean;
-  screenshotDir: string;
-  screenshotShadow: boolean;
-  screenshotRounded: boolean;
-}
-
-export interface DataStatsSettings {
-  dataDir: string;
-  includeWeekend: boolean;
-  reportFormat: 'excel' | 'csv' | 'pdf';
 }
 
 export interface HistoryEntry {
@@ -153,15 +76,6 @@ export interface RequirementProject {
   fullName?: string;
   producerName?: string;
   materialType?: string;
-}
-
-export interface GameMapping {
-  id?: number;
-  game_name: string;
-  image_path: string;
-  aliases: string[];
-  created_at?: string;
-  updated_at?: string;
 }
 
 export interface ValidationResult {
@@ -210,8 +124,6 @@ export const TOKEN_OPTIONS: Array<{ value: TokenType; label: string }> = [
   { value: 'Sequence', label: '序号' },
   { value: 'OriginalName', label: '原文件名' },
   { value: 'CustomText', label: '自定义文本' },
-  { value: 'AiElement', label: '画面元素(AI)' },
-  { value: 'AiCategory', label: '游戏品类(AI)' },
 ];
 
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
@@ -221,61 +133,23 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   imageRegular: '常规图片',
   imageManual: '手搓图片',
   imageSpecial: '特殊版块',
-  aiImage: 'AI识别命名',
 };
 
 export const DEFAULT_USER_INFO: UserInfo = { name: '', department: '', email: '' };
-export const DEFAULT_API_KEYS: ApiKeys = {
-  geminiKey: '',
-  sdPath: '',
-  aiIntegration: {
-    apiBaseUrl: '',
-    apiKey: '',
-    modelName: '',
-    systemPrompt: '请识别图片，提取“画面元素”和“游戏品类”，并严格按照“画面元素-游戏品类”的格式返回，不要包含其他任何文本。例如：橡皮人-射击',
-  }
-};
 export const DEFAULT_SYSTEM: SystemSettings = {
   theme: 'auto',
-  language: 'zh',
   autoStart: false,
   closeToTray: true,
-  autoUpdate: true,
 };
 export const DEFAULT_WORKSPACE: WorkspaceSettings = {
   sourceDir: '',
   destDir: '',
-  duplicateAction: 'rename',
 };
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   togglePanel: 'CommandOrControl+Shift+Space',
-  screenshot: 'CommandOrControl+1',
-  screenshotAndCopy: 'CommandOrControl+2',
-  customScreenshot: 'Shift+F1',
-  pinImage: 'CommandOrControl+3',
-  hideShowAllPins: 'Shift+F3',
-  switchPinGroup: 'CommandOrControl+F3',
-};
-export const DEFAULT_PROCESSING: ProcessingSettings = {
-  imageFormat: 'original',
-  imageQuality: 80,
-  videoCompressRate: 'medium',
-  videoRemoveAudio: false,
-  screenshotDir: '',
-  screenshotShadow: true,
-  screenshotRounded: true,
-};
-export const DEFAULT_DATA_STATS: DataStatsSettings = {
-  dataDir: '',
-  includeWeekend: false,
-  reportFormat: 'excel',
 };
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
-  defaultOutputDir: '',
-  organizerSourceDir: '',
-  organizerDestDir: '',
   organizerFormats: ['jpg', 'mp4'],
-  screenshotShortcut: 'CommandOrControl+Shift+A',
   renameTemplates: {
     videoRegular: [
       { type: 'CustomText', value: 'RSQM' },
@@ -326,19 +200,13 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
       { type: 'Producer' },
       { type: 'Sequence' },
     ],
-    aiImage: [
-      { type: 'AiElement' },
-      { type: 'AiCategory' },
-      { type: 'AspectRatio' },
-      { type: 'Producer' },
-    ],
   },
 };
 
 
 export function buildTemplatePreview(template: TemplateToken[], producerName: string): string {
   const producerAbbr = producerName
-    ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
+    ? toPinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
     : '';
 
   const sampleValues: Record<TokenType, string> = {
@@ -351,8 +219,6 @@ export function buildTemplatePreview(template: TemplateToken[], producerName: st
     Sequence: '(1)',
     OriginalName: '原文件名',
     CustomText: '',
-    AiElement: '橡皮人',
-    AiCategory: '射击',
   };
 
   return template

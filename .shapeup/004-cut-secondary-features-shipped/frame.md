@@ -3,7 +3,7 @@
 **Record ID**: 004  
 **Feature ID**: 004-cut-secondary-features  
 **Created**: 2026-06-02  
-**Status**: Frame Go — approved 2026-06-02
+**Status**: Shipped — archived 2026-06-03
 
 ---
 
@@ -103,4 +103,4 @@ Medium Batch（2-3 个会话）。
 
 ---
 
-## Status: Frame Go — approved 2026-06-02
+## Status: Shipped — archived 2026-06-03

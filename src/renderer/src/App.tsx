@@ -6,23 +6,13 @@ import {
   Box,
   Button,
   Card,
-  Checkbox,
-  Code,
   Drawer,
   Flex,
   Group,
   Indicator,
-  PasswordInput,
-  ScrollArea,
-  Select,
-  SimpleGrid,
   Stack,
-  Tabs,
   Text,
-  TextInput,
-  ThemeIcon,
   Title,
-  Tooltip,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -32,66 +22,40 @@ import * as dylan from '@dicebear/dylan';
 import {
   Bell,
   CalendarDays,
-  Cpu,
-  History,
   Plus,
-  Save,
   Search,
   Settings,
-  Shield,
-  Sparkles,
-  TableProperties,
-  Trash2,
-  User,
   Workflow,
   FolderSearch,
-  Library,
 } from 'lucide-react';
 import {
-  buildTemplatePreview,
   dedupeStrings,
-  DEFAULT_API_KEYS,
   DEFAULT_USER_INFO,
   DEFAULT_WORKFLOW,
   formatHistoryTime,
-  getDirFromFilePath,
   PRESET_SIZES,
-  TEMPLATE_LABELS,
-  TOKEN_OPTIONS,
   DEFAULT_SYSTEM,
   DEFAULT_WORKSPACE,
   DEFAULT_SHORTCUTS,
-  DEFAULT_PROCESSING,
-  DEFAULT_DATA_STATS,
-  DEFAULT_SCREENSHOT,
-  type ApiKeys,
   type HistoryEntry,
   type NotificationHistoryEntry,
   type RequirementDetail,
   type RequirementProject,
-  type TemplateKey,
-  type TokenType,
   type UserInfo,
   type ValidationResult,
   type WorkflowSettings,
   type SystemSettings,
   type WorkspaceSettings,
   type ShortcutSettings,
-  type ProcessingSettings,
-  type DataStatsSettings,
-  type ScreenshotSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { buildValidationPresentation } from './validationPresentation';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
-import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
-import { AiWorkspace } from './views/AiWorkspace';
-import { GameDictionaryWorkspace } from './views/GameDictionaryWorkspace';
 import { isDarkColorScheme } from './theme';
 
-type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary' | 'settings';
+type ViewKey = 'daily' | 'organizer' | 'format' | 'settings';
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
@@ -120,13 +84,9 @@ export default function App() {
   const [isNotificationCenterOpened, setIsNotificationCenterOpened] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
-  const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
-  const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
-  const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
-  const [screenshotSettings, setScreenshotSettings] = useState<ScreenshotSettings>(DEFAULT_SCREENSHOT);
   const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
   const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
   const dragCounter = useRef(0);
@@ -188,7 +148,7 @@ export default function App() {
     window.electronAPI.store.getAll().then((config) => {
       if (!config) return;
       if (config.userInfo && typeof config.userInfo === 'object') {
-        const stored = config.userInfo as Record<string, string>;
+        const stored = config.userInfo as Partial<UserInfo>;
         const next = { name: stored.name ?? '', department: stored.department ?? '', email: stored.email ?? '' };
         setUserInfo(next);
       }
@@ -205,16 +165,7 @@ export default function App() {
         if (config.renameTemplates) {
           setWorkflowSettings((prev) => ({ ...prev, renameTemplates: config.renameTemplates as WorkflowSettings['renameTemplates'] }));
         }
-        if (typeof config.defaultOutputDir === 'string') {
-          setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
-        }
       }
-      if (config.apiKeys && typeof config.apiKeys === 'object') {
-        const stored = config.apiKeys as Record<string, string>;
-        setApiKeys({ geminiKey: stored.geminiKey ?? '', sdPath: stored.sdPath ?? '' });
-      }
-
-      // Load newly added state types
       if (config.systemSettings) {
         const sys = config.systemSettings as SystemSettings;
         setSystemSettings(sys);
@@ -224,13 +175,6 @@ export default function App() {
       }
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
-      else if (config.screenshotShortcut) {
-        // Migration from old single shortcut state
-        setShortcutSettings(prev => ({ ...prev, screenshot: config.screenshotShortcut as string }));
-      }
-      if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
-      if (config.dataStatsSettings) setDataStatsSettings(config.dataStatsSettings as DataStatsSettings);
-      if (config.screenshotSettings) setScreenshotSettings(config.screenshotSettings as ScreenshotSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
@@ -434,7 +378,8 @@ export default function App() {
           const sep = p.includes('\\') ? '\\' : '/';
           return p.substring(p.lastIndexOf(sep) + 1);
         }).join(', ');
-        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
+        const historyStatus: HistoryEntry['status'] = failed.length === 0 ? 'success' : 'warning';
+        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: historyStatus, timestamp: Date.now() }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
         setLastRenamedPaths([...folderPaths]);
@@ -471,9 +416,6 @@ export default function App() {
     { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
     { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
-    { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
-    { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
-    { key: 'dictionary', label: '库', icon: <Library size={20} />, color: 'pink' },
   ];
 
   if (!isAppReady) {
@@ -510,7 +452,7 @@ export default function App() {
                 height: 6,
                 transform: 'translateX(-50%)',
                 borderRadius: 999,
-                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-pink-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
+                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-red-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
               }}
             />
           </Box>
@@ -711,44 +653,18 @@ export default function App() {
             setUserInfo={setUserInfo}
             workflowSettings={workflowSettings}
             setWorkflowSettings={setWorkflowSettings}
-            apiKeys={apiKeys}
-            setApiKeys={setApiKeys}
             systemSettings={systemSettings}
             setSystemSettings={setSystemSettings}
             workspaceSettings={workspaceSettings}
             setWorkspaceSettings={setWorkspaceSettings}
             shortcutSettings={shortcutSettings}
             setShortcutSettings={setShortcutSettings}
-            processingSettings={processingSettings}
-            setProcessingSettings={setProcessingSettings}
-            dataStatsSettings={dataStatsSettings}
-            setDataStatsSettings={setDataStatsSettings}
-            screenshotSettings={screenshotSettings}
-            setScreenshotSettings={setScreenshotSettings}
             producerName={userInfo.name}
           />
-        ) : activeView === 'bitable' ? (
-          <BitableWorkspace />
         ) : activeView === 'format' ? (
           <FormatProcessor />
-        ) : activeView === 'ai' ? (
-          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={userInfo.name} />
-        ) : activeView === 'dictionary' ? (
-          <GameDictionaryWorkspace />
         ) : (
-          <Flex h="100%" align="center" justify="center" p={40}>
-            <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>
-              <Stack gap="sm">
-                <Badge color="teal" variant="light" w="fit-content">
-                  多维表格
-                </Badge>
-                <Title order={2}>表格版块</Title>
-                <Text c="dimmed">
-                  原来的后端功能已经全部放到“日常”版块。这里先保留为新界面占位区，后续按你的设计继续细化。
-                </Text>
-              </Stack>
-            </Card>
-          </Flex>
+          <FormatProcessor />
         )}
       </Box>
 
@@ -773,7 +689,7 @@ export default function App() {
                   mt={6}
                   style={{
                     borderRadius: 999,
-                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : ['red', 'pink'].includes(item.color) ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
+                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : item.color === 'red' ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
                     flexShrink: 0
                   }}
                 />
