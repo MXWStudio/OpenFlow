@@ -61,7 +61,23 @@ export const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-export function getImportedData(batchId?: string): Promise<any[]> {
+export interface DbImportedDataRow {
+  id: number;
+  batch_id: string;
+  row_data: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportedData {
+  id: number;
+  batch_id: string;
+  row_data: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getImportedData(batchId?: string): Promise<ImportedData[]> {
   return new Promise((resolve, reject) => {
     let sql = `SELECT * FROM imported_data`;
     const params: any[] = [];
@@ -76,10 +92,13 @@ export function getImportedData(batchId?: string): Promise<any[]> {
         reject(err);
       } else {
         resolve(
-          rows.map((row: any) => ({
-            ...row,
-            row_data: JSON.parse(row.row_data),
-          }))
+          rows.map((row: unknown) => {
+            const r = row as DbImportedDataRow;
+            return {
+              ...r,
+              row_data: JSON.parse(r.row_data),
+            };
+          })
         );
       }
     });
