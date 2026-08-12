@@ -1,0 +1,944 @@
+// popup.js
+let extractedBulkData = [];
+let extractionMetadata = {};
+const EXTRACTED_BULK_DATA_STORAGE_KEY = 'extractedBulkData';
+const EXTRACTED_BULK_META_STORAGE_KEY = 'extractedBulkDataMeta';
+const DEADLINE_FILTER_STORAGE_KEY = 'deadlineFilter';
+
+const KNOWN_CHANNELS = new Set(["华为", "穿山甲", "广点通", "快手", "腾讯", "抖音", "头条", "oppo", "vivo", "小米", "百度", "b站", "微信", "朋友圈", "优量汇", "巨量", "巨量引擎", "苹果", "ios", "安卓", "android"]);
+const COMMON_TAGS = new Set(["手动", "自动", "竖版", "横版", "测试", "常规", "首发", "图文", "视频", "平面", "自投", "代投"]);
+const SPECIAL_STYLE_HEADERS = new Set(["原创", "尺寸延展", "视频总产出", "原创视频"]);
+
+/**
+ * 助手函数：拆分项目名称，提取游戏名，灵活过滤冗余信息
+ */
+function splitProjectName(fullName, company, channel) {
+    if (!fullName) return { gameName: "未知项目", fullName: "未知项目" };
+    const parts = fullName.split('-');
+    if (parts.length <= 1) return { gameName: fullName, fullName: fullName };
+    if (parts.length === 2) return { gameName: parts[1].trim(), fullName: fullName };
+
+    let candidates = parts.slice(1).filter(p => {
+        const pt = p.trim();
+        const ptl = pt.toLowerCase();
+        if (channel && ptl === channel.toLowerCase()) return false;
+        if (company && ptl === company.toLowerCase()) return false;
+        if (company && ptl.includes(company.toLowerCase())) return false;
+        if (KNOWN_CHANNELS.has(ptl)) return false;
+        if (COMMON_TAGS.has(ptl)) return false;
+        if (/^\d{4}$/.test(pt) || /^\d{6}$/.test(pt) || /^\d{8}$/.test(pt)) return false;
+        return true;
+    });
+
+    if (candidates.length > 0) {
+        // 返回最长的那一段作为游戏名
+        candidates.sort((a, b) => b.trim().length - a.trim().length);
+        return { gameName: candidates[0].trim(), fullName: fullName };
+    }
+
+    return { gameName: parts[1].trim(), fullName: fullName };
+}
+
+/**
+ * 助手函数：格式化日期
+ * @param {Date} date
+ * @param {string} format 'YYYY/MM/DD' 或 'YYYYMMDD'
+ */
+function formatDate(date, format) {
+    if (format === 'YYYY/MM/DD') {
+        return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/');
+    }
+    if (format === 'YYYYMMDD') {
+        return date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
+    }
+    return '';
+}
+
+const SETTINGS_STORAGE_KEY = 'smartAdSettings';
+
+const DEFAULT_GRAPHIC_HEADERS = "日期,制作者,项目名称,公司主体,集团,需求方,网易标识,业务分类,广告策略,素材用途,投放渠道,素材类型,原创,尺寸延展";
+const DEFAULT_VIDEO_HEADERS = "日期,制作人,项目名称,公司名称,集团,设计小组,需求归属,需求属性,渠道,素材类型,工具标签,视频总产出,原创视频,尺寸延展";
+
+function getStoredExtractedBulkData() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(EXTRACTED_BULK_DATA_STORAGE_KEY, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve(result[EXTRACTED_BULK_DATA_STORAGE_KEY]);
+        });
+    });
+}
+
+function getStoredExtractedBulkMeta() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(EXTRACTED_BULK_META_STORAGE_KEY, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve(result[EXTRACTED_BULK_META_STORAGE_KEY] || {});
+        });
+    });
+}
+
+function saveExtractedBulkData(dataList, metadata = {}) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({
+            [EXTRACTED_BULK_DATA_STORAGE_KEY]: dataList,
+            [EXTRACTED_BULK_META_STORAGE_KEY]: metadata
+        }, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve();
+        });
+    });
+}
+
+function getStoredDeadlineFilter() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(DEADLINE_FILTER_STORAGE_KEY, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve(result[DEADLINE_FILTER_STORAGE_KEY] || '');
+        });
+    });
+}
+
+function saveDeadlineFilter(deadline) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({ [DEADLINE_FILTER_STORAGE_KEY]: deadline }, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+
+            resolve();
+        });
+    });
+}
+
+function escapeHtmlText(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function sanitizePathSegment(value, fallback = '未命名') {
+    let text = String(value ?? '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/[<>:"/\\|?*]+/g, '_')
+        .replace(/\s+/g, ' ')
+        .replace(/_+/g, '_')
+        .trim()
+        .replace(/^[. ]+|[. ]+$/g, '');
+
+    if (!text) text = fallback;
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(text)) {
+        text = `${text}_`;
+    }
+    return text;
+}
+
+function normalizeResolution(value) {
+    const match = String(value ?? '').trim().match(/(\d+)\s*[*xX×-]\s*(\d+)/);
+    return match ? `${match[1]}*${match[2]}` : '';
+}
+
+function parseRequiredQuantity(value) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value);
+    const match = String(value ?? '').match(/\d+/);
+    if (!match) return undefined;
+    const parsed = parseInt(match[0], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function buildExtractionWarnings(dataList) {
+    const warnings = [];
+    if (!Array.isArray(dataList) || dataList.length === 0) {
+        return ['未提取到任何任务'];
+    }
+
+    dataList.forEach((task, index) => {
+        const projectName = task.projectName || task['项目名称'] || `第 ${index + 1} 个任务`;
+        const details = Array.isArray(task.details) ? task.details : [];
+        if (details.length === 0) {
+            warnings.push(`${projectName} 缺少尺寸要求`);
+            return;
+        }
+        const missingResolution = details.filter(detail => !normalizeResolution(detail.resolution || detail['分辨率'])).length;
+        const missingQuantity = details.filter(detail => parseRequiredQuantity(detail.requiredQuantity ?? detail['所需数量']) == null).length;
+        if (missingResolution > 0) warnings.push(`${projectName} 有 ${missingResolution} 条尺寸无法识别`);
+        if (missingQuantity > 0) warnings.push(`${projectName} 有 ${missingQuantity} 条尺寸缺少数量`);
+    });
+
+    return warnings;
+}
+
+function formatMetadataTime(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+async function ensureContentScriptInjected(tabId) {
+    try {
+        const [probe] = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => Boolean(window.__OPENFLOW_CONTENT_READY__)
+        });
+        if (probe?.result) return;
+    } catch (err) {
+        console.warn('检查 content.js 注入状态失败，将尝试重新注入:', err);
+    }
+
+    await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+    });
+}
+
+function setExtractButtonPrimaryState() {
+    const btn = document.getElementById('extractBtn');
+    btn.disabled = false;
+    btn.className = 'btn btn-primary';
+    btn.innerHTML = '<span>📥</span> 按截止日期提取任务';
+}
+
+function setExtractButtonSecondaryState() {
+    const btn = document.getElementById('extractBtn');
+    btn.disabled = false;
+    btn.className = 'btn btn-secondary';
+    btn.innerHTML = '<span>🔄</span> 按截止日期重新提取';
+}
+
+function setExtractButtonLoadingState() {
+    const btn = document.getElementById('extractBtn');
+    btn.disabled = true;
+    btn.className = 'btn btn-primary';
+    btn.innerHTML = '<span>⏳</span> 提取中...';
+}
+
+function hidePreviewSections() {
+    document.getElementById('statusArea').style.display = 'none';
+    document.getElementById('listWrapper').style.display = 'none';
+    document.getElementById('exportActions').style.display = 'none';
+}
+
+async function restoreExtractedBulkData() {
+    try {
+        const cachedData = await getStoredExtractedBulkData();
+        const cachedMeta = await getStoredExtractedBulkMeta();
+        if (Array.isArray(cachedData) && cachedData.length > 0) {
+            extractedBulkData = cachedData;
+            extractionMetadata = cachedMeta || {};
+            renderPreview(extractedBulkData, { metadata: extractionMetadata, isCached: true });
+        }
+    } catch (err) {
+        console.error('恢复提取缓存失败:', err);
+    }
+}
+
+async function restoreDeadlineFilter() {
+    try {
+        const deadline = await getStoredDeadlineFilter();
+        if (deadline) document.getElementById('deadlineInput').value = deadline;
+    } catch (err) {
+        console.error('恢复截止日期失败:', err);
+    }
+}
+
+async function loadSettings() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(SETTINGS_STORAGE_KEY, (result) => {
+            const settings = result[SETTINGS_STORAGE_KEY] || {};
+            document.getElementById('graphicHeadersInput').value = settings.graphicHeaders || DEFAULT_GRAPHIC_HEADERS;
+            document.getElementById('videoHeadersInput').value = settings.videoHeaders || DEFAULT_VIDEO_HEADERS;
+            resolve(settings);
+        });
+    });
+}
+
+function saveSettings() {
+    const graphicHeaders = document.getElementById('graphicHeadersInput').value.trim();
+    const videoHeaders = document.getElementById('videoHeadersInput').value.trim();
+    const settings = {
+        graphicHeaders: graphicHeaders || DEFAULT_GRAPHIC_HEADERS,
+        videoHeaders: videoHeaders || DEFAULT_VIDEO_HEADERS
+    };
+    chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: settings }, () => {
+        alert("设置已保存！");
+        document.getElementById('settingsPanel').style.display = 'none';
+    });
+}
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+    const panel = document.getElementById('settingsPanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'flex';
+    } else {
+        panel.style.display = 'none';
+    }
+});
+
+document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+
+// 主题切换逻辑
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+themeToggleBtn.addEventListener('click', () => {
+    const isDark = document.body.classList.toggle('dark-theme');
+    themeToggleBtn.textContent = isDark ? '🌙' : '☀️';
+    chrome.storage.local.set({ isDarkTheme: isDark });
+});
+
+function loadTheme() {
+    chrome.storage.local.get('isDarkTheme', (result) => {
+        if (result.isDarkTheme) {
+            document.body.classList.add('dark-theme');
+            themeToggleBtn.textContent = '🌙';
+        } else {
+            themeToggleBtn.textContent = '☀️';
+        }
+    });
+}
+
+setExtractButtonPrimaryState();
+hidePreviewSections();
+void restoreExtractedBulkData();
+void restoreDeadlineFilter();
+void loadSettings();
+void loadTheme();
+
+document.getElementById('extractBtn').addEventListener('click', async () => {
+    const deadline = document.getElementById('deadlineInput').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+        alert("请先指定要抓取的截止日期。");
+        return;
+    }
+
+    // 1. 按钮防抖与提示交互
+    setExtractButtonLoadingState();
+
+    try {
+        await saveDeadlineFilter(deadline);
+
+        // 获取当前活动标签页
+        let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        // 注入 content.js (如果尚未注入)
+        await ensureContentScriptInjected(tab.id);
+
+        // 2. 发送批量抓取指令
+        // 给一点点延迟确保 content.js 加载完毕
+        setTimeout(() => {
+            chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_BULK_DOM", deadline }, async (response) => {
+                // 恢复按钮状态
+                setExtractButtonPrimaryState();
+
+                if (chrome.runtime.lastError) {
+                    alert("无法连接到页面脚本，请刷新页面后重试。\n错误信息: " + chrome.runtime.lastError.message);
+                    return;
+                }
+
+                if (response && response.success) {
+                    extractedBulkData = Array.isArray(response.data) ? response.data : [];
+                    extractionMetadata = {
+                        sourceUrl: response.sourceUrl || tab.url || '',
+                        extractedAt: response.extractedAt || new Date().toISOString(),
+                        warnings: response.warnings || buildExtractionWarnings(extractedBulkData),
+                        deadline: response.deadline || deadline,
+                        matchedCount: response.matchedCount ?? extractedBulkData.length
+                    };
+
+                    try {
+                        await saveExtractedBulkData(extractedBulkData, extractionMetadata);
+                    } catch (err) {
+                        console.error('保存提取缓存失败:', err);
+                        alert("保存提取数据失败：" + err.message);
+                    }
+                    if (extractedBulkData.length === 0) {
+                        hidePreviewSections();
+                        alert(`当前已加载的任务中没有截止日期为 ${deadline} 的项目。`);
+                    } else {
+                        renderPreview(extractedBulkData, { metadata: extractionMetadata });
+                    }
+                } else {
+                    alert("提取失败！\n" + (response?.error || '未知错误'));
+                }
+            });
+        }, 150);
+
+    } catch (err) {
+        setExtractButtonPrimaryState();
+        alert("执行脚本发生错误：" + err.message);
+    }
+});
+
+/**
+ * 渲染预览界面
+ */
+function renderPreview(dataList, options = {}) {
+    let graphicCount = 0;
+    let videoCount = 0;
+    let wdzCount = 0; // 温典战数量统计
+    let victorCount = 0; // 维克多数量统计
+
+    dataList.forEach(task => {
+        const materialType = task.materialType || task["素材类型"] || "";
+        if (materialType.includes("平面")) {
+            graphicCount += 1;
+        }
+        if (materialType.includes("视频")) {
+            videoCount += 1;
+        }
+
+        const orderer = task["下单人"] || "";
+        if (orderer.includes("温典战")) {
+            wdzCount += 1;
+        }
+        if (orderer.includes("维克多")) {
+            victorCount += 1;
+        }
+    });
+
+    let statusHtml =
+        '<span class="badge badge-success">✅ 共 ' + dataList.length + ' 个</span>' +
+        '<span class="badge badge-blue">平面: ' + graphicCount + '</span>' +
+        '<span class="badge badge-purple">视频: ' + videoCount + '</span>';
+
+    if (options.metadata?.deadline) {
+        statusHtml += '<span class="badge badge-blue">截止日期: ' + escapeHtmlText(options.metadata.deadline) + '</span>';
+    }
+
+    if (wdzCount > 0) {
+        statusHtml += '<div class="badge badge-red">特殊需求-AI批量制作-温典战 (' + wdzCount + '个)</div>';
+    }
+    if (victorCount > 0) {
+        statusHtml += '<div class="badge badge-red">特殊需求-AI批量制作-维克多（ 整图直接用AI生成，注意！生成注意标题的美观、突出主体、色彩饱和度 ） (' + victorCount + '个)</div>';
+    }
+
+    const warnings = options.metadata?.warnings || buildExtractionWarnings(dataList);
+    const extractedAtText = formatMetadataTime(options.metadata?.extractedAt);
+    if (options.isCached) {
+        statusHtml += '<span class="badge badge-blue">上次提取' + (extractedAtText ? ': ' + escapeHtmlText(extractedAtText) : '') + '</span>';
+    }
+    if (warnings.length > 0) {
+        statusHtml += '<div class="badge badge-red">' + escapeHtmlText(warnings.slice(0, 3).join('；')) + '</div>';
+    }
+
+    document.getElementById('statusArea').innerHTML = statusHtml;
+    document.getElementById('statusArea').style.display = 'flex';
+    document.getElementById('listWrapper').style.display = 'block';
+    document.getElementById('exportActions').style.display = 'flex';
+    setExtractButtonSecondaryState();
+
+    const ul = document.getElementById('taskList');
+    ul.innerHTML = '';
+
+    dataList.forEach(task => {
+        const projectName = task.projectName || task["项目名称"] || '未知项目';
+        const detailsCount = task.details ? task.details.length : 0;
+        const requiredSets = task.requiredSets || task["所需套数"] || task["素材数"] || '';
+        const metaParts = [`${detailsCount} 个尺寸`];
+        const safeProjectName = escapeHtmlText(projectName);
+        const orderer = task["下单人"] || "";
+
+        if (requiredSets) {
+            metaParts.push(`数量 ${requiredSets}`);
+        }
+        if (task.deadline || task['截止日期']) {
+            metaParts.push(`截止 ${task.deadline || task['截止日期']}`);
+        }
+        if (task.status) {
+            metaParts.push(task.status);
+        }
+
+        let taskNameHtml = safeProjectName;
+        if (orderer.includes("温典战")) {
+            taskNameHtml += '<span class="badge-small-red">温典战</span>';
+        }
+        if (orderer.includes("维克多")) {
+            taskNameHtml += '<span class="badge-small-red">维克多</span>';
+        }
+
+        let li = document.createElement('li');
+        li.className = 'task-item';
+        li.innerHTML =
+            '<span class="task-name" title="' + safeProjectName + '">' + taskNameHtml + '</span>' +
+            '<span class="task-meta">' + escapeHtmlText(metaParts.join(' · ')) + '</span>';
+        ul.appendChild(li);
+    });
+}
+
+/**
+ * 展平嵌套的 JSON 数据以便于导出 Excel
+ * 结构：任务(1) -> 尺寸要求明细(N) ===展平===> N 行数据
+ */
+function flattenDataForExport(dataList) {
+    const flatArray = [];
+
+    dataList.forEach(task => {
+        const baseInfo = {
+            "项目游戏名称": task.projectName,
+            "素材类型": task.materialType,
+            "所需套数": task.requiredSets,
+            "状态": task.status || task["状态"] || "",
+            "截止日期": task.deadline || task["截止日期"] || ""
+        };
+
+        // 如果该任务有具体尺寸，则针对每个尺寸生成一条记录
+        if (task.details && task.details.length > 0) {
+            task.details.forEach(detail => {
+                flatArray.push({
+                    ...baseInfo,
+                    "版位类型": detail.positionType || "-",
+                    "分辨率": detail.resolution,
+                    "大小限制": detail.sizeLimit,
+                    "尺寸所需数量": detail.requiredQuantity
+                });
+            });
+        } else {
+            // 如果该任务根本没有任何尺寸要求，也保底输出一条记录
+            flatArray.push({
+                ...baseInfo,
+                "版位类型": "-",
+                "分辨率": "-",
+                "大小限制": "-",
+                "尺寸所需数量": "-"
+            });
+        }
+    });
+
+    return flatArray;
+}
+
+// 3. 导出 JSON 功能
+document.getElementById('exportJsonBtn').addEventListener('click', () => {
+    if (!extractedBulkData || extractedBulkData.length === 0) {
+        alert("没有可导出的数据！");
+        return;
+    }
+
+    // 按目标结构重建 JSON 列表
+    const formattedDataList = extractedBulkData.map(task => {
+        const orderedData = {};
+
+        // 公司名称和集团需要提前获取用于项目名清洗
+        const companyName = task["集团名称"] || task["公司名称"] || task["公司主体"] || "赛诺斯";
+        const mediaChannel = task["投放媒体"] || task["渠道"] || "华为";
+
+        const { gameName, fullName } = splitProjectName(task.projectName || task["项目名称"], companyName, mediaChannel);
+
+        // 日期处理
+        const dateStr = formatDate(new Date(), 'YYYY/MM/DD');
+
+        // 核心值
+        const materialTypeRaw = task.materialType || task["素材类型"] || "";
+        const isGraphic = materialTypeRaw.includes("平面");
+
+        // 统计套数 (素材数)
+        let rawMaterialCount = 4;
+        const rawSets = task["所需套数"] || task["素材数"];
+        if (rawSets) {
+            const match = String(rawSets).match(/\d+/);
+            if (match) rawMaterialCount = parseInt(match[0], 10);
+        }
+
+        const details = task.details || [];
+        const makerName = task["制作人"] || task["制作者"] || "孟祥伟";
+
+        // 组装头部字段
+        if (isGraphic) {
+            // 平面模板 (13个字段)
+            orderedData["日期"] = dateStr;
+            orderedData["制作者"] = makerName;
+            orderedData["项目名称"] = gameName;
+            orderedData["公司主体"] = companyName;
+            orderedData["集团"] = companyName;
+            orderedData["需求方"] = task["需求方"] || "移动终端事业部";
+            orderedData["网易标识"] = companyName.includes("网易") ? "网易" : "非网易";
+            orderedData["业务分类"] = task["需求归属"] || task["业务分组"] || "移动终端-IAA";
+            orderedData["投放渠道"] = mediaChannel;
+            orderedData["素材类型"] = "平面-买量素材-奇觅";
+            orderedData["素材用途"] = task["需求属性"] || task["素材用途"] || "代投";
+            orderedData["广告策略"] = "竞价";
+            orderedData["原创"] = rawMaterialCount;
+            // 尺寸延展 = 所有尺寸的所需数量之和
+            const totalExt = details.reduce((acc, d) => acc + (parseInt(d.requiredQuantity) || 0), 0);
+            orderedData["尺寸延展"] = totalExt || (rawMaterialCount * details.length);
+        } else {
+            // 视频模板 (13个字段)
+            orderedData["日期"] = dateStr;
+            orderedData["制作人"] = makerName;
+            orderedData["项目名称"] = gameName;
+            orderedData["公司名称"] = companyName;
+            orderedData["集团"] = companyName;
+            orderedData["设计小组"] = "AIGC组";
+            orderedData["需求归属"] = "移动终端-IAA";
+            orderedData["需求属性"] = "代投";
+            orderedData["渠道"] = mediaChannel;
+            orderedData["素材类型"] = "视频";
+            orderedData["工具标签"] = "奇觅";
+            orderedData["视频总产出"] = String(rawMaterialCount);
+            orderedData["原创视频"] = rawMaterialCount;
+        }
+
+        // 收集附加属性（包含项目全名）
+        const extraAttributesMap = { "项目全称": fullName };
+        const skipKeys = new Set([
+            "日期", "制作人", "制作者", "项目游戏名称", "项目名称", "项目全称", "projectName",
+            "公司名称", "公司主体", "集团", "集团名称", "设计小组", "需求归属",
+            "需求属性", "渠道", "投放媒体", "素材类型", "materialType", "工具标签",
+            "视频总产出", "原创视频", "所需套数", "素材数", "原创", "尺寸延展",
+            "网易标识", "广告策略", "素材用途", "投放渠道", "业务分类", "需求方",
+            "details", "尺寸要求明细"
+        ]);
+
+        Object.keys(task).forEach(k => {
+            if (!skipKeys.has(k)) {
+                extraAttributesMap[k] = task[k];
+            }
+        });
+
+        // 组装格式化的尺寸明细
+        const cleanDetails = details.map(d => {
+            const resolution = normalizeResolution(d.resolution);
+            const requiredQuantity = parseRequiredQuantity(d.requiredQuantity);
+            return {
+                "版位类型": d.positionType || (isGraphic ? "平面" : "视频"),
+                "分辨率": resolution || d.resolution,
+                "大小限制": d.sizeLimit,
+                "所需数量": requiredQuantity != null ? String(requiredQuantity) : String(d.requiredQuantity || '')
+            };
+        });
+        const requirements = cleanDetails
+            .map(d => ({
+                resolution: normalizeResolution(d["分辨率"]),
+                requiredQuantity: parseRequiredQuantity(d["所需数量"]),
+                positionType: d["版位类型"],
+                sizeLimit: d["大小限制"]
+            }))
+            .filter(d => d.resolution);
+
+        orderedData["尺寸要求明细"] = cleanDetails;
+        orderedData["其他信息"] = extraAttributesMap;
+
+        return {
+            ...orderedData,
+            projectName: orderedData["项目名称"],
+            fullName,
+            producerName: makerName,
+            materialType: orderedData["素材类型"],
+            requirements,
+            sizes: requirements.map(item => item.resolution)
+        };
+    });
+
+    // 导出文件
+    const metadataWarnings = buildExtractionWarnings(extractedBulkData);
+    const exportPayload = {
+        schemaVersion: 'openflow.requirements.v1',
+        source: {
+            app: 'OpenFlow',
+            url: extractionMetadata.sourceUrl || '',
+        },
+        extractedAt: extractionMetadata.extractedAt || new Date().toISOString(),
+        warnings: metadataWarnings,
+        projects: formattedDataList
+    };
+    const jsonStr = JSON.stringify(exportPayload, null, 2);
+    const blob = new Blob([jsonStr], {type: "application/json;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+
+    // 按照指定格式命名：yyyymmdd-制作人名字数据表.json
+    const yyyymmdd = formatDate(new Date(), 'YYYYMMDD');
+    const finalMakerName = formattedDataList.length > 0 ? (formattedDataList[0]["制作者"] || formattedDataList[0]["制作人"]) : "孟祥伟";
+    const fileName = `${yyyymmdd}-${sanitizePathSegment(finalMakerName, '制作人')}数据表.json`;
+
+    chrome.downloads.download({ url: url, filename: fileName });
+});
+
+// 4. 导出 Excel 功能
+document.getElementById('exportExcelBtn').addEventListener('click', async () => {
+    if (!extractedBulkData || extractedBulkData.length === 0) {
+        alert("没有可导出的数据！");
+        return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+        alert("Excel 导出库未加载，请刷新插件后重试！");
+        return;
+    }
+
+    const settings = await loadSettings();
+    const graphicHeadersStr = settings.graphicHeaders || DEFAULT_GRAPHIC_HEADERS;
+    const videoHeadersStr = settings.videoHeaders || DEFAULT_VIDEO_HEADERS;
+
+    const graphicHeaders = graphicHeadersStr.split(',').map(s => s.trim()).filter(Boolean);
+    const videoHeaders = videoHeadersStr.split(',').map(s => s.trim()).filter(Boolean);
+
+    const getTaskExportBase = (task) => {
+        const dateStr = formatDate(new Date(), 'YYYY/MM/DD');
+        const companyName = task["集团名称"] || task["公司名称"] || task["公司主体"] || "赛诺斯";
+        const mediaChannel = task["投放媒体"] || task["渠道"] || "华为";
+        const { gameName } = splitProjectName(task.projectName || task["项目名称"], companyName, mediaChannel);
+
+        let rawMaterialCount = 4;
+        const rawSets = task["所需套数"] || task["素材数"];
+        if (rawSets) {
+            const match = String(rawSets).match(/\d+/);
+            if (match) rawMaterialCount = parseInt(match[0], 10);
+        }
+
+        return {
+            dateStr,
+            companyName,
+            mediaChannel,
+            gameName,
+            rawMaterialCount,
+            makerName: task["制作人"] || task["制作者"] || "制作人",
+            details: task.details || []
+        };
+    };
+
+    const createBorder = () => ({
+        top: { style: "thin", color: { rgb: "D0D7E5" } },
+        bottom: { style: "thin", color: { rgb: "D0D7E5" } },
+        left: { style: "thin", color: { rgb: "D0D7E5" } },
+        right: { style: "thin", color: { rgb: "D0D7E5" } }
+    });
+
+    const createAlignment = () => ({
+        wrapText: true,
+        horizontal: "center",
+        vertical: "center"
+    });
+
+    const createHeaderStyle = () => ({
+        fill: { patternType: "solid", fgColor: { rgb: "2F75B5" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true },
+        border: createBorder(),
+        alignment: createAlignment()
+    });
+
+    const createDataCellStyle = (header) => {
+        const style = {
+            border: createBorder(),
+            alignment: createAlignment()
+        };
+
+        if (header === "项目名称") {
+            style.fill = { patternType: "solid", fgColor: { rgb: "D9E1F2" } };
+        }
+
+        if (header === "投放渠道" || header === "渠道") {
+            style.fill = { patternType: "solid", fgColor: { rgb: "FCE4D6" } };
+        }
+
+        if (SPECIAL_STYLE_HEADERS.has(header)) {
+            style.fill = { patternType: "solid", fgColor: { rgb: "E2EFDA" } };
+            style.font = { bold: true };
+        }
+
+        return style;
+    };
+
+    const getColumnWidths = (headers) => {
+        const widthMap = {
+            "日期": 12,
+            "制作人": 12,
+            "制作者": 12,
+            "项目名称": 25,
+            "公司名称": 18,
+            "公司主体": 18,
+            "集团": 18,
+            "需求方": 16,
+            "网易标识": 12,
+            "业务分类": 16,
+            "广告策略": 12,
+            "素材用途": 14,
+            "投放渠道": 14,
+            "设计小组": 14,
+            "需求归属": 14,
+            "需求属性": 14,
+            "渠道": 14,
+            "素材类型": 18,
+            "工具标签": 12,
+            "原创": 12,
+            "尺寸延展": 12,
+            "视频总产出": 12,
+            "原创视频": 12
+        };
+
+        return headers.map(header => ({ wch: widthMap[header] || 12 }));
+    };
+
+    const buildWorksheet = (headers, rows) => {
+        const aoa = [
+            headers,
+            ...rows.map(row => headers.map(header => row[header] == null ? '' : String(row[header])))
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = getColumnWidths(headers);
+        ws['!rows'] = Array.from({ length: aoa.length }, (_, index) => {
+            return index === 0 ? { hpx: 28 } : { hpx: 24 };
+        });
+
+        headers.forEach((header, colIndex) => {
+            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+            if (ws[cellAddress]) {
+                ws[cellAddress].s = createHeaderStyle();
+            }
+        });
+
+        for (let rowIndex = 1; rowIndex < aoa.length; rowIndex += 1) {
+            headers.forEach((header, colIndex) => {
+                const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+                if (ws[cellAddress]) {
+                    ws[cellAddress].s = createDataCellStyle(header);
+                }
+            });
+        }
+
+        return ws;
+    };
+
+    const downloadWorkbook = (wb, fileName) => {
+        const workbookArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([workbookArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+
+        return new Promise((resolve, reject) => {
+            chrome.downloads.download({ url, filename: fileName }, (downloadId) => {
+                const runtimeError = chrome.runtime.lastError;
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+                if (runtimeError) {
+                    reject(new Error(runtimeError.message));
+                    return;
+                }
+
+                resolve(downloadId);
+            });
+        });
+    };
+
+    const graphicTasks = [];
+    const videoTasks = [];
+
+    extractedBulkData.forEach(task => {
+        const materialType = task.materialType || task["素材类型"] || "";
+        if (materialType.includes("平面")) {
+            graphicTasks.push(task);
+        } else if (materialType.includes("视频")) {
+            videoTasks.push(task);
+        }
+    });
+
+    if (graphicTasks.length === 0 && videoTasks.length === 0) {
+        alert("没有可导出的平面或视频任务！");
+        return;
+    }
+
+    const yyyymmdd = formatDate(new Date(), 'YYYYMMDD');
+
+    try {
+        if (graphicTasks.length > 0) {
+            const graphicRows = graphicTasks.map(task => {
+                const { dateStr, companyName, mediaChannel, gameName, rawMaterialCount, makerName, details } = getTaskExportBase(task);
+                const totalExt = details.reduce((acc, d) => acc + (parseInt(d.requiredQuantity, 10) || 0), 0) || (rawMaterialCount * details.length);
+
+                const baseData = {
+                    "日期": dateStr,
+                    "制作者": makerName,
+                    "项目名称": gameName,
+                    "公司主体": companyName,
+                    "集团": companyName,
+                    "需求方": task["需求方"] || "移动终端事业部",
+                    "网易标识": companyName.includes("网易") ? "网易" : "非网易",
+                    "业务分类": task["需求归属"] || task["业务分组"] || "移动终端-IAA",
+                    "投放渠道": mediaChannel,
+                    "素材类型": "平面-买量素材-奇觅",
+                    "素材用途": task["需求属性"] || task["素材用途"] || "代投",
+                    "广告策略": "竞价",
+                    "原创": rawMaterialCount,
+                    "尺寸延展": totalExt
+                };
+
+                const finalRow = {};
+                graphicHeaders.forEach(header => {
+                    finalRow[header] = baseData[header] !== undefined ? baseData[header] : (task[header] || "");
+                });
+                return finalRow;
+            });
+
+            const graphicSheet = buildWorksheet(graphicHeaders, graphicRows);
+            const graphicWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(graphicWorkbook, graphicSheet, "平面报表");
+            const graphicMakerName = graphicRows[0]["制作者"] || graphicRows[0]["制作人"] || "制作者";
+            await downloadWorkbook(graphicWorkbook, `${yyyymmdd}-${graphicMakerName}-平面报表.xlsx`);
+        }
+
+        if (videoTasks.length > 0) {
+            const videoRows = videoTasks.map(task => {
+                const { dateStr, companyName, mediaChannel, gameName, rawMaterialCount, makerName, details } = getTaskExportBase(task);
+
+                let totalExt = 0;
+                if (details && details.length === 2) {
+                    totalExt = rawMaterialCount;
+                } else if (details && details.length > 2) {
+                    totalExt = rawMaterialCount * 2;
+                } else if (details && details.length === 1) {
+                    // Fallback to 0 if only 1 detail, just in case (though user stated minimum is 2)
+                    totalExt = 0;
+                }
+
+                const baseData = {
+                    "日期": dateStr,
+                    "制作人": makerName,
+                    "项目名称": gameName,
+                    "公司名称": companyName,
+                    "集团": companyName,
+                    "设计小组": "AIGC组",
+                    "需求归属": task["需求归属"] || "移动终端-IAA",
+                    "需求属性": task["需求属性"] || "代投",
+                    "渠道": mediaChannel,
+                    "素材类型": "视频",
+                    "工具标签": "奇觅",
+                    "视频总产出": String(rawMaterialCount + totalExt),
+                    "原创视频": rawMaterialCount,
+                    "尺寸延展": totalExt
+                };
+
+                const finalRow = {};
+                videoHeaders.forEach(header => {
+                    finalRow[header] = baseData[header] !== undefined ? baseData[header] : (task[header] || "");
+                });
+                return finalRow;
+            });
+
+            const videoSheet = buildWorksheet(videoHeaders, videoRows);
+            const videoWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(videoWorkbook, videoSheet, "视频报表");
+            const videoMakerName = videoRows[0]["制作人"] || videoRows[0]["制作者"] || "制作人";
+            await downloadWorkbook(videoWorkbook, `${yyyymmdd}-${videoMakerName}-视频报表.xlsx`);
+        }
+    } catch (err) {
+        console.error("生成 Excel 失败:", err);
+        alert("生成 Excel 文件失败：" + err.message);
+    }
+});

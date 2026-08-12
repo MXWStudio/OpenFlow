@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartAd 素材需求提取助手</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #F5F5F7;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .popup-container {
+            width: 480px;
+            background: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 16px;
+            color: #1F1F1F;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .settings-panel {
+            background: #FAFAFA;
+            border: 1px solid #E8E8E8;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .setting-item label {
+            font-size: 12px;
+            color: #595959;
+            font-weight: 500;
+        }
+
+        .setting-item textarea {
+            width: 100%;
+            border: 1px solid #D9D9D9;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 12px;
+            font-family: inherit;
+            resize: vertical;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .setting-item textarea:focus {
+            border-color: #1677FF;
+            box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+        }
+
+        .extraction-filter {
+            background: #FAFAFA;
+            border: 1px solid #E8E8E8;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .extraction-filter label {
+            color: #262626;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .extraction-filter input {
+            width: 100%;
+            border: 1px solid #D9D9D9;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #262626;
+            background: #FFFFFF;
+            font: inherit;
+            outline: none;
+        }
+
+        .extraction-filter input:focus {
+            border-color: #1677FF;
+            box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+        }
+
+        .filter-help {
+            color: #8C8C8C;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .btn-icon {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: #F0F0F0;
+        }
+
+        .btn {
+            border: none;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.75;
+        }
+
+        .btn-primary {
+            background: #1677FF;
+            color: #FFFFFF;
+            width: 100%;
+            box-shadow: 0 2px 0 rgba(5, 145, 255, 0.1);
+        }
+
+        .btn-primary:hover {
+            background: #4096FF;
+        }
+
+        .btn-secondary {
+            background: #FFFFFF;
+            color: #1F1F1F;
+            border: 1px solid #D9D9D9;
+            width: 100%;
+        }
+
+        .btn-secondary:hover {
+            background: #FAFAFA;
+            border-color: #1677FF;
+            color: #1677FF;
+        }
+
+        .status-area {
+            display: none;
+            gap: 8px;
+            flex-wrap: wrap;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #F6FFED;
+            color: #389E0D;
+            border: 1px solid #B7EB8F;
+        }
+
+        .badge-blue {
+            background: #E6F4FF;
+            color: #1677FF;
+            border: 1px solid #91CAFF;
+        }
+
+        .badge-purple {
+            background: #F9F0FF;
+            color: #531DAB;
+            border: 1px solid #D3ADF7;
+        }
+
+        .badge-red {
+            background: #FFF1F0;
+            color: #CF1322;
+            border: 1px solid #FFA39E;
+            width: 100%;
+            text-align: center;
+            padding: 8px;
+            margin-top: 4px;
+        }
+
+        .badge-small-red {
+            background: #FFF1F0;
+            color: #CF1322;
+            border: 1px solid #FFA39E;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .list-wrapper {
+            background: #FAFAFA;
+            border: 1px solid #F0F0F0;
+            border-radius: 8px;
+            padding: 4px;
+            display: none;
+        }
+
+        .task-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .task-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .task-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .task-list::-webkit-scrollbar-thumb {
+            background: #D9D9D9;
+            border-radius: 4px;
+        }
+
+        .task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+
+        .task-item:hover {
+            background: #F0F0F0;
+        }
+
+        .task-name {
+            font-size: 13px;
+            color: #262626;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 320px;
+        }
+
+        .task-meta {
+            font-size: 12px;
+            color: #8C8C8C;
+            white-space: nowrap;
+        }
+
+        .export-actions {
+            display: none;
+            gap: 10px;
+        }
+
+        .btn-excel {
+            flex: 1;
+            background: #F6FFED;
+            color: #389E0D;
+            border: 1px solid #B7EB8F;
+        }
+
+        .btn-excel:hover {
+            background: #D9F7BE;
+            border-color: #95DE64;
+        }
+
+        .btn-json {
+            flex: 1;
+            background: #F9F0FF;
+            color: #531DAB;
+            border: 1px solid #D3ADF7;
+        }
+
+        .btn-json:hover {
+            background: #EFDBFF;
+            border-color: #B37FEB;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Dark Mode Styles */
+        body.dark-theme {
+            background-color: #1e1e1e;
+        }
+
+        body.dark-theme .popup-container {
+            background: #252526;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        body.dark-theme .header {
+            color: #E0E0E0;
+        }
+
+        body.dark-theme .settings-panel {
+            background: #2D2D30;
+            border-color: #3E3E42;
+        }
+
+        body.dark-theme .setting-item label {
+            color: #A0A0A0;
+        }
+
+        body.dark-theme .setting-item textarea {
+            background: #1E1E1E;
+            border-color: #3E3E42;
+            color: #E0E0E0;
+        }
+
+        body.dark-theme .setting-item textarea:focus {
+            border-color: #007ACC;
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
+        }
+
+        body.dark-theme .btn-icon:hover {
+            background: #3E3E42;
+        }
+
+        body.dark-theme .btn-secondary {
+            background: #333333;
+            color: #E0E0E0;
+            border-color: #3E3E42;
+        }
+
+        body.dark-theme .btn-secondary:hover {
+            background: #3E3E42;
+            border-color: #007ACC;
+            color: #007ACC;
+        }
+
+        body.dark-theme .btn-primary {
+            background: #007ACC;
+            color: #FFFFFF;
+        }
+
+        body.dark-theme .btn-primary:hover {
+            background: #0098FF;
+        }
+
+        body.dark-theme .list-wrapper {
+            background: #2D2D30;
+            border-color: #3E3E42;
+        }
+
+        body.dark-theme .task-item:hover {
+            background: #3E3E42;
+        }
+
+        body.dark-theme .task-name {
+            color: #E0E0E0;
+        }
+
+        body.dark-theme .task-meta {
+            color: #A0A0A0;
+        }
+
+        body.dark-theme .badge-success {
+            background: #1B2B1B;
+            color: #73D13D;
+            border-color: #389E0D;
+        }
+
+        body.dark-theme .badge-blue {
+            background: #112840;
+            color: #4096FF;
+            border-color: #1677FF;
+        }
+
+        body.dark-theme .badge-purple {
+            background: #221536;
+            color: #B37FEB;
+            border-color: #722ED1;
+        }
+
+        body.dark-theme .badge-red {
+            background: #301114;
+            color: #FF4D4F;
+            border-color: #CF1322;
+        }
+
+        body.dark-theme .badge-small-red {
+            background: #301114;
+            color: #FF4D4F;
+            border-color: #CF1322;
+        }
+
+        body.dark-theme .btn-excel {
+            background: #1B2B1B;
+            color: #73D13D;
+            border-color: #389E0D;
+        }
+
+        body.dark-theme .btn-excel:hover {
+            background: #233B23;
+            border-color: #52C41A;
+        }
+
+        body.dark-theme .btn-json {
+            background: #221536;
+            color: #B37FEB;
+            border-color: #722ED1;
+        }
+
+        body.dark-theme .btn-json:hover {
+            background: #2B1D45;
+            border-color: #9254DE;
+        }
+
+        body.dark-theme .extraction-filter {
+            background: #1F1F1F;
+            border-color: #434343;
+        }
+
+        body.dark-theme .extraction-filter label,
+        body.dark-theme .extraction-filter input {
+            color: #F0F0F0;
+        }
+
+        body.dark-theme .extraction-filter input {
+            background: #141414;
+            border-color: #595959;
+        }
+
+        body.dark-theme .filter-help {
+            color: #BFBFBF;
+        }
+
+        body.dark-theme .task-list::-webkit-scrollbar-thumb {
+            background: #555555;
+        }
+    </style>
+</head>
+<body>
+    <div class="popup-container">
+        <div class="header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span>🚀</span><span>任务抓取工具</span>
+            </div>
+            <div class="header-actions">
+                <button id="themeToggleBtn" class="btn btn-icon" title="切换模式">☀️</button>
+                <button id="settingsBtn" class="btn btn-icon" title="设置">⚙️</button>
+            </div>
+        </div>
+
+        <div id="settingsPanel" class="settings-panel" style="display: none;">
+            <div class="setting-item">
+                <label>平面报表顶部字段 (逗号分隔)</label>
+                <textarea id="graphicHeadersInput" rows="3"></textarea>
+            </div>
+            <div class="setting-item">
+                <label>视频报表顶部字段 (逗号分隔)</label>
+                <textarea id="videoHeadersInput" rows="3"></textarea>
+            </div>
+            <button id="saveSettingsBtn" class="btn btn-secondary" style="margin-top: 8px;">保存设置</button>
+        </div>
+
+        <div class="extraction-filter">
+            <label for="deadlineInput">按截止日期抓取</label>
+            <input id="deadlineInput" type="date" aria-describedby="deadlineHelp">
+            <span id="deadlineHelp" class="filter-help">填写后抓取当前列表中该截止日期的任务，不限制任务状态。</span>
+        </div>
+
+        <button id="extractBtn" class="btn btn-primary"><span>📥</span> 按截止日期提取任务</button>
+        <div id="statusArea" class="status-area"></div>
+        <div id="listWrapper" class="list-wrapper">
+            <ul id="taskList" class="task-list"></ul>
+        </div>
+        <div id="exportActions" class="export-actions">
+            <button id="exportExcelBtn" class="btn btn-excel"><span>📊</span> 导出 Excel</button>
+            <button id="exportJsonBtn" class="btn btn-json"><span>📋</span> 导出 JSON</button>
+        </div>
+    </div>
+
+    <script src="xlsx.bundle.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

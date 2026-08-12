@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "openflow.requirements.v1",
+  "extractedAt": "2026-08-12T00:00:00.000Z",
+  "source": {
+    "app": "OpenFlow",
+    "url": "https://example.test/orders/123"
+  },
+  "producerName": "测试制作人",
+  "department": "创意中心",
+  "email": "producer@example.test",
+  "warnings": [],
+  "projects": [
+    {
+      "projectName": "示例项目",
+      "fullName": "示例项目-信息流-0812",
+      "producerName": "测试制作人",
+      "materialType": "视频",
+      "requirements": [
+        {
+          "resolution": "1080x1920",
+          "requiredQuantity": 3,
+          "positionType": "竖版",
+          "sizeLimit": "50M"
+        },
+        {
+          "resolution": "1920x1080",
+          "requiredQuantity": 1,
+          "positionType": "横版",
+          "sizeLimit": "50M"
+        }
+      ],
+      "sizes": [
+        "1080x1920",
+        "1920x1080"
+      ]
+    }
+  ]
+}

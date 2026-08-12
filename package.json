@@ -14,7 +14,8 @@
     "build": "electron-vite build && electron-builder --win",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit",
-    "test": "node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
+    "check:extension": "node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs",
+    "test": "npm run check:extension && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
   },
   "build": {
     "appId": "com.openflow.studio",
@@ -29,6 +30,12 @@
       "out/**/*",
       "icons/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "extensions/chrome",
+        "to": "chrome-extension"
+      }
     ],
     "win": {
       "icon": "icons/icon.png",

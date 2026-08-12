@@ -207,3 +207,30 @@ This document records architectural patterns and constraints as shipped features
 - Field customization does not support arbitrary JavaScript, regex transformation, or conditional routing.
 - Execution is sequential and does not provide an all-or-nothing rollback journal.
 - An external process can still race the final target existence check; the affected item returns a recoverable failure instead of receiving a cross-process transaction guarantee.
+
+## Chrome Extension Integration (2026-08-12)
+
+### Repository Boundary
+
+- `extensions/chrome` is the maintained Manifest V3 extension source inside the OpenFlow repository.
+- The Electron desktop and Chrome extension are maintained together in this repository without a submodule or external source-repository dependency.
+- The retired PySide6 desktop prototype and repository-maintenance Python scripts are not part of the current product.
+
+### Handoff Contract
+
+- The extension extracts requirements from the active tab and exports `openflow.requirements.v1` JSON.
+- The Electron desktop imports that JSON through `parseRequirementJson`, then owns folder creation, validation, and local rename execution.
+- `extensions/chrome/fixtures/requirements-v1.example.json` and `src/main/extensionContract.test.ts` form the cross-component contract test.
+- There is no background bridge, native-messaging host, custom protocol, or persistent website access in this integration.
+
+### Packaging and Verification
+
+- `npm run check:extension` validates Manifest V3, the approved permission set, local resource references, script syntax, and exporter contract markers.
+- `npm test` runs the extension check before the desktop test suite.
+- Electron Builder copies the unpacked extension to `resources/chrome-extension`; installation does not modify Chrome or silently enable the extension.
+
+### Security Conventions
+
+- Keep `activeTab` plus on-demand `scripting` instead of broad `host_permissions` unless a separately reviewed feature requires persistent access.
+- Any permission change must update the automated permission contract and receive an explicit privacy/security review.
+- Browser extraction remains read-oriented; destructive local filesystem operations stay in the Electron main process.
