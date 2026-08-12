@@ -125,6 +125,50 @@ describe('buildValidationPresentation', () => {
     assert.strictEqual(presentation.summary.canRenamePassedFiles, true);
   });
 
+  it('treats empty folders as missing-file feedback before quantity shortages', () => {
+    const presentation = buildValidationPresentation([
+      row({
+        fileName: '[缺失] 文件',
+        filePath: '',
+        folderName: '-',
+        ext: '',
+        fileSize: 0,
+        actualWidth: 0,
+        actualHeight: 0,
+        status: 'missing',
+        targetSize: '缺失文件',
+        requiredQuantity: 5,
+        actualQuantity: 0,
+        missingCount: 5,
+        missingKind: 'empty_folder',
+        error: '素材目录内没有可校验文件',
+        workspaceProjectName: 'Empty Project',
+      }),
+      row({
+        fileName: '[缺失] 1080*607',
+        filePath: '',
+        folderName: '-',
+        ext: '',
+        fileSize: 0,
+        actualWidth: 0,
+        actualHeight: 0,
+        status: 'missing',
+        targetSize: '1080*607',
+        requiredQuantity: 2,
+        actualQuantity: 1,
+        missingCount: 1,
+        workspaceProjectName: 'Empty Project',
+      }),
+    ]);
+
+    const [group] = presentation.groups;
+    assert.strictEqual(presentation.summary.emptyFolderCount, 1);
+    assert.strictEqual(presentation.summary.missingRowsCount, 2);
+    assert.strictEqual(presentation.summary.missingTotal, 6);
+    assert.deepStrictEqual(group.actionRows.map((item) => item.targetSize), ['缺失文件', '1080*607']);
+    assert.strictEqual(getValidationRowReason(group.actionRows[0]), '素材目录为空，请添加素材后重验');
+  });
+
   it('treats files in non-required matching size folders as extra instead of blocking', () => {
     const presentation = buildValidationPresentation([
       row({ fileName: 'passed', status: 'valid', workspaceProjectName: 'Project A' }),

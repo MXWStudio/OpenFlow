@@ -92,7 +92,7 @@ describe('requirements', () => {
     assert.match(result.warnings.join('\n'), /无法识别尺寸/)
   })
 
-  it('sanitizes file and directory path segments without stripping Chinese names', () => {
+  it('sanitizes file and directory path segments without removing Chinese names', () => {
     assert.strictEqual(sanitizePathSegment(' 小火车:华为/0601 '), '小火车_华为_0601')
     assert.strictEqual(sanitizePathSegment(''), '未命名')
     assert.strictEqual(sanitizePathSegment('CON'), 'CON_')

@@ -4,9 +4,13 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { RenameRequest } from '../shared/renameTemplates'
 
 // 将所有安全 API 暴露到 window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', {
+  app: {
+    rendererReady: () => ipcRenderer.send('app:renderer-ready'),
+  },
   webUtils: {
     getPathForFile: (file: File) => webUtils.getPathForFile(file)
   },
@@ -17,9 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 打开系统文件选择框，返回解析后的 JSON 数据 */
     openJson: () => ipcRenderer.invoke('dialog:openJson'),
 
-    /** 打开系统文件选择框，返回解析后的 Excel 数据 */
-    importExcel: () => ipcRenderer.invoke('dialog:importExcel'),
-
     /** 打开文件夹选择框，返回选中的目录路径 */
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
 
@@ -28,33 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ────────────────────────────────────────────────
-  // 数据库 API (SQLite)
-  // ────────────────────────────────────────────────
-  db: {
-    getImportedData: (batchId?: string) => ipcRenderer.invoke('db:getImportedData', batchId),
-    insertImportedData: (batchId: string, rowData: any) => ipcRenderer.invoke('db:insertImportedData', batchId, rowData),
-    updateImportedData: (id: number, rowData: any) => ipcRenderer.invoke('db:updateImportedData', id, rowData),
-    deleteImportedData: (id: number) => ipcRenderer.invoke('db:deleteImportedData', id),
-    deleteBatch: (batchId: string) => ipcRenderer.invoke('db:deleteBatch', batchId),
-    clearAllImportedData: () => ipcRenderer.invoke('db:clearAllImportedData'),
-    getGameMappings: () => ipcRenderer.invoke('db:getGameMappings'),
-    insertGameMapping: (mapping: any) => ipcRenderer.invoke('db:insertGameMapping', mapping),
-    updateGameMapping: (id: number, mapping: any) => ipcRenderer.invoke('db:updateGameMapping', id, mapping),
-    deleteGameMapping: (id: number) => ipcRenderer.invoke('db:deleteGameMapping', id),
-    getExcelFiles: () => ipcRenderer.invoke('db:getExcelFiles'),
-    insertExcelFile: (file: any) => ipcRenderer.invoke('db:insertExcelFile', file),
-    deleteExcelFile: (id: number) => ipcRenderer.invoke('db:deleteExcelFile', id),
-    clearAllExcelFiles: () => ipcRenderer.invoke('db:clearAllExcelFiles'),
-  },
-
-  // ────────────────────────────────────────────────
   // 文件系统 API
   // ────────────────────────────────────────────────
   fs: {
-    /** 保存图片到本地存储用于游戏库 */
-    saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) =>
-      ipcRenderer.invoke('fs:saveImageToLocal', args),
-
     /** 批量初始化项目目录结构（主进程内弹窗选择目标总目录） */
     initFolders: (projectsData: Array<{ projectName: string; sizes: string[]; requirements?: unknown[] }>) =>
       ipcRenderer.invoke('fs:initFolders', projectsData),
@@ -71,22 +48,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     trashFile: (filePath: string) =>
       ipcRenderer.invoke('fs:trashFile', filePath),
 
-    /** 执行批量重命名 */
-    executeRename: (
-      files: unknown[],
-      templates: {
-        videoRegular: any[];
-        videoSpecial: any[];
-        videoManual: any[];
-        imageRegular: any[];
-        imageSpecial: any[];
-        imageManual: any[];
-      },
-      projectName: string,
-      producer?: string,
-      isSpecialEnabled?: boolean,
-      isManualEnabled?: boolean
-    ) => ipcRenderer.invoke('fs:executeRename', { files, templates, projectName, producer, isSpecialEnabled, isManualEnabled }),
+    /** 生成批量重命名预检，不修改文件 */
+    previewRename: (request: RenameRequest) =>
+      ipcRenderer.invoke('fs:previewRename', request),
+
+    /** 执行经过同一规则规划的批量重命名 */
+    executeRename: (request: RenameRequest) =>
+      ipcRenderer.invoke('fs:executeRename', request),
 
     /** 扫描素材整理目录 */
     scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) =>
@@ -103,9 +71,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 批量格式处理 */
     processFormat: (files: any[], config: any) =>
       ipcRenderer.invoke('fs:processFormat', { files, config }),
-
-    /** 自动清理旧的 Excel 备份文件 */
-    cleanupOldExcels: () => ipcRenderer.invoke('fs:cleanupOldExcels'),
   },
 
   // ────────────────────────────────────────────────
@@ -147,26 +112,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
     on: (channel: string, listener: (event: any, ...args: any[]) => void) => ipcRenderer.on(channel, listener),
     removeListener: (channel: string, listener: (event: any, ...args: any[]) => void) => ipcRenderer.removeListener(channel, listener),
   },
-
-  // ────────────────────────────────────────────────
-  // Screenshot & Pin API
-  // ────────────────────────────────────────────────
-  screenshot: {
-    onScreenshotCaptured: (callback: (dataUrl: string) => void) => {
-      ipcRenderer.on('screenshot:captured', (_event, dataUrl) => callback(dataUrl))
-    },
-    closeScreenshot: () => ipcRenderer.send('screenshot:close'),
-    copyToClipboard: (dataUrl: string) => ipcRenderer.send('screenshot:copy', dataUrl),
-    saveScreenshot: (dataUrl: string) => ipcRenderer.send('screenshot:save', dataUrl),
-    pinScreenshot: (data: { dataUrl: string, bounds: { x: number, y: number, width: number, height: number } }) => {
-      ipcRenderer.send('screenshot:pin', data)
-    }
-  },
-
-  pin: {
-    onPinData: (callback: (dataUrl: string) => void) => {
-      ipcRenderer.on('pin:data', (_event, dataUrl) => callback(dataUrl))
-    },
-    closePin: () => ipcRenderer.send('pin:close')
-  }
 })

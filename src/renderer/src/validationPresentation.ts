@@ -6,6 +6,7 @@ export interface ValidationPresentationSummary {
   extraCount: number;
   missingRowsCount: number;
   missingTotal: number;
+  emptyFolderCount: number;
   passedCount: number;
   hasBlockingIssues: boolean;
   hasExtraIssues: boolean;
@@ -88,6 +89,9 @@ export function getValidationRowReason(row: ValidationResult) {
   }
 
   if (row.status === 'missing') {
+    if (row.missingKind === 'empty_folder') {
+      return '素材目录为空，请添加素材后重验';
+    }
     const required = row.requiredQuantity || row.missingCount || 1;
     const actual = row.actualQuantity || 0;
     return `需要 ${required} / 已有 ${actual}`;
@@ -103,9 +107,10 @@ function getMissingCount(row: ValidationResult) {
 function getRowPriority(row: ValidationResult) {
   if (row.status === 'error' || row.status === 'format_error') return 0;
   if (getValidationRowKind(row) === 'blocking') return 1;
-  if (row.status === 'missing') return 2;
-  if (isExtraValidationRow(row)) return 3;
-  return 3;
+  if (row.status === 'missing' && row.missingKind === 'empty_folder') return 2;
+  if (row.status === 'missing') return 3;
+  if (isExtraValidationRow(row)) return 4;
+  return 5;
 }
 
 function getSortLabel(row: ValidationResult) {
@@ -122,6 +127,7 @@ function summarizeRows(rows: ValidationResult[]): ValidationPresentationSummary 
   const blockingCount = rows.filter(isBlockingValidationRow).length;
   const extraCount = rows.filter(isExtraValidationRow).length;
   const missingRows = rows.filter((row) => row.status === 'missing');
+  const emptyFolderCount = missingRows.filter((row) => row.missingKind === 'empty_folder').length;
   const passedCount = rows.filter((row) => row.status === 'valid').length;
   const missingTotal = missingRows.reduce((sum, row) => sum + getMissingCount(row), 0);
   const hasBlockingIssues = blockingCount > 0;
@@ -134,6 +140,7 @@ function summarizeRows(rows: ValidationResult[]): ValidationPresentationSummary 
     extraCount,
     missingRowsCount: missingRows.length,
     missingTotal,
+    emptyFolderCount,
     passedCount,
     hasBlockingIssues,
     hasExtraIssues,

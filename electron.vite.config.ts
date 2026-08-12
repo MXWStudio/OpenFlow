@@ -1,7 +1,11 @@
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import type { UserConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { createRequire } from 'node:module'
 import { resolve } from 'path'
+
+// The CommonJS entry avoids a Babel ESM interop deadlock in newer Node runtimes.
+const require = createRequire(import.meta.url)
+const { defineConfig, externalizeDepsPlugin } = require('electron-vite') as typeof import('electron-vite')
 
 const devCspPlugin = {
   name: 'openflow-dev-csp',
@@ -17,9 +21,7 @@ const devCspPlugin = {
 export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
-    plugins: [
-      externalizeDepsPlugin({ exclude: ['xlsx'] }),
-    ],
+    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -32,7 +34,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
   },
 
-  // ── 渲染进程配置（React + Tailwind v4） ─────────────────
+  // ── 渲染进程配置（React）────────────────────────────────
   renderer: {
     root: 'src/renderer',
     server: {
@@ -42,15 +44,12 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
-          screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
-          pin: resolve(__dirname, 'src/renderer/pin.html'),
         },
       },
     },
     plugins: [
       devCspPlugin,
       react(),
-      tailwindcss(), // Tailwind v4 Vite 插件
     ],
     resolve: {
       alias: {
@@ -59,4 +58,4 @@ export default defineConfig({
       },
     },
   },
-})
+} satisfies UserConfig)

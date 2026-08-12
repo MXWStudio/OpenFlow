@@ -19,7 +19,9 @@ export function StatusBadge({
       : result.status === 'mismatch'
         ? { color: 'yellow', label: '尺寸错误' }
         : result.status === 'missing'
-          ? { color: 'red', label: `缺 ${result.missingCount || 1} 张` }
+          ? result.missingKind === 'empty_folder'
+            ? { color: 'red', label: '缺失文件' }
+            : { color: 'red', label: `缺 ${result.missingCount || 1} 张` }
           : { color: 'red', label: '读取失败' };
 
   const isMutedValid = muted && result.status === 'valid';

@@ -3,36 +3,13 @@
  * 负责：窗口管理、所有 IPC 通道处理、底层 Node.js 能力
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, desktopCapturer, screen, clipboard, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, screen } from 'electron'
 import { join, extname, basename, dirname } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import sizeOf from 'image-size'
 import ffmpeg from 'fluent-ffmpeg'
-import ffmpegStatic from 'ffmpeg-static'
-// @ts-expect-error 无类型包
-import ffprobeStatic from 'ffprobe-static'
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
-import { pinyin } from 'pinyin-pro'
-import * as xlsx from 'xlsx'
-import sharp from 'sharp'
-import {
-  clearAllImportedData,
-  deleteBatch,
-  deleteImportedData,
-  getImportedData,
-  insertImportedData,
-  updateImportedData,
-  getGameMappings,
-  insertGameMapping,
-  updateGameMapping,
-  deleteGameMapping,
-  getExcelFiles,
-  insertExcelFile,
-  deleteExcelFile,
-  clearAllExcelFiles
-} from './utils/db'
 import {
   getMissingRequirements,
   normalizeResolution,
@@ -41,31 +18,105 @@ import {
   sanitizePathSegment,
   type RequirementDetail,
 } from './requirements'
+import { selectQimiFolderName } from './organize'
+import { getResolutionFolderContext, SIZE_FOLDER_REGEX } from './renameContext'
+import { executeRenameRequest, previewRenameRequest, type RenameRequest } from './rename'
+import { JsonConfigStore } from './configStore'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
 app.disableHardwareAcceleration()
 
 let tray: Tray | null = null
-let screenshotWindow: BrowserWindow | null = null
-const pinWindows: Set<BrowserWindow> = new Set()
 
-// 设置 fluent-ffmpeg 使用静态 ffmpeg 可执行文件
-let ffmpegPath = ffmpegInstaller.path || (ffmpegStatic as string)
-if (ffmpegPath) {
-  if (ffmpegPath.includes('app.asar')) {
-    ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked')
+function normalizeError(error: unknown): string {
+  if (error instanceof Error) {
+    return [error.name, error.message, error.stack].filter(Boolean).join('\n')
   }
-  ffmpeg.setFfmpegPath(ffmpegPath)
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
 }
 
-// 设置 ffprobe 路径，确保视频尺寸可读；打包后需从 app.asar.unpacked 加载
-if (ffprobeStatic?.path) {
-  let ffprobePath = ffprobeStatic.path as string
-  if (ffprobePath.includes('app.asar')) {
-    ffprobePath = ffprobePath.replace('app.asar', 'app.asar.unpacked')
+function showFatalError(title: string, error: unknown): void {
+  const detail = normalizeError(error)
+  console.error(title, detail)
+  dialog.showErrorBox(title, detail || '未知错误')
+}
+
+function isAutoUpdaterError(error: unknown): boolean {
+  const detail = normalizeError(error)
+  return detail.includes('github.com/MXWStudio/OpenFlow/releases/download') ||
+    detail.includes('Cannot download') ||
+    detail.includes('Auto Updater')
+}
+
+process.on('uncaughtException', (error) => {
+  showFatalError('OpenFlow Studio 启动失败', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  if (isAutoUpdaterError(reason)) {
+    console.warn('Auto Updater Background Error:', normalizeError(reason))
+    return
   }
-  ffmpeg.setFfprobePath(ffprobePath)
+  showFatalError('OpenFlow Studio 异步任务失败', reason)
+})
+
+function requireOptional<T>(moduleName: string): T | null {
+  try {
+    return require(moduleName) as T
+  } catch (error) {
+    console.warn(`Optional dependency unavailable: ${moduleName}`, normalizeError(error))
+    return null
+  }
+}
+
+function requireRuntimeDependency<T>(moduleName: string): T {
+  const dependency = requireOptional<T>(moduleName)
+  if (!dependency) {
+    throw new Error(`缺少运行依赖 ${moduleName}。请重新安装当前系统架构对应的 OpenFlow Studio 安装包。`)
+  }
+  return dependency
+}
+
+function unpackedPath(binaryPath: string): string {
+  return binaryPath.includes('app.asar')
+    ? binaryPath.replace('app.asar', 'app.asar.unpacked')
+    : binaryPath
+}
+
+type SharpModule = typeof import('sharp')
+
+let sharpModule: SharpModule | null = null
+
+function getSharp(): SharpModule {
+  if (!sharpModule) {
+    sharpModule = requireRuntimeDependency<SharpModule>('sharp')
+  }
+  return sharpModule
+}
+
+let ffmpegPathsConfigured = false
+
+function configureFfmpegPaths(): void {
+  if (ffmpegPathsConfigured) return
+  ffmpegPathsConfigured = true
+
+  const installer = requireOptional<{ path?: string }>('@ffmpeg-installer/ffmpeg')
+  const staticPath = requireOptional<string>('ffmpeg-static')
+  const ffmpegPath = installer?.path || staticPath
+  if (typeof ffmpegPath === 'string' && ffmpegPath) {
+    ffmpeg.setFfmpegPath(unpackedPath(ffmpegPath))
+  }
+
+  const ffprobeStatic = requireOptional<{ path?: string }>('ffprobe-static')
+  if (ffprobeStatic?.path) {
+    ffmpeg.setFfprobePath(unpackedPath(ffprobeStatic.path))
+  }
 }
 
 // ─── 轻量级 JSON 配置存储 ────────────────────────────────
@@ -77,63 +128,26 @@ function getConfigPath(): string {
 }
 
 async function storeRead(): Promise<Record<string, unknown>> {
-  try {
-    return await fs.readJson(getConfigPath())
-  } catch {
-    return {}
-  }
+  return getConfigStore().getAll()
+}
+
+let configStore: JsonConfigStore | null = null
+
+function getConfigStore(): JsonConfigStore {
+  if (!configStore) configStore = new JsonConfigStore(getConfigPath())
+  return configStore
 }
 
 async function storeGetValue(key: string): Promise<unknown> {
-  const data = await storeRead()
-  const keys = key.split('.')
-  // 安全检查：防止原型污染
-  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
-    return undefined
-  }
-  // 支持点号路径，如 "userInfo.name"
-  return keys.reduce(
-    (obj: Record<string, unknown>, k) => obj?.[k] as Record<string, unknown>,
-    data
-  )
+  return getConfigStore().get(key)
 }
 
 async function storeSetValue(key: string, value: unknown): Promise<void> {
-  const data = await storeRead()
-  const keys = key.split('.')
-  // 安全检查：防止原型污染
-  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
-    return
-  }
-  let current: Record<string, unknown> = data
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
-      current[keys[i]] = {}
-    }
-    current = current[keys[i]] as Record<string, unknown>
-  }
-  current[keys[keys.length - 1]] = value
-  await fs.outputJson(getConfigPath(), data, { spaces: 2 })
+  return getConfigStore().set(key, value)
 }
 
 async function storeDeleteKey(key: string): Promise<void> {
-  const data = await storeRead()
-  const keys = key.split('.')
-  // 安全检查：防止原型污染
-  if (keys.some((k) => ['__proto__', 'constructor', 'prototype'].includes(k))) {
-    return
-  }
-  if (keys.length === 1) {
-    delete data[key]
-  } else {
-    let current: Record<string, unknown> = data
-    for (let i = 0; i < keys.length - 1; i++) {
-      current = current[keys[i]] as Record<string, unknown>
-      if (!current) return
-    }
-    delete current[keys[keys.length - 1]]
-  }
-  await fs.outputJson(getConfigPath(), data, { spaces: 2 })
+  return getConfigStore().delete(key)
 }
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -152,16 +166,10 @@ interface ValidationResult {
   requiredQuantity?: number
   actualQuantity?: number
   missingCount?: number
+  missingKind?: 'empty_folder'
   /** 底层错误或说明，供前端展示 */
   error?: string
   workspaceProjectName?: string
-}
-
-interface RenameResult {
-  oldFileName: string
-  newFileName: string
-  success: boolean
-  error?: string
 }
 
 // ─── 支持的媒体文件扩展名 ────────────────────────────────
@@ -174,6 +182,7 @@ const VIDEO_EXTS = new Set(['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.we
 function getVideoInfo(
   filePath: string
 ): Promise<{ width: number; height: number; duration: number }> {
+  configureFfmpegPaths()
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) return reject(err)
@@ -188,64 +197,69 @@ function getVideoInfo(
   })
 }
 
-/**
- * 应用新的对象数组形式重命名模板
- */
-function applyNewTemplate(
-  templateTokens: Array<{ type: string; value?: string }>,
-  vars: Record<string, string>
-): string {
-  if (!Array.isArray(templateTokens) || templateTokens.length === 0) {
-    return vars.Name || 'untitled'
-  }
-
-  let result = ''
-  for (let i = 0; i < templateTokens.length; i++) {
-    const token = templateTokens[i]
-    let tokenStr = ''
-
-    if (token.type === 'CustomText') {
-      tokenStr = token.value || ''
-    } else {
-      tokenStr = vars[token.type] || ''
-    }
-
-    if (!tokenStr) continue
-
-    if (result.length === 0) {
-      result = tokenStr
-    } else {
-      // 检查是否需要省略横杠
-      // 规则：当前是 Date，并且上一个是 CustomText 且它是第一个元素
-      const prevToken = templateTokens[i - 1]
-      const omitHyphen = token.type === 'Date' &&
-                         prevToken &&
-                         prevToken.type === 'CustomText' &&
-                         i - 1 === 0
-
-      if (omitHyphen) {
-        result += tokenStr
-      } else {
-        result += '-' + tokenStr
-      }
-    }
-  }
-
-  return result.replace(/-+/g, '-').replace(/^-|-$/g, '')
-}
-
 // ─── 窗口创建 ───────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
 
 let closeToTray = true // 默认为 true
 
+const RENDERER_BOOT_CHECK_DELAY_MS = 1500
+const MAX_RENDERER_RECOVERY_ATTEMPTS = 2
+
+function isUsableWindow(window: BrowserWindow): boolean {
+  return !window.isDestroyed() && !window.webContents.isDestroyed()
+}
+
+async function hasMountedRenderer(window: BrowserWindow): Promise<boolean> {
+  if (!isUsableWindow(window)) return false
+  try {
+    return await window.webContents.executeJavaScript(
+      "Boolean(document.getElementById('root')?.childElementCount)",
+      true,
+    ) as boolean
+  } catch (error) {
+    console.error('Renderer health check failed:', normalizeError(error))
+    return false
+  }
+}
+
+async function showRendererLoadFailure(window: BrowserWindow): Promise<void> {
+  if (!isUsableWindow(window)) return
+  try {
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const root = document.getElementById('root') || document.body;
+        root.innerHTML = '';
+        Object.assign(root.style, {
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px',
+          color: '#e2e8f0',
+          background: '#0f172a',
+          fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif',
+          textAlign: 'center'
+        });
+        root.textContent = '界面加载失败，请关闭并重新启动 OpenFlow Studio。';
+      })()
+    `, true)
+  } catch (error) {
+    console.error('Failed to render startup fallback:', normalizeError(error))
+  }
+  if (!window.isVisible()) window.show()
+}
+
 function createWindow(): void {
+  const { width: workWidth, height: workHeight } = screen.getPrimaryDisplay().workAreaSize
+  const windowWidth = Math.min(1440, Math.max(1080, Math.floor(workWidth * 0.92)))
+  const windowHeight = Math.min(900, Math.max(640, Math.floor(workHeight * 0.92)))
+
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1200,
-    minHeight: 700,
+    width: windowWidth,
+    height: windowHeight,
+    minWidth: 1080,
+    minHeight: 640,
     show: false, // 先隐藏，等 ready-to-show 再显示，避免白屏
     autoHideMenuBar: true,
     backgroundColor: '#0f172a', // slate-900，防止加载时白色闪烁
@@ -257,247 +271,143 @@ function createWindow(): void {
     },
   })
 
-  // 窗口准备好后再显示，优化视觉体验
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  const window = mainWindow
+  let rendererRecoveryAttempts = 0
+  let rendererHealthTimer: NodeJS.Timeout | null = null
+
+  const clearRendererHealthTimer = () => {
+    if (rendererHealthTimer) clearTimeout(rendererHealthTimer)
+    rendererHealthTimer = null
+  }
+
+  const handleRendererReady = (event: Electron.IpcMainEvent) => {
+    if (event.sender !== window.webContents || !isUsableWindow(window)) return
+    clearRendererHealthTimer()
+    rendererRecoveryAttempts = 0
+    if (!window.isVisible()) window.show()
+  }
+
+  const verifyRendererMounted = () => {
+    clearRendererHealthTimer()
+    rendererHealthTimer = setTimeout(async () => {
+      rendererHealthTimer = null
+      if (!isUsableWindow(window)) return
+
+      if (await hasMountedRenderer(window)) {
+        rendererRecoveryAttempts = 0
+        if (!window.isVisible()) window.show()
+        return
+      }
+
+      if (rendererRecoveryAttempts < MAX_RENDERER_RECOVERY_ATTEMPTS) {
+        rendererRecoveryAttempts += 1
+        console.warn(
+          `Renderer root is empty; retrying startup (${rendererRecoveryAttempts}/${MAX_RENDERER_RECOVERY_ATTEMPTS}).`,
+        )
+        window.webContents.reloadIgnoringCache()
+        return
+      }
+
+      console.error('Renderer failed to mount after automatic startup retries.')
+      await showRendererLoadFailure(window)
+    }, RENDERER_BOOT_CHECK_DELAY_MS)
+  }
+
+  window.webContents.on('did-finish-load', verifyRendererMounted)
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return // -3 = ERR_ABORTED，由正常跳转或重载触发
+    console.error('Renderer load failed:', { errorCode, errorDescription, validatedURL })
+    verifyRendererMounted()
   })
 
-  mainWindow.on('close', (e) => {
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Renderer process exited:', details)
+  })
+  ipcMain.on('app:renderer-ready', handleRendererReady)
+
+  window.on('close', (e) => {
     if (closeToTray && !(app as any).isQuitting) {
       e.preventDefault()
-      mainWindow?.hide()
+      window.hide()
     }
   })
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
+  window.on('closed', () => {
+    clearRendererHealthTimer()
+    ipcMain.removeListener('app:renderer-ready', handleRendererReady)
+    if (mainWindow === window) mainWindow = null
   })
 
   // 开发模式：加载 Vite dev server；生产模式：加载本地 HTML
   const isDev = !app.isPackaged
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    mainWindow.webContents.openDevTools()
+    void window.loadURL(process.env['ELECTRON_RENDERER_URL']).catch((error) => {
+      console.error('Unable to load renderer URL:', normalizeError(error))
+      verifyRendererMounted()
+    })
+    window.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void window.loadFile(join(__dirname, '../renderer/index.html')).catch((error) => {
+      console.error('Unable to load renderer file:', normalizeError(error))
+      verifyRendererMounted()
+    })
   }
 
   // 在系统默认浏览器中打开外部链接
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
 }
 
-// ─── 截屏功能 ───────────────────────────────────────────
-
-async function startScreenshot() {
-  console.log('--- Starting Screenshot ---')
-  if (screenshotWindow) {
-    console.log('Screenshot window already exists')
-    if (!screenshotWindow.isDestroyed()) {
-      screenshotWindow.focus()
-      return
-    }
-    screenshotWindow = null
-  }
-
-  // Get total bounds of all displays
-  const displays = screen.getAllDisplays()
-  let minX = 0, minY = 0, maxX = 0, maxY = 0
-  displays.forEach(display => {
-    const bounds = display.bounds
-    minX = Math.min(minX, bounds.x)
-    minY = Math.min(minY, bounds.y)
-    maxX = Math.max(maxX, bounds.x + bounds.width)
-    maxY = Math.max(maxY, bounds.y + bounds.height)
-  })
-
-  const width = maxX - minX
-  const height = maxY - minY
-  console.log('Display bounds:', { minX, minY, width, height })
-
-  screenshotWindow = new BrowserWindow({
-    x: minX,
-    y: minY,
-    width,
-    height,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    movable: false,
-    hasShadow: false,
-    enableLargerThanScreen: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    }
-  })
-
-  // Capture all screens
-  try {
-    console.log('Capturing sources...')
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width, height }
-    })
-
-    console.log('Sources found:', sources.length)
-    if (sources.length === 0) {
-      throw new Error('No screen sources found')
-    }
-
-    // We'll pass the first source for now
-    const source = sources[0]
-    console.log('Selected source:', source.name)
-
-    screenshotWindow.once('ready-to-show', () => {
-      console.log('Screenshot window ready to show')
-      if (screenshotWindow && !screenshotWindow.isDestroyed()) {
-        screenshotWindow.show()
-        screenshotWindow.webContents.send('screenshot:captured', source.thumbnail.toDataURL())
-        console.log('Sent screenshot:captured to renderer')
-      }
-    })
-
-    const isDev = !app.isPackaged
-    if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-      const url = `${process.env['ELECTRON_RENDERER_URL']}/screenshot.html`
-      console.log('Loading URL:', url)
-      screenshotWindow.loadURL(url)
+function toggleMainWindow(): void {
+  if (mainWindow) {
+    if (mainWindow.isVisible() && mainWindow.isFocused()) {
+      mainWindow.hide()
     } else {
-      const path = join(__dirname, '../renderer/screenshot.html')
-      console.log('Loading file:', path)
-      screenshotWindow.loadFile(path)
+      restoreMainWindow()
     }
-  } catch (err) {
-    console.error('Screenshot capture failed:', err)
-    if (screenshotWindow) {
-      screenshotWindow.close()
-      screenshotWindow = null
-    }
-  }
-
-  screenshotWindow?.on('closed', () => {
-    console.log('Screenshot window closed')
-    screenshotWindow = null
-  })
-}
-
-function closeScreenshot() {
-  if (screenshotWindow) {
-    screenshotWindow.close()
-    screenshotWindow = null
-  }
-}
-
-// ─── 悬浮贴图功能 ────────────────────────────────────────
-
-function createPinWindow(dataUrl: string, bounds: { width: number, height: number, x: number, y: number }) {
-  console.log('Creating Pin Window with bounds:', bounds)
-  const pinWin = new BrowserWindow({
-    width: Math.round(bounds.width),
-    height: Math.round(bounds.height),
-    x: Math.round(bounds.x),
-    y: Math.round(bounds.y),
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    resizable: true,
-    hasShadow: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    }
-  })
-
-  pinWin.once('ready-to-show', () => {
-    pinWin.show()
-    pinWin.webContents.send('pin:data', dataUrl)
-  })
-
-  const isDev = !app.isPackaged
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    pinWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/pin.html`)
   } else {
-    pinWin.loadFile(join(__dirname, '../renderer/pin.html'))
+    createWindow()
   }
-
-  pinWindows.add(pinWin)
-  pinWin.on('closed', () => {
-    pinWindows.delete(pinWin)
-  })
 }
 
-/**
- * 从剪贴板读取图片并贴图
- */
-function pinFromClipboard() {
-  console.log('--- Pinning from Clipboard ---')
-  const image = clipboard.readImage()
-  if (image.isEmpty()) {
-    console.log('Clipboard is empty or does not contain an image')
+function restoreMainWindow(): void {
+  if (!mainWindow) {
+    createWindow()
     return
   }
 
-  const size = image.getSize()
-  const display = screen.getPrimaryDisplay()
-  const x = (display.bounds.width - size.width) / 2
-  const y = (display.bounds.height - size.height) / 2
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
 
-  createPinWindow(image.toDataURL(), {
-    width: size.width,
-    height: size.height,
-    x: Math.max(0, x),
-    y: Math.max(0, y)
-  })
+  if (process.platform === 'darwin') {
+    app.focus({ steal: true })
+  }
+
+  mainWindow.focus()
 }
 
-
-// ─── IPC: 截屏 & 贴图 ───────────────────────────────────
-
-ipcMain.on('screenshot:close', () => {
-  closeScreenshot()
-})
-
-ipcMain.on('screenshot:copy', (_, dataUrl: string) => {
-  const image = nativeImage.createFromDataURL(dataUrl)
-  clipboard.writeImage(image)
-  closeScreenshot()
-})
-
-ipcMain.on('screenshot:save', async (_, dataUrl: string) => {
-  closeScreenshot()
-  const image = nativeImage.createFromDataURL(dataUrl)
-  const result = await dialog.showSaveDialog({
-    title: '保存截图',
-    defaultPath: `screenshot-${Date.now()}.png`,
-    filters: [{ name: 'Images', extensions: ['png'] }]
-  })
-  if (!result.canceled && result.filePath) {
-    await fs.writeFile(result.filePath, image.toPNG())
+async function getTogglePanelShortcut(): Promise<string> {
+  const nestedShortcut = await storeGetValue('shortcutSettings.togglePanel')
+  if (typeof nestedShortcut === 'string' && nestedShortcut.trim()) {
+    return nestedShortcut
   }
-})
 
-ipcMain.on('screenshot:pin', (_, data: { dataUrl: string, bounds: { x: number, y: number, width: number, height: number } }) => {
-  closeScreenshot()
-  createPinWindow(data.dataUrl, data.bounds)
-})
+  const shortcutSettings = await storeGetValue('shortcutSettings') as { togglePanel?: unknown } | undefined
+  if (shortcutSettings && typeof shortcutSettings.togglePanel === 'string' && shortcutSettings.togglePanel.trim()) {
+    return shortcutSettings.togglePanel
+  }
 
-ipcMain.on('pin:close', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (win) win.close()
-})
+  return 'CommandOrControl+Shift+Space'
+}
 
 // ─── 自动更新 ────────────────────────────────────────────
 
 function setupAutoUpdater() {
-  // Check for updates
-  autoUpdater.checkForUpdatesAndNotify()
+  autoUpdater.on('error', (err) => {
+    console.error('Auto Updater Error:', err)
+  })
 
   autoUpdater.on('update-downloaded', async () => {
     const result = await dialog.showMessageBox({
@@ -512,8 +422,8 @@ function setupAutoUpdater() {
     }
   })
 
-  autoUpdater.on('error', (err) => {
-    console.error('Auto Updater Error:', err)
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.error('Auto Updater Check Error:', err)
   })
 }
 
@@ -522,7 +432,15 @@ function setupAutoUpdater() {
 // 添加一个全局变量标记是否正在退出
 ;(app as any).isQuitting = false
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+
+app.on('second-instance', () => {
+  restoreMainWindow()
+})
+
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
   setupAutoUpdater()
 
   // 读取系统设置
@@ -571,22 +489,7 @@ app.whenReady().then(async () => {
   tray = new Tray(trayIcon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '打开主面板', click: () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          if (mainWindow.isMinimized()) mainWindow.restore()
-          mainWindow.focus()
-        } else {
-          createWindow()
-        }
-      }
-    },
-    { label: '开始截图', click: () => startScreenshot() },
-    { label: '截图开发调试', click: () => {
-        if (screenshotWindow) screenshotWindow.webContents.openDevTools({ mode: 'detach' })
-        else {
-          startScreenshot().then(() => {
-            screenshotWindow?.webContents.openDevTools({ mode: 'detach' })
-          })
-        }
+        restoreMainWindow()
       }
     },
     { type: 'separator' },
@@ -598,26 +501,18 @@ app.whenReady().then(async () => {
   ])
   tray.setToolTip('OpenFlow Studio')
   tray.setContextMenu(contextMenu)
+  tray.on('click', restoreMainWindow)
+  tray.on('double-click', restoreMainWindow)
 
-  // Register shortcuts
-  const screenshotShortcut = await storeGetValue('screenshotShortcut') as string || 'F1'
-  const pinShortcut = await storeGetValue('pinShortcut') as string || 'F3'
-
-  globalShortcut.register(screenshotShortcut, () => {
-    console.log('Screenshot shortcut triggered:', screenshotShortcut)
-    startScreenshot()
-  })
-
-  globalShortcut.register(pinShortcut, () => {
-    console.log('Pin shortcut triggered:', pinShortcut)
-    pinFromClipboard()
-  })
-
-  console.log(`Shortcuts registered - Screenshot: ${screenshotShortcut}, Pin: ${pinShortcut}`)
+  const togglePanelShortcut = await getTogglePanelShortcut()
+  const registered = globalShortcut.register(togglePanelShortcut, toggleMainWindow)
+  console.log(`Shortcut registered - Toggle Panel: ${togglePanelShortcut} (${registered ? 'ok' : 'failed'})`)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    restoreMainWindow()
   })
+}).catch((error) => {
+  showFatalError('OpenFlow Studio 启动失败', error)
 })
 
 app.on('will-quit', () => {
@@ -628,44 +523,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-ipcMain.handle('shortcut:update', async (_, newShortcut: string | { screenshot: string, togglePanel: string, pinImage: string }) => {
+ipcMain.handle('shortcut:update', async (_, newShortcut: string | { togglePanel?: string }) => {
   globalShortcut.unregisterAll()
 
-  if (typeof newShortcut === 'string') {
-    const success = globalShortcut.register(newShortcut, () => {
-      startScreenshot()
-    })
-    if (success) {
-      await storeSetValue('screenshotShortcut', newShortcut)
-    }
-    return success
-  } else {
-    // Handling the new ShortcutSettings object
-    let success = true
-    if (newShortcut.screenshot) {
-      success = globalShortcut.register(newShortcut.screenshot, () => startScreenshot()) && success
-      if (success) await storeSetValue('screenshotShortcut', newShortcut.screenshot)
-    }
-    if (newShortcut.pinImage) {
-      success = globalShortcut.register(newShortcut.pinImage, () => pinFromClipboard()) && success
-      if (success) await storeSetValue('pinShortcut', newShortcut.pinImage)
-    }
-    if (newShortcut.togglePanel) {
-      success = globalShortcut.register(newShortcut.togglePanel, () => {
-        if (mainWindow) {
-          if (mainWindow.isVisible() && mainWindow.isFocused()) {
-            mainWindow.hide()
-          } else {
-            mainWindow.show()
-            mainWindow.focus()
-          }
-        } else {
-          createWindow()
-        }
-      }) && success
-    }
-    return success
+  const accelerator = typeof newShortcut === 'string' ? newShortcut : newShortcut.togglePanel
+  if (!accelerator) {
+    return true
   }
+
+  const success = globalShortcut.register(accelerator, toggleMainWindow)
+  if (success) {
+    await storeSetValue('shortcutSettings.togglePanel', accelerator)
+  }
+  return success
 })
 
 ipcMain.handle('shortcut:check', (_, accelerator: string) => {
@@ -686,104 +556,6 @@ ipcMain.handle('settings:applySystem', async (_, settings: { autoStart?: boolean
 })
 
 
-// ─── IPC: 数据库 (SQLite) ───────────────────────────────
-
-ipcMain.handle('db:getImportedData', async (_, batchId?: string) => {
-  try {
-    return await getImportedData(batchId)
-  } catch (error) {
-    console.error('db:getImportedData Error:', error)
-    return []
-  }
-})
-
-ipcMain.handle('db:insertImportedData', async (_, batchId: string, rowData: any) => {
-  try {
-    return await insertImportedData(batchId, rowData)
-  } catch (error) {
-    console.error('db:insertImportedData Error:', error)
-    return -1
-  }
-})
-
-ipcMain.handle('db:updateImportedData', async (_, id: number, rowData: any) => {
-  try {
-    await updateImportedData(id, rowData)
-    return true
-  } catch (error) {
-    console.error('db:updateImportedData Error:', error)
-    return false
-  }
-})
-
-ipcMain.handle('db:getExcelFiles', async () => {
-  try {
-    return await getExcelFiles()
-  } catch (error) {
-    console.error('db:getExcelFiles Error:', error)
-    return []
-  }
-})
-
-ipcMain.handle('db:insertExcelFile', async (_, file: any) => {
-  try {
-    return await insertExcelFile(file)
-  } catch (error) {
-    console.error('db:insertExcelFile Error:', error)
-    return -1
-  }
-})
-
-ipcMain.handle('db:deleteExcelFile', async (_, id: number) => {
-  try {
-    await deleteExcelFile(id)
-    return true
-  } catch (error) {
-    console.error('db:deleteExcelFile Error:', error)
-    return false
-  }
-})
-
-ipcMain.handle('db:clearAllExcelFiles', async () => {
-  try {
-    await clearAllExcelFiles()
-    return true
-  } catch (error) {
-    console.error('db:clearAllExcelFiles Error:', error)
-    return false
-  }
-})
-
-ipcMain.handle('db:deleteImportedData', async (_, id: number) => {
-  try {
-    await deleteImportedData(id)
-    return true
-  } catch (error) {
-    console.error('db:deleteImportedData Error:', error)
-    return false
-  }
-})
-
-ipcMain.handle('db:deleteBatch', async (_, batchId: string) => {
-  try {
-    await deleteBatch(batchId)
-    return true
-  } catch (error) {
-    console.error('db:deleteBatch Error:', error)
-    return false
-  }
-})
-
-ipcMain.handle('db:clearAllImportedData', async () => {
-  try {
-    await clearAllImportedData()
-    return true
-  } catch (error) {
-    console.error('db:clearAllImportedData Error:', error)
-    return false
-  }
-})
-
 // ─── IPC: 窗口控制 ──────────────────────────────────────
 
 ipcMain.on('window:minimize', () => {
@@ -798,117 +570,6 @@ ipcMain.on('window:maximize', () => {
 
 ipcMain.on('window:close', () => {
   BrowserWindow.getFocusedWindow()?.close()
-})
-
-// ─── IPC: Excel 解析 ────────────────────────────────────
-
-ipcMain.handle('dialog:importExcel', async () => {
-  const result = await dialog.showOpenDialog({
-    title: '导入 Excel 表格',
-    filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls', 'csv'] }],
-    properties: ['openFile'],
-  })
-
-  if (result.canceled || !result.filePaths[0]) return null
-
-  try {
-    const filePath = result.filePaths[0]
-    const fileName = basename(filePath)
-    const ext = extname(filePath)
-
-    // Ensure local backup directory exists
-    const userDataPath = app.getPath('userData')
-    const backupDir = join(userDataPath, 'imported_excels')
-    await fs.ensureDir(backupDir)
-
-    // Create a unique filename to avoid overwrites
-    const uniqueFilename = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`
-    const savedPath = join(backupDir, uniqueFilename)
-
-    // Copy the original file to the backup location
-    await fs.copyFile(filePath, savedPath)
-
-    // Read the file
-    const fileBuffer = await fs.readFile(filePath)
-    const workbook = xlsx.read(fileBuffer, { type: 'buffer' })
-
-    // Get first sheet
-    const firstSheetName = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets[firstSheetName]
-
-    // Convert to JSON (array of objects)
-    const data = xlsx.utils.sheet_to_json(worksheet)
-
-    return { fileName, data, savedPath }
-  } catch (error) {
-    console.error('Error parsing Excel:', error)
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`无法解析 Excel 文件: ${message}`)
-  }
-})
-
-// Auto-cleanup handler for old Excel files (older than 30 days)
-ipcMain.handle('fs:cleanupOldExcels', async () => {
-  try {
-    const userDataPath = app.getPath('userData')
-    const backupDir = join(userDataPath, 'imported_excels')
-    if (!(await fs.pathExists(backupDir))) return true
-
-    const files = await fs.readdir(backupDir)
-    const now = Date.now()
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
-
-    const results = await Promise.all(
-      files.map(async (file) => {
-        const filePath = join(backupDir, file)
-        try {
-          const stat = await fs.stat(filePath)
-          if (now - stat.mtimeMs > THIRTY_DAYS_MS) {
-            await fs.remove(filePath)
-            return true
-          }
-        } catch (error) {
-          console.error(`Error processing file ${file} for cleanup:`, error)
-        }
-        return false
-      })
-    )
-    const deletedCount = results.filter(Boolean).length
-    console.log(`Cleaned up ${deletedCount} old Excel files.`)
-    return true
-  } catch (error) {
-    console.error('Error cleaning up Excel files:', error)
-    return false
-  }
-})
-
-ipcMain.handle('fs:saveImageToLocal', async (_, args: { dataUrl?: string; sourcePath?: string }) => {
-  try {
-    const userDataPath = app.getPath('userData')
-    const imagesDir = join(userDataPath, 'game_dictionary_images')
-    await fs.ensureDir(imagesDir)
-
-    let destPath = ''
-    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}`
-
-    if (args.dataUrl) {
-      const base64Data = args.dataUrl.replace(/^data:image\/\w+;base64,/, "")
-      const buffer = Buffer.from(base64Data, 'base64')
-      destPath = join(imagesDir, `${filename}.png`)
-      await fs.writeFile(destPath, buffer)
-    } else if (args.sourcePath) {
-      const ext = extname(args.sourcePath) || '.png'
-      destPath = join(imagesDir, `${filename}${ext}`)
-      await fs.copyFile(args.sourcePath, destPath)
-    } else {
-      throw new Error('No dataUrl or sourcePath provided')
-    }
-
-    return destPath
-  } catch (error) {
-    console.error('fs:saveImageToLocal error:', error)
-    throw error
-  }
 })
 
 // ─── IPC: 对话框 ─────────────────────────────────────────
@@ -1022,6 +683,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
       let outFilePath = join(outDir, outFileName)
 
       if (isImage) {
+        const sharp = getSharp()
         let pipeline = sharp(file.filePath)
 
         // 1. Resize
@@ -1049,6 +711,7 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
         existingFiles.add(outFileName)
         results.push({ id: file.id, success: true, targetPath: outFilePath })
       } else if (isVideo) {
+        configureFfmpegPaths()
         await new Promise((resolve, reject) => {
           let cmd = ffmpeg(file.filePath)
 
@@ -1061,8 +724,8 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
           }
 
           if (config.quality) {
-            // ffmpeg video quality can be tricky. Using CRF (Constant Rate Factor) for typical formats
-            // mapping 1-100 to crf 51-0 (approximate). Lower CRF is better quality.
+            // ffmpeg video quality can be tricky. Using CRF (Constant Rate Factor) for typical formats.
+            // Convert 1-100 to crf 51-0 (approximate). Lower CRF is better quality.
             const crf = Math.floor(51 - (config.quality / 100) * 51)
             cmd = cmd.outputOptions([`-crf ${crf}`])
           }
@@ -1145,11 +808,8 @@ ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
   }
 })
 
-/** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
 /** 各种特殊固定文件夹名称 */
 const FIXED_FOLDERS = ['截屏素材', '录屏素材', '奇觅生成', '模糊处理', '即梦生成']
-/** 仅识别纯数字尺寸的一级子目录，如 720x1280、1080x1920 */
-const SIZE_FOLDER_REGEX = /^\d+[xX-]\d+$/
 /** 这些文件夹为原始物料目录，不参与尺寸识别，必须忽略 */
 const SKIP_DIRS_READ_SIZE = new Set([...FIXED_FOLDERS, '_Assets'])
 
@@ -1244,7 +904,7 @@ async function collectMediaFiles(
     const ext = extname(name).toLowerCase()
     if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) continue
 
-    const folderName = basename(dirPath)
+    const folderName = getResolutionFolderContext(fullPath)?.resolutionFolderName || basename(dirPath)
 
     fileList.push({
       filePath: fullPath,
@@ -1279,6 +939,12 @@ function normalizeValidationTargets(targetSizes: unknown): RequirementDetail[] {
   })
 }
 
+function getRequiredQuantityTotal(requirements: RequirementDetail[]) {
+  return requirements.reduce((sum, requirement) => {
+    return sum + Math.max(1, requirement.requiredQuantity ?? 1)
+  }, 0)
+}
+
 /**
  * fs:startValidation
  * 递归扫描文件夹内媒体文件，读取真实宽高，与目标尺寸对比并打标
@@ -1292,6 +958,27 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
 
   const fileList: { filePath: string; fileName: string; folderName: string; ext: string; size: number }[] = []
   await collectMediaFiles(folderPath, fileList, true)
+
+  if (fileList.length === 0) {
+    const requiredTotal = getRequiredQuantityTotal(targetRequirements) || 1
+    results.push({
+      fileName: '[缺失] 文件',
+      filePath: '',
+      folderName: '-',
+      ext: '',
+      fileSize: 0,
+      actualWidth: 0,
+      actualHeight: 0,
+      status: 'missing',
+      targetSize: '缺失文件',
+      requiredQuantity: requiredTotal,
+      actualQuantity: 0,
+      missingCount: requiredTotal,
+      missingKind: 'empty_folder',
+      error: '素材目录内没有可校验文件',
+    })
+    return results
+  }
 
   for (const { filePath, fileName, folderName, ext, size: fileSize } of fileList) {
     const isImage = IMAGE_EXTS.has(ext)
@@ -1412,341 +1099,12 @@ ipcMain.handle('fs:trashFile', async (_, filePath: string) => {
   }
 })
 
-/**
- * fs:executeRename
- * 批量重命名文件，自动处理同名冲突（追加 _1, _2...）
- */
-ipcMain.handle('fs:executeRename', async (_, { files, templates, projectName, producer, isSpecialEnabled, isManualEnabled }) => {
-  const results: RenameResult[] = []
-  const dirCache = new Map<string, Set<string>>()
-
-  const getDirEntries = async (dir: string) => {
-    if (!dirCache.has(dir)) {
-      try {
-        const names = await fs.readdir(dir)
-        dirCache.set(dir, new Set(names))
-      } catch {
-        dirCache.set(dir, new Set())
-      }
-    }
-    return dirCache.get(dir)!
-  }
-
-  // Date in YYYYMMDD format
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  const today = `${year}${month}${day}`
-
-  // 记录每个文件夹和媒体类型独立的序号
-  const sequenceCounters: Record<string, number> = {}
-
-  // 准备并发重命名的任务队列
-  type RenameTask = {
-    oldPath: string;
-    newPath: string;
-    dir: string;
-    oldName: string;
-    newName: string;
-    onSuccess?: () => void;
-    onError?: (err: any) => void;
-  }
-  const renameTasks: RenameTask[] = []
-
-  // 1. 先收集所有项目根目录（基于 ValidationResult 中的文件路径）
-  const projectRoots = new Set<string>()
-  for (const file of files as ValidationResult[]) {
-    if (!file.filePath || file.status === 'missing') continue
-    // 文件路径通常是 ProjectRoot / SizeFolder / file.ext
-    // 所以 dirname(dirname(filePath)) 即为 ProjectRoot
-    projectRoots.add(dirname(dirname(file.filePath)))
-  }
-
-  // 2. 静默处理 5 个特殊固定文件夹
-  // 规则：[父文件夹名称(即游戏名)][当前固定文件夹名]-[制作人缩写]-([序号]).[扩展名]
-  const producerAbbr = producer
-    ? pinyin(producer, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
-    : ''
-
-  for (const root of projectRoots) {
-    const gameName = basename(root)
-    for (const fixedFolderName of FIXED_FOLDERS) {
-      // Check for the new prefixed folder format or fallback to the old format for backward compatibility
-      let fixedFolderPath = join(root, `${gameName}-${fixedFolderName}`)
-      let stat: fs.Stats | null = null
-
-      try {
-        stat = await fs.stat(fixedFolderPath)
-      } catch (e) {
-        // Fallback to legacy exact name
-        fixedFolderPath = join(root, fixedFolderName)
-        try {
-          stat = await fs.stat(fixedFolderPath)
-        } catch (e2) {
-          // Both don't exist, ignore
-        }
-      }
-
-      if (stat && stat.isDirectory()) {
-          // If it's the 录屏素材 folder, skip renaming its files
-          if (fixedFolderName === '录屏素材') {
-            continue
-          }
-          // 获取文件夹内容，并利用现有的 dirCache 优化查询
-          const existingFiles = await getDirEntries(fixedFolderPath)
-          const names = Array.from(existingFiles)
-          const fixedSequenceCounters: Record<string, number> = {}
-
-          // 并行获取文件 stat
-          const statPromises = names.map(async (name) => {
-            const fullPath = join(fixedFolderPath, name)
-            try {
-              const fileStat = await fs.stat(fullPath)
-              return { name, fullPath, isFile: fileStat.isFile() }
-            } catch {
-              return { name, fullPath, isFile: false }
-            }
-          })
-          const fileStats = await Promise.all(statPromises)
-
-          for (const { name, fullPath, isFile } of fileStats) {
-            if (isFile) {
-              const ext = extname(name).toLowerCase()
-              const isImage = IMAGE_EXTS.has(ext)
-              const isVideo = VIDEO_EXTS.has(ext)
-
-              if (!isImage && !isVideo) continue // 静默跳过非图片/视频
-
-              const mediaType = isImage ? 'image' : 'video'
-              const seqKey = `${fixedFolderPath}_${mediaType}`
-              if (!fixedSequenceCounters[seqKey]) {
-                fixedSequenceCounters[seqKey] = 1
-              }
-              const currentSequence = fixedSequenceCounters[seqKey]
-
-              // 小火车截屏素材-XXX-(1).jpg
-              let newBaseName = sanitizePathSegment(`${gameName}${fixedFolderName}-${producerAbbr}-(${currentSequence})`)
-              let newFileName = `${newBaseName}${ext}`
-
-              // 冲突处理：顺延寻找可用序号
-              let localSeq = currentSequence
-              while (existingFiles.has(newFileName) && join(fixedFolderPath, newFileName) !== fullPath) {
-                localSeq++
-                newBaseName = sanitizePathSegment(`${gameName}${fixedFolderName}-${producerAbbr}-(${localSeq})`)
-                newFileName = `${newBaseName}${ext}`
-              }
-
-              const newFilePath = join(fixedFolderPath, newFileName)
-
-              if (join(fixedFolderPath, newFileName) !== fullPath) {
-                existingFiles.add(newFileName)
-              }
-
-              if (fullPath !== newFilePath) {
-                renameTasks.push({
-                  oldPath: fullPath,
-                  newPath: newFilePath,
-                  dir: fixedFolderPath,
-                  oldName: name,
-                  newName: newFileName,
-                  onSuccess: () => {
-                    existingFiles.delete(name)
-                    existingFiles.add(newFileName)
-                  }
-                })
-              }
-
-              fixedSequenceCounters[seqKey] = localSeq + 1
-            }
-          }
-        }
-    }
-  }
-
-  // 3. 处理正常的分辨率文件夹
-  for (const file of files as ValidationResult[]) {
-    if (!file.filePath || file.status === 'missing') continue
-
-    const dir = dirname(file.filePath)
-    // 动态读取上一级目录作为游戏名称
-    const gameName = basename(dirname(dir))
-
-    // 覆盖原本逻辑中的 projectName
-    const currentProjectName = gameName || projectName || ''
-    const isSpecial = isSpecialEnabled || currentProjectName.includes('创意比特') || currentProjectName.includes('（创意比特）') || currentProjectName.includes('(创意比特)')
-    const cleanProjectName = currentProjectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '')
-
-    const originalExt = file.ext || extname(file.filePath)
-    const originalBaseName = file.fileName
-    const sizeStr = `${file.actualWidth}x${file.actualHeight}`
-
-    const isImage = IMAGE_EXTS.has(originalExt.toLowerCase())
-    const isVideo = VIDEO_EXTS.has(originalExt.toLowerCase())
-
-    let targetTemplate = []
-    let finalExt = originalExt
-
-    if (isVideo) {
-      if (isManualEnabled) targetTemplate = templates.videoManual
-      else targetTemplate = isSpecial ? templates.videoSpecial : templates.videoRegular
-      finalExt = '.mp4'
-    } else if (isImage) {
-      if (isManualEnabled) targetTemplate = templates.imageManual
-      else targetTemplate = isSpecial ? templates.imageSpecial : templates.imageRegular
-    }
-
-    const aspectRatio = file.actualWidth >= file.actualHeight ? '横' : '竖'
-    const mediaType = isImage ? 'image' : (isVideo ? 'video' : 'other')
-    const sequenceKey = `${dir}_${mediaType}`
-
-    // 初始化该文件夹及媒体类型的序号，从 1 开始
-    if (!sequenceCounters[sequenceKey]) {
-      sequenceCounters[sequenceKey] = 1
-    }
-    const currentSequence = sequenceCounters[sequenceKey]
-
-    const vars: Record<string, string> = {
-      ProjectName: sanitizePathSegment(currentProjectName || 'Project', 'Project'),
-      CleanProjectName: sanitizePathSegment(cleanProjectName || 'Project', 'Project'),
-      Date: today,
-      Producer: sanitizePathSegment(producerAbbr, 'Producer'),
-      Resolution: sizeStr,
-      AspectRatio: aspectRatio,
-      Sequence: `(${currentSequence})`,
-      OriginalName: sanitizePathSegment(originalBaseName, 'Original')
-    }
-
-    let newBaseName = sanitizePathSegment(applyNewTemplate(targetTemplate, vars), 'Untitled')
-
-    const existingFiles = await getDirEntries(dir)
-    let newFileName = `${newBaseName}${finalExt}`
-
-    // 冲突处理：顺延寻找可用序号
-    let localSeq = currentSequence
-    while (existingFiles.has(newFileName) && join(dir, newFileName) !== file.filePath) {
-      localSeq++
-      vars.Sequence = `(${localSeq})`
-      newBaseName = sanitizePathSegment(applyNewTemplate(targetTemplate, vars), 'Untitled')
-      newFileName = `${newBaseName}${finalExt}`
-    }
-    const newFilePath = join(dir, newFileName)
-
-    // 预先占位，防止后续循环中名字冲突
-    if (join(dir, newFileName) !== file.filePath) {
-      existingFiles.add(newFileName)
-    }
-
-    // 先计算序号，不管是否成功都自增以保证不跳号（这满足了不跳号的要求）
-    // 更新序列计数器，以便下一个文件从新的最大序号开始计算
-    sequenceCounters[sequenceKey] = localSeq + 1
-
-    const resultObj: RenameResult = { oldFileName: file.fileName, newFileName, success: true }
-    results.push(resultObj)
-
-    if (file.filePath !== newFilePath) {
-      renameTasks.push({
-        oldPath: file.filePath,
-        newPath: newFilePath,
-        dir,
-        oldName: basename(file.filePath),
-        newName: newFileName,
-        onSuccess: () => {
-          existingFiles.delete(basename(file.filePath!))
-        },
-        onError: (err) => {
-          resultObj.success = false
-          resultObj.error = String(err)
-        }
-      })
-    }
-  }
-
-  // 4. 并发执行所有重命名任务
-  await Promise.all(
-    renameTasks.map(async (task) => {
-      if (task.oldPath === task.newPath) {
-        // 如果名字相同不需要改，但如果是 normal 文件夹，需要记录成功
-        if (task.onSuccess) task.onSuccess()
-        return
-      }
-      try {
-        await fs.rename(task.oldPath, task.newPath)
-        if (task.onSuccess) task.onSuccess()
-      } catch (err) {
-        if (task.onError) {
-          task.onError(err)
-        }
-      }
-    })
-  )
-
-  return results
+ipcMain.handle('fs:previewRename', async (_, request: RenameRequest) => {
+  return previewRenameRequest(request)
 })
 
-/**
- * fs:renameAiBatch
- * 为 AI 识图结果批量重命名文件
- */
-ipcMain.handle('fs:renameAiBatch', async (_, { filePath, templates, producerName, vars }) => {
-  const dirCache = new Map<string, Set<string>>()
-  const getDirEntries = async (dir: string) => {
-    if (!dirCache.has(dir)) {
-      try {
-        const names = await fs.readdir(dir)
-        dirCache.set(dir, new Set(names))
-      } catch {
-        dirCache.set(dir, new Set())
-      }
-    }
-    return dirCache.get(dir)!
-  }
-
-  const dir = dirname(filePath)
-  const originalExt = extname(filePath)
-
-  // Producer conversion
-  const producerAbbr = producerName
-    ? pinyin(producerName, { pattern: 'first', toneType: 'none', type: 'array' }).join('').toUpperCase()
-    : ''
-
-  const finalVars = { ...vars, Producer: producerAbbr }
-
-  // Filter out any potential illegal path characters in vars to prevent fs errors
-  // AI returns can sometimes contain random symbols
-  for (const key of Object.keys(finalVars)) {
-    if (typeof finalVars[key] === 'string') {
-      finalVars[key] = finalVars[key].replace(/[\\/:*?"<>|]/g, '')
-    }
-  }
-
-  let newBaseName = applyNewTemplate(templates, finalVars)
-  const existingFiles = await getDirEntries(dir)
-  let newFileName = `${newBaseName}${originalExt}`
-
-  // 冲突处理：顺延寻找可用序号（解析名字末尾的序号进行自增，如果没有序号则加一个序号）
-  let collisionCounter = 1
-  while (existingFiles.has(newFileName) && join(dir, newFileName) !== filePath) {
-    const match = newBaseName.match(/\((\d+)\)$/)
-    if (match) {
-      const seq = parseInt(match[1], 10) + 1
-      newBaseName = newBaseName.replace(/\(\d+\)$/, `(${seq})`)
-    } else {
-      newBaseName = `${newBaseName}-(${collisionCounter})`
-      collisionCounter++
-    }
-    newFileName = `${newBaseName}${originalExt}`
-  }
-  const newFilePath = join(dir, newFileName)
-
-  try {
-    await fs.rename(filePath, newFilePath)
-    existingFiles.delete(basename(filePath))
-    existingFiles.add(newFileName)
-    return { success: true, newFileName }
-  } catch (err) {
-    return { success: false, error: String(err) }
-  }
+ipcMain.handle('fs:executeRename', async (_, request: RenameRequest) => {
+  return executeRenameRequest(request)
 })
 
 /**
@@ -1880,10 +1238,30 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir, isQimiEnabled }
     const gameFolder = join(destDir, file.gameName)
     let finalResolution = file.resolution
 
-    // If it is an mp4 file and qimi generation is enabled, force the target folder to be '奇觅生成'
-    let qimiCreated = false;
+    // 视频素材优先归档到现有的“游戏名-奇觅生成”等包含“奇觅生成”的目录。
     if (isQimiEnabled && file.ext && file.ext.toLowerCase() === '.mp4') {
-      finalResolution = '奇觅生成';
+      const qimiFolderCandidates: string[] = []
+
+      if (await fs.pathExists(gameFolder)) {
+        try {
+          const gameSubDirs = await fs.readdir(gameFolder)
+          const directoryChecks = await Promise.all(
+            gameSubDirs.map(async (subDir) => {
+              try {
+                const stat = await fs.stat(join(gameFolder, subDir))
+                return stat.isDirectory() ? subDir : null
+              } catch {
+                return null
+              }
+            })
+          )
+          qimiFolderCandidates.push(...directoryChecks.filter((name): name is string => Boolean(name)))
+        } catch (err) {
+          // Ignore read errors, will just use the default qimi folder name.
+        }
+      }
+
+      finalResolution = selectQimiFolderName(file.gameName, qimiFolderCandidates)
     } else {
       // Check if the game folder exists and look for an existing resolution folder
       if (await fs.pathExists(gameFolder)) {
@@ -1913,11 +1291,7 @@ ipcMain.handle('fs:executeOrganize', async (_, { files, destDir, isQimiEnabled }
 
     // 如果目标文件夹不存在，记录并创建
     if (!(await fs.pathExists(targetFolder))) {
-      if (finalResolution === '奇觅生成') {
-        missingFolders.add(`已为您创建【奇觅生成】文件夹。`)
-      } else {
-        missingFolders.add(`【${file.gameName}】缺少文件夹，已为您创建【${finalResolution}】文件夹。`)
-      }
+      missingFolders.add(`【${file.gameName}】缺少文件夹，已为您创建【${finalResolution}】文件夹。`)
       await fs.ensureDir(targetFolder)
     }
 
@@ -1996,45 +1370,6 @@ ipcMain.handle('shell:openPath', async (_, path: string) => {
     return errorMsg || 'success'
   } catch (error) {
     return String(error)
-  }
-})
-
-// --- Game Mappings DB Handlers ---
-ipcMain.handle('db:getGameMappings', async () => {
-  try {
-    return await getGameMappings()
-  } catch (error) {
-    console.error('db:getGameMappings Error:', error)
-    throw error
-  }
-})
-
-ipcMain.handle('db:insertGameMapping', async (_, mapping: any) => {
-  try {
-    return await insertGameMapping(mapping)
-  } catch (error) {
-    console.error('db:insertGameMapping Error:', error)
-    throw error
-  }
-})
-
-ipcMain.handle('db:updateGameMapping', async (_, id: number, mapping: any) => {
-  try {
-    await updateGameMapping(id, mapping)
-    return true
-  } catch (error) {
-    console.error('db:updateGameMapping Error:', error)
-    throw error
-  }
-})
-
-ipcMain.handle('db:deleteGameMapping', async (_, id: number) => {
-  try {
-    await deleteGameMapping(id)
-    return true
-  } catch (error) {
-    console.error('db:deleteGameMapping Error:', error)
-    throw error
   }
 })
 

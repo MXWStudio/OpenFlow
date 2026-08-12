@@ -15,7 +15,13 @@ const theme = createTheme({
   fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif',
 });
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root');
+
+if (!root) {
+  throw new Error('Renderer root element is missing');
+}
+
+createRoot(root).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <Notifications position="top-right" />
@@ -23,3 +29,7 @@ createRoot(document.getElementById('root')!).render(
     </MantineProvider>
   </StrictMode>,
 );
+
+requestAnimationFrame(() => {
+  window.electronAPI?.app?.rendererReady();
+});

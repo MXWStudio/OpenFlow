@@ -182,7 +182,7 @@ export function FormatProcessor() {
     setIsProcessing(true);
 
     // Check if user has chosen a custom format
-    // But what if it's processing a video and keeping original format?
+    // But what if it's processing a video and retaining original format?
     // Wait, the main issue is the `files` array missing properties or properties getting lost.
 
     // reset status
@@ -228,7 +228,7 @@ export function FormatProcessor() {
     : [{ value: '', label: '保持原格式' }, { value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }];
 
   return (
-    <Flex h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
+    <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
       <Group justify="space-between">
          <Box>
             <Title order={3} c="#1d2230">格式处理</Title>
@@ -236,9 +236,10 @@ export function FormatProcessor() {
          </Box>
       </Group>
 
-      <Flex gap="lg" style={{ flex: 1, minHeight: 0 }}>
+      <Flex className="format-layout" gap="lg" style={{ flex: 1, minHeight: 0 }}>
         {/* 左侧：文件列表与拖拽区 */}
         <Card
+          className="format-file-card"
           radius="xl"
           withBorder
           shadow="sm"
@@ -293,7 +294,7 @@ export function FormatProcessor() {
         </Card>
 
         {/* 右侧：动作流配置区 */}
-        <Card radius="xl" withBorder shadow="sm" w={340} style={{ display: 'flex', flexDirection: 'column' }}>
+        <Card className="format-settings-card" radius="xl" withBorder shadow="sm" w={340} style={{ display: 'flex', flexDirection: 'column' }}>
           <Title order={5} mb="md" c="#22324c" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Settings size={18} /> 处理动作流
           </Title>

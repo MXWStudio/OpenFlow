@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Avatar,
@@ -6,23 +6,13 @@ import {
   Box,
   Button,
   Card,
-  Checkbox,
-  Code,
   Drawer,
   Flex,
   Group,
   Indicator,
-  PasswordInput,
-  ScrollArea,
-  Select,
-  SimpleGrid,
   Stack,
-  Tabs,
   Text,
-  TextInput,
-  ThemeIcon,
   Title,
-  Tooltip,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -32,66 +22,54 @@ import * as dylan from '@dicebear/dylan';
 import {
   Bell,
   CalendarDays,
-  Cpu,
-  History,
-  Plus,
-  Save,
-  Search,
   Settings,
-  Shield,
-  Sparkles,
-  TableProperties,
-  Trash2,
-  User,
   Workflow,
   FolderSearch,
-  Library,
 } from 'lucide-react';
 import {
-  buildTemplatePreview,
   dedupeStrings,
-  DEFAULT_API_KEYS,
   DEFAULT_USER_INFO,
   DEFAULT_WORKFLOW,
   formatHistoryTime,
-  getDirFromFilePath,
   PRESET_SIZES,
-  TEMPLATE_LABELS,
-  TOKEN_OPTIONS,
   DEFAULT_SYSTEM,
   DEFAULT_WORKSPACE,
   DEFAULT_SHORTCUTS,
-  DEFAULT_PROCESSING,
-  DEFAULT_DATA_STATS,
-  DEFAULT_SCREENSHOT,
-  type ApiKeys,
+  hydrateWorkflowSettings,
   type HistoryEntry,
+  type DailyRequirementSession,
   type NotificationHistoryEntry,
   type RequirementDetail,
   type RequirementProject,
-  type TemplateKey,
-  type TokenType,
   type UserInfo,
   type ValidationResult,
   type WorkflowSettings,
   type SystemSettings,
   type WorkspaceSettings,
   type ShortcutSettings,
-  type ProcessingSettings,
-  type DataStatsSettings,
-  type ScreenshotSettings,
 } from './appState';
 import { DailyWorkspace } from './views/DailyWorkspace';
 import { buildValidationPresentation } from './validationPresentation';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
-import { BitableWorkspace } from './views/BitableWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
-import { AiWorkspace } from './views/AiWorkspace';
-import { GameDictionaryWorkspace } from './views/GameDictionaryWorkspace';
 import { isDarkColorScheme } from './theme';
+import {
+  buildDailyRequirementSession,
+  isFreshDailyRequirementSession,
+} from './dailyRequirementSession';
+import {
+  formatRenameProducer,
+  getRenamePreset,
+  renderRenameRule,
+  validateRenamePreset,
+  type RenameBatchResult,
+  type RenamePreview,
+  type RenameRequest,
+  type RenameSelection,
+} from '../../shared/renameTemplates.ts';
 
-type ViewKey = 'daily' | 'organizer' | 'ai' | 'bitable' | 'format' | 'dictionary' | 'settings';
+type ViewKey = 'daily' | 'organizer' | 'format' | 'settings';
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
@@ -104,15 +82,21 @@ export default function App() {
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
-  const [isSpecialEnabled, setIsSpecialEnabled] = useState(false);
-  const [isManualEnabled, setIsManualEnabled] = useState(false);
+  const [renameSelection, setRenameSelection] = useState<RenameSelection>({
+    mode: 'regular',
+    customPresetId: DEFAULT_WORKFLOW.renameSettings.lastCustomPresetId,
+  });
+  const [renamePreview, setRenamePreview] = useState<RenamePreview | null>(null);
+  const [renameBatchResult, setRenameBatchResult] = useState<RenameBatchResult | null>(null);
+  const [workflowSaveState, setWorkflowSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isChangingJson, setIsChangingJson] = useState(false);
-  const [isDraggingGlobally, setIsDraggingGlobally] = useState(false);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [lastRenamedPaths, setLastRenamedPaths] = useState<string[]>([]);
-  const [selectedSizes, setSelectedSizes] = useState<string[]>(['1920*1080', '1080*1920']);
+  const [manualTargetSizes, setManualTargetSizes] = useState<string[]>(['1920*1080', '1080*1920']);
+  const [detectedFolderSizes, setDetectedFolderSizes] = useState<string[]>([]);
   const [projectsList, setProjectsList] = useState<RequirementProject[]>([]);
   const [jsonFileName, setJsonFileName] = useState('');
+  const [dailyRequirementSession, setDailyRequirementSession] = useState<DailyRequirementSession | null>(null);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([]);
@@ -120,16 +104,9 @@ export default function App() {
   const [isNotificationCenterOpened, setIsNotificationCenterOpened] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo>(DEFAULT_USER_INFO);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_WORKFLOW);
-  const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_API_KEYS);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
-  const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(DEFAULT_PROCESSING);
-  const [dataStatsSettings, setDataStatsSettings] = useState<DataStatsSettings>(DEFAULT_DATA_STATS);
-  const [screenshotSettings, setScreenshotSettings] = useState<ScreenshotSettings>(DEFAULT_SCREENSHOT);
-  const [layoutLeft, setLayoutLeft] = useState<string[]>(['todayData', 'createDir', 'sizePreview']);
-  const [layoutRight, setLayoutRight] = useState<string[]>(['systemStatus', 'quickActions', 'mediaDetails']);
-  const dragCounter = useRef(0);
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
   const validationPresentation = useMemo(
@@ -144,16 +121,69 @@ export default function App() {
   const hasBlockingIssues = hasValidated && validationPresentation.summary.hasBlockingIssues;
   const hasMissingIssues = hasValidated && validationPresentation.summary.hasMissingIssues;
   const hasExtraIssues = hasValidated && validationPresentation.summary.hasExtraIssues;
-  const canRename = hasValidated && validationPresentation.summary.canRenamePassedFiles;
+  const validationCanRename = hasValidated && validationPresentation.summary.canRenamePassedFiles;
+  const canRename = validationCanRename && renamePreview?.canExecute === true;
+  const regularRenamePreset = workflowSettings.renameSettings.presets.find((preset) => preset.kind === 'regular');
+  const canFallbackToRegular = Boolean(regularRenamePreset && validateRenamePreset(regularRenamePreset).length === 0);
+  const selectedRenamePreset = useMemo(() => {
+    if (renameSelection.mode === 'custom') {
+      const preset = getRenamePreset(workflowSettings.renameSettings, renameSelection.customPresetId);
+      return preset?.kind === 'custom' ? preset : undefined;
+    }
+    return workflowSettings.renameSettings.presets.find((preset) => preset.kind === renameSelection.mode);
+  }, [workflowSettings.renameSettings, renameSelection]);
+  const renameExample = useMemo(() => {
+    if (!selectedRenamePreset) return null;
+    const projectName = primaryProjectName || '示例项目';
+    const cleanProjectName = projectName.replace(/\(创意比特\)|（创意比特）|创意比特/g, '').trim() || '示例项目';
+    const variables = {
+      ProjectName: projectName,
+      CleanProjectName: cleanProjectName,
+      Date: new Date(),
+      Producer: formatRenameProducer(userInfo.name) || 'MXW',
+      Resolution: '1280x720',
+      AspectRatio: '横',
+      OriginalName: '素材原名',
+    };
+    const renderExample = (mediaType: 'image' | 'video') => {
+      const rule = selectedRenamePreset.rules[mediaType];
+      const result = renderRenameRule(rule, variables, rule.sequence.start);
+      return {
+        label: mediaType === 'image' ? '图片' : '视频',
+        value: result.ok ? `${result.value}.${mediaType === 'image' ? 'jpg' : 'mp4'}` : result.error,
+        valid: result.ok,
+      };
+    };
+    return {
+      presetName: selectedRenamePreset.name,
+      items: [renderExample('image'), renderExample('video')],
+    };
+  }, [selectedRenamePreset, primaryProjectName, userInfo.name]);
 
-  const allDisplaySizes = useMemo(() => dedupeStrings([...PRESET_SIZES, ...selectedSizes]), [selectedSizes]);
-  const horizontalSizes = useMemo(
-    () => allDisplaySizes.filter((size) => Number(size.split('*')[0]) >= Number(size.split('*')[1])),
-    [allDisplaySizes],
+  const requirementTargets = useMemo(
+    () => projectsList.flatMap((project) => {
+      const requirements = project.requirements?.length
+        ? project.requirements
+        : (project.sizes || []).map((resolution) => ({ resolution, requiredQuantity: 1 }));
+      return requirements;
+    }),
+    [projectsList],
   );
-  const verticalSizes = useMemo(
-    () => allDisplaySizes.filter((size) => Number(size.split('*')[0]) < Number(size.split('*')[1])),
-    [allDisplaySizes],
+  const requirementSizes = useMemo(
+    () => dedupeStrings(requirementTargets.map((item) => item.resolution)),
+    [requirementTargets],
+  );
+  const manualDisplaySizes = useMemo(
+    () => dedupeStrings([...PRESET_SIZES, ...manualTargetSizes, ...detectedFolderSizes]),
+    [manualTargetSizes, detectedFolderSizes],
+  );
+  const horizontalManualSizes = useMemo(
+    () => manualDisplaySizes.filter((size) => Number(size.split('*')[0]) >= Number(size.split('*')[1])),
+    [manualDisplaySizes],
+  );
+  const verticalManualSizes = useMemo(
+    () => manualDisplaySizes.filter((size) => Number(size.split('*')[0]) < Number(size.split('*')[1])),
+    [manualDisplaySizes],
   );
   const avatarSrc = useMemo(
     () =>
@@ -188,33 +218,15 @@ export default function App() {
     window.electronAPI.store.getAll().then((config) => {
       if (!config) return;
       if (config.userInfo && typeof config.userInfo === 'object') {
-        const stored = config.userInfo as Record<string, string>;
+        const stored = config.userInfo as Partial<UserInfo>;
         const next = { name: stored.name ?? '', department: stored.department ?? '', email: stored.email ?? '' };
         setUserInfo(next);
       }
       if (config.workflow && typeof config.workflow === 'object') {
-        const stored = config.workflow as Partial<WorkflowSettings>;
-        setWorkflowSettings((prev) => ({
-          ...prev,
-          ...stored,
-          renameTemplates: stored.renameTemplates || prev.renameTemplates,
-          organizerFormats: stored.organizerFormats || prev.organizerFormats,
-        }));
+        setWorkflowSettings((prev) => hydrateWorkflowSettings(config, prev));
       } else {
-        // Fallback for older config format
-        if (config.renameTemplates) {
-          setWorkflowSettings((prev) => ({ ...prev, renameTemplates: config.renameTemplates as WorkflowSettings['renameTemplates'] }));
-        }
-        if (typeof config.defaultOutputDir === 'string') {
-          setWorkflowSettings((prev) => ({ ...prev, defaultOutputDir: config.defaultOutputDir as string }));
-        }
+        setWorkflowSettings((prev) => hydrateWorkflowSettings(config, prev));
       }
-      if (config.apiKeys && typeof config.apiKeys === 'object') {
-        const stored = config.apiKeys as Record<string, string>;
-        setApiKeys({ geminiKey: stored.geminiKey ?? '', sdPath: stored.sdPath ?? '' });
-      }
-
-      // Load newly added state types
       if (config.systemSettings) {
         const sys = config.systemSettings as SystemSettings;
         setSystemSettings(sys);
@@ -224,34 +236,101 @@ export default function App() {
       }
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
-      else if (config.screenshotShortcut) {
-        // Migration from old single shortcut state
-        setShortcutSettings(prev => ({ ...prev, screenshot: config.screenshotShortcut as string }));
+
+      if (config.dailyRequirementSession && typeof config.dailyRequirementSession === 'object') {
+        const session = config.dailyRequirementSession as DailyRequirementSession;
+        if (isFreshDailyRequirementSession(session)) {
+          setDailyRequirementSession(session);
+          setProjectsList(Array.isArray(session.projects) ? session.projects : []);
+          setJsonFileName(session.fileName ? session.fileName.replace(/\.json$/i, '') : '');
+          if (session.producerName || session.department || session.email) {
+            setUserInfo((prev) => ({
+              ...prev,
+              ...(session.producerName ? { name: session.producerName } : {}),
+              ...(session.department ? { department: session.department } : {}),
+              ...(session.email ? { email: session.email } : {}),
+            }));
+          }
+        } else {
+          window.electronAPI.store.delete('dailyRequirementSession');
+        }
       }
-      if (config.processingSettings) setProcessingSettings(config.processingSettings as ProcessingSettings);
-      if (config.dataStatsSettings) setDataStatsSettings(config.dataStatsSettings as DataStatsSettings);
-      if (config.screenshotSettings) setScreenshotSettings(config.screenshotSettings as ScreenshotSettings);
 
       if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
-      if (Array.isArray(config.dailyLayoutLeft)) setLayoutLeft(config.dailyLayoutLeft as string[]);
-      if (Array.isArray(config.dailyLayoutRight)) setLayoutRight(config.dailyLayoutRight as string[]);
     }).finally(() => setIsAppReady(true));
   }, []);
 
-  async function handleLayoutChange(left: string[], right: string[]) {
-    setLayoutLeft(left);
-    setLayoutRight(right);
-    if (window.electronAPI) {
-      await window.electronAPI.store.set('dailyLayoutLeft', left);
-      await window.electronAPI.store.set('dailyLayoutRight', right);
+  useEffect(() => {
+    if (!isAppReady || !window.electronAPI) return;
+    setWorkflowSaveState('saving');
+    const timeout = window.setTimeout(() => {
+      window.electronAPI.store.set('workflow', workflowSettings)
+        .then(() => setWorkflowSaveState('saved'))
+        .catch(() => setWorkflowSaveState('error'));
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [isAppReady, workflowSettings]);
+
+  useEffect(() => {
+    const selected = getRenamePreset(workflowSettings.renameSettings, renameSelection.customPresetId);
+    if (selected?.kind === 'custom') return;
+    const fallback = getRenamePreset(workflowSettings.renameSettings, workflowSettings.renameSettings.lastCustomPresetId)
+      || workflowSettings.renameSettings.presets.find((preset) => preset.kind === 'custom');
+    if (fallback) setRenameSelection((prev) => ({ ...prev, customPresetId: fallback.id }));
+  }, [workflowSettings.renameSettings, renameSelection.customPresetId]);
+
+  useEffect(() => {
+    if (!validationCanRename || !window.electronAPI?.fs?.previewRename) {
+      setRenamePreview(null);
+      return;
     }
-  }
+
+    let cancelled = false;
+    const request: RenameRequest = {
+      files: validationResults.filter((item) => item.status === 'valid'),
+      settings: workflowSettings.renameSettings,
+      selection: renameSelection,
+      projectName: primaryProjectName,
+      producer: userInfo.name,
+    };
+    window.electronAPI.fs.previewRename(request)
+      .then((preview) => {
+        if (!cancelled) setRenamePreview(preview);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRenamePreview({
+            canExecute: false,
+            errorCount: 1,
+            items: [{
+              oldPath: '',
+              newPath: '',
+              oldFileName: '',
+              newFileName: '',
+              status: 'blocked',
+              errorCode: 'PREVIEW_FAILED',
+              error: error instanceof Error ? error.message : String(error),
+            }],
+          });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [
+    validationCanRename,
+    validationResults,
+    workflowSettings.renameSettings,
+    renameSelection,
+    primaryProjectName,
+    userInfo.name,
+  ]);
 
 
   function resetValidationState() {
     setValidationResults([]);
     setHasValidated(false);
+    setRenamePreview(null);
+    setRenameBatchResult(null);
   }
 
   function getPathBaseName(path: string): string {
@@ -276,25 +355,20 @@ export default function App() {
     });
   }
 
+  function getRequirementTargetsForProject(project: RequirementProject): RequirementDetail[] {
+    if (project.requirements?.length) return project.requirements;
+    return (project.sizes || []).map((resolution) => ({ resolution, requiredQuantity: 1 }));
+  }
+
+  function getFallbackTargetSizes() {
+    return dedupeStrings([...manualTargetSizes, ...detectedFolderSizes]);
+  }
+
   function getValidationTargetsForFolder(folderPath: string): Array<string | RequirementDetail> {
     const project = projectsList.length === 1 ? projectsList[0] : findProjectForFolder(folderPath);
-    if (!project) return selectedSizes;
-
-    const selectedSizeSet = new Set(selectedSizes);
-    const requirements = (project?.requirements || []).filter((item) => selectedSizeSet.has(item.resolution));
-
-    if (projectsList.length > 1) {
-      const projectSizeSet = new Set([
-        ...(project.sizes || []),
-        ...(project.requirements || []).map((item) => item.resolution),
-      ]);
-      const projectSizes = selectedSizes.filter((size) => projectSizeSet.has(size));
-      return requirements.length ? requirements : projectSizes;
-    }
-
-    const requirementSizeSet = new Set(requirements.map((item) => item.resolution));
-    const manualSizes = selectedSizes.filter((size) => !requirementSizeSet.has(size));
-    return [...requirements, ...manualSizes];
+    if (project) return getRequirementTargetsForProject(project);
+    if (requirementTargets.length) return requirementTargets;
+    return getFallbackTargetSizes();
   }
 
   async function handleChangeJson() {
@@ -302,18 +376,22 @@ export default function App() {
     try {
       const result = await window.electronAPI.dialog.openJson();
       if (!result) return;
-      const projects = Array.isArray((result as { projects?: unknown[] }).projects)
-        ? ((result as { projects?: RequirementProject[] }).projects || [])
-        : [];
+      const session = buildDailyRequirementSession(result);
+      const projects = session.projects;
+      setDailyRequirementSession(session);
       setProjectsList(projects);
-      setJsonFileName(result.fileName ? result.fileName.replace(/\.json$/i, '') : '');
-      if (result.producerName || result.department || result.email) {
+      setJsonFileName(session.fileName ? session.fileName.replace(/\.json$/i, '') : '');
+      resetValidationState();
+      if (window.electronAPI?.store) {
+        window.electronAPI.store.set('dailyRequirementSession', session);
+      }
+      if (session.producerName || session.department || session.email) {
         setUserInfo((prev) => {
           const newUserInfo = {
             ...prev,
-            ...(result.producerName ? { name: result.producerName as string } : {}),
-            ...(result.department ? { department: result.department as string } : {}),
-            ...(result.email ? { email: result.email as string } : {}),
+            ...(session.producerName ? { name: session.producerName } : {}),
+            ...(session.department ? { department: session.department } : {}),
+            ...(session.email ? { email: session.email } : {}),
           };
           if (window.electronAPI && window.electronAPI.store) {
             window.electronAPI.store.set('userInfo', newUserInfo);
@@ -321,16 +399,9 @@ export default function App() {
           return newUserInfo;
         });
       }
-      const sizeSet = new Set<string>();
-      projects.forEach((project) => {
-        project.sizes.forEach((size) => sizeSet.add(size));
-        (project.requirements || []).forEach((item) => sizeSet.add(item.resolution));
-      });
-      (result.sizes || []).forEach((size) => sizeSet.add(size));
-      if (sizeSet.size) setSelectedSizes([...sizeSet]);
-      notify('green', '需求表已更新', result.fileName ?? undefined);
-      if (result.warnings && result.warnings.length > 0) {
-        notify('orange', '需求表有提示', result.warnings.slice(0, 2).join('；'));
+      notify('green', '需求表已更新', session.fileName || undefined);
+      if (session.warnings && session.warnings.length > 0) {
+        notify('orange', '需求表有提示', session.warnings.slice(0, 2).join('；'));
       }
     } catch {
       notify('red', '读取失败', '请检查 JSON 文件格式后重试。');
@@ -347,7 +418,7 @@ export default function App() {
     resetValidationState();
     try {
       const detectedSizes = await window.electronAPI.fs.readProjectSizes(uniquePaths);
-      if (detectedSizes.length) setSelectedSizes(detectedSizes);
+      if (detectedSizes.length) setDetectedFolderSizes(detectedSizes);
     } catch {}
     notify('green', '目录已加入工作区', `${uniquePaths.length} 个目录`);
   }
@@ -375,7 +446,9 @@ export default function App() {
 
   async function handleValidate() {
     if (!folderPaths.length) return notify('orange', '工作区为空', '请先添加素材目录。');
-    if (!selectedSizes.length) return notify('orange', '未选择尺寸', '请先勾选目标尺寸。');
+    if (!folderPaths.some((folderPath) => getValidationTargetsForFolder(folderPath).length > 0)) {
+      return notify('orange', '缺少校验目标', '请先导入需求表，或添加可识别尺寸的素材目录。');
+    }
 
     setIsValidating(true);
     setValidationResults([]);
@@ -390,9 +463,13 @@ export default function App() {
       setValidationResults(allResults);
       setHasValidated(true);
       const presentation = buildValidationPresentation(allResults);
-      const { blockingCount, missingRowsCount, missingTotal, extraCount } = presentation.summary;
+      const { blockingCount, missingRowsCount, missingTotal, emptyFolderCount, extraCount } = presentation.summary;
       if (blockingCount === 0 && missingRowsCount === 0 && extraCount === 0) {
         notify('green', '校验通过', '全部素材符合要求。');
+      } else if (blockingCount === 0 && emptyFolderCount > 0) {
+        const extraText = extraCount > 0 ? `另有 ${extraCount} 项非需求素材不会参与重命名。` : '';
+        notify('orange', '缺失文件', `${emptyFolderCount} 个素材目录为空，请添加素材后重验。${extraText}`);
+        setIsTableExpanded(true);
       } else if (blockingCount === 0 && missingRowsCount > 0) {
         const extraText = extraCount > 0 ? `另有 ${extraCount} 项非需求素材不会参与重命名。` : '';
         notify('orange', '数量不足', `${missingRowsCount} 个尺寸缺素材，共缺 ${missingTotal} 张。可补齐后重验，也可先重命名已有素材。${extraText}`);
@@ -412,11 +489,13 @@ export default function App() {
   }
 
   async function handleRename() {
-    if (!canRename) return notify('red', '无法执行重命名', '请先处理尺寸错误或读取失败的素材。');
+    if (!validationCanRename) return notify('red', '无法执行重命名', '请先处理尺寸错误或读取失败的素材。');
+    if (!renamePreview?.canExecute) {
+      const error = renamePreview?.items.find((item) => item.error)?.error;
+      return notify('red', '命名预检未通过', error || '请检查当前命名模板。');
+    }
     setIsRenaming(true);
     try {
-      const storedTemplates = await window.electronAPI.store.get<WorkflowSettings['renameTemplates']>('renameTemplates');
-      const templates = storedTemplates || workflowSettings.renameTemplates;
       const validFiles = validationResults.filter((item) => item.status === 'valid');
       if (hasMissingIssues && !hasBlockingIssues) {
         notify('orange', '按现有素材重命名', '仍有数量缺口，本次只重命名已通过校验的素材。');
@@ -424,22 +503,35 @@ export default function App() {
       if (hasExtraIssues && !hasBlockingIssues) {
         notify('blue', '跳过非需求素材', '额外尺寸素材不会参与本次重命名。');
       }
-      const results = await window.electronAPI.fs.executeRename(validFiles, templates, primaryProjectName, userInfo.name, isSpecialEnabled, isManualEnabled);
-      const successCount = results.filter((item) => item.success).length;
-      const failed = results.filter((item) => !item.success);
+      const result = await window.electronAPI.fs.executeRename({
+        files: validFiles,
+        settings: workflowSettings.renameSettings,
+        selection: renameSelection,
+        projectName: primaryProjectName,
+        producer: userInfo.name,
+      });
+      setRenameBatchResult(result);
+      const successCount = result.successCount;
+      const failed = result.results.filter((item) => !item.success);
       if (failed.length === 0) notify('green', '重命名完成', `${successCount} 个文件`);
-      else notify('red', '重命名部分失败', failed[0]?.error || '部分文件可能被占用。');
+      else notify('red', '重命名部分失败', `${failed.length} 个文件待重试：${failed[0]?.error || '文件可能被占用。'}`);
       if (successCount > 0) {
         const folderNames = folderPaths.map((p) => {
           const sep = p.includes('\\') ? '\\' : '/';
           return p.substring(p.lastIndexOf(sep) + 1);
         }).join(', ');
-        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: failed.length === 0 ? 'success' : 'warning', timestamp: Date.now() }, ...historyData].slice(0, 20);
+        const historyStatus: HistoryEntry['status'] = failed.length === 0 ? 'success' : 'warning';
+        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: historyStatus, timestamp: Date.now() }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
         setLastRenamedPaths([...folderPaths]);
+      }
+      if (failed.length === 0) {
         setFolderPaths([]);
         resetValidationState();
+      } else {
+        const failedPaths = new Set(failed.map((item) => item.oldPath));
+        setValidationResults((prev) => prev.filter((item) => item.status !== 'valid' || failedPaths.has(item.filePath)));
       }
     } catch {
       notify('red', '重命名部分失败', '部分文件可能被占用或命名冲突。');
@@ -471,9 +563,6 @@ export default function App() {
     { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
     { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
-    { key: 'ai', label: 'AI识图', icon: <Sparkles size={20} />, color: 'violet' },
-    { key: 'bitable', label: '表格', icon: <TableProperties size={20} />, color: 'teal' },
-    { key: 'dictionary', label: '库', icon: <Library size={20} />, color: 'pink' },
   ];
 
   if (!isAppReady) {
@@ -488,8 +577,9 @@ export default function App() {
     : 'var(--mantine-color-blue-8)';
 
   return (
-    <Flex h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
+    <Flex className="app-shell" h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
       <Box
+        className="app-sidebar"
         w={92}
         style={{
           background: isDarkTheme ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
@@ -498,8 +588,8 @@ export default function App() {
           zIndex: 20,
         }}
       >
-        <Flex direction="column" h="100%" align="center" py={18}>
-          <Box mb={30} mt={2} style={{ position: 'relative' }}>
+        <Flex className="app-sidebar-inner" direction="column" h="100%" align="center" py={18}>
+          <Box className="app-avatar" mb={30} mt={2} style={{ position: 'relative' }}>
             <Avatar src={avatarSrc} size={50} radius="xl" />
             <Box
               style={{
@@ -510,52 +600,20 @@ export default function App() {
                 height: 6,
                 transform: 'translateX(-50%)',
                 borderRadius: 999,
-                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-pink-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
+                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-red-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
               }}
             />
           </Box>
 
-          <Stack gap={12} align="center" mb={22}>
-            <ActionIcon
-              variant="subtle"
-              styles={{
-                root: {
-                  width: 48,
-                  height: 48,
-                  color: 'var(--mantine-color-dimmed)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-              }}
-            >
-              <Search size={26} />
-            </ActionIcon>
-            <ActionIcon
-              variant="subtle"
-              styles={{
-                root: {
-                  width: 48,
-                  height: 48,
-                  color: 'var(--mantine-color-dimmed)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-              }}
-            >
-              <Plus size={28} />
-            </ActionIcon>
-          </Stack>
-
           <Box my={4} w={46} h={1} style={{ background: 'var(--mantine-color-default-border)' }} />
 
-          <Stack gap={10} align="center" mt={18}>
+          <Stack className="app-nav" gap={10} align="center" mt={18}>
             {navItems.map((item) => {
               const active = activeView === item.key;
 
               return (
                 <button
+                  className="app-nav-button"
                   key={item.key}
                   onClick={() => setActiveView(item.key)}
                   style={{
@@ -603,7 +661,7 @@ export default function App() {
 
           <Box style={{ marginTop: 'auto' }} />
 
-          <Stack gap={16} align="center" pb={10}>
+          <Stack className="app-utilities" gap={16} align="center" pb={10}>
             <Indicator color="red" size={8} offset={5} disabled={notificationHistory.length === 0}>
               <ActionIcon
                 variant="subtle"
@@ -646,34 +704,49 @@ export default function App() {
         </Flex>
       </Box>
 
-      <Box style={{ flex: 1, minWidth: 0 }}>
+      <Box className="app-content" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         {activeView === 'daily' ? (
           <DailyWorkspace
             jsonFileName={jsonFileName}
             projectsCount={projectsList.length}
-            selectedSizes={selectedSizes}
-            horizontalSizes={horizontalSizes}
-            verticalSizes={verticalSizes}
+            requirementSizes={requirementSizes}
+            detectedFolderSizes={detectedFolderSizes}
+            manualTargetSizes={manualTargetSizes}
+            horizontalManualSizes={horizontalManualSizes}
+            verticalManualSizes={verticalManualSizes}
             folderPaths={folderPaths}
             validationResults={validationResults}
             isChangingJson={isChangingJson}
             isValidating={isValidating}
             isRenaming={isRenaming}
-            isSpecialEnabled={isSpecialEnabled}
-            isManualEnabled={isManualEnabled}
+            renameSelection={renameSelection}
+            customRenamePresets={workflowSettings.renameSettings.presets.filter((preset) => preset.kind === 'custom')}
+            renameExample={renameExample}
+            renamePreview={renamePreview}
+            renameBatchResult={renameBatchResult}
+            workflowSaveState={workflowSaveState}
+            canFallbackToRegular={canFallbackToRegular}
             lastRenamedPaths={lastRenamedPaths}
-            onToggleSpecialEnabled={(v) => { setIsSpecialEnabled(v); if (v) setIsManualEnabled(false); }}
-            onToggleManualEnabled={(v) => { setIsManualEnabled(v); if (v) setIsSpecialEnabled(false); }}
+            onChangeRenameMode={(mode) => setRenameSelection((prev) => ({ ...prev, mode }))}
+            onChangeCustomPreset={(customPresetId) => {
+              setRenameSelection({ mode: 'custom', customPresetId });
+              setWorkflowSettings((prev) => ({
+                ...prev,
+                renameSettings: { ...prev.renameSettings, lastCustomPresetId: customPresetId },
+              }));
+            }}
+            onFallbackToRegular={() => setRenameSelection((prev) => ({ ...prev, mode: 'regular' }))}
+            onRetryFailed={() => void handleRename()}
             hasValidated={hasValidated}
             hasIssues={hasIssues}
             canRename={canRename}
             isTableExpanded={isTableExpanded}
             onToggleTable={() => setIsTableExpanded((prev) => !prev)}
-            onToggleSize={(size) => setSelectedSizes((prev) => prev.includes(size) ? prev.filter((item) => item !== size) : [...prev, size])}
+            onToggleManualSize={(size) => setManualTargetSizes((prev) => prev.includes(size) ? prev.filter((item) => item !== size) : [...prev, size])}
             onChangeJson={() => void handleChangeJson()}
             onInitFolders={() => void handleInitFolders()}
             onAddFolder={() => void handleAddFolder()}
-            onClearFolders={() => { setFolderPaths([]); setLastRenamedPaths([]); setSelectedSizes([]); resetValidationState(); }}
+            onClearFolders={() => { setFolderPaths([]); setLastRenamedPaths([]); setDetectedFolderSizes([]); setManualTargetSizes([]); resetValidationState(); }}
             onRemoveFolder={(path) => { setFolderPaths((prev) => prev.filter((item) => item !== path)); resetValidationState(); }}
             onValidate={() => void handleValidate()}
             onRename={() => void handleRename()}
@@ -686,9 +759,6 @@ export default function App() {
                 window.electronAPI.shell.openPath(path);
               }
             }}
-            layoutLeft={layoutLeft}
-            layoutRight={layoutRight}
-            onLayoutChange={handleLayoutChange}
           />
         ) : activeView === 'organizer' ? (
           <OrganizerWorkspace
@@ -711,44 +781,19 @@ export default function App() {
             setUserInfo={setUserInfo}
             workflowSettings={workflowSettings}
             setWorkflowSettings={setWorkflowSettings}
-            apiKeys={apiKeys}
-            setApiKeys={setApiKeys}
             systemSettings={systemSettings}
             setSystemSettings={setSystemSettings}
             workspaceSettings={workspaceSettings}
             setWorkspaceSettings={setWorkspaceSettings}
             shortcutSettings={shortcutSettings}
             setShortcutSettings={setShortcutSettings}
-            processingSettings={processingSettings}
-            setProcessingSettings={setProcessingSettings}
-            dataStatsSettings={dataStatsSettings}
-            setDataStatsSettings={setDataStatsSettings}
-            screenshotSettings={screenshotSettings}
-            setScreenshotSettings={setScreenshotSettings}
             producerName={userInfo.name}
+            workflowSaveState={workflowSaveState}
           />
-        ) : activeView === 'bitable' ? (
-          <BitableWorkspace />
         ) : activeView === 'format' ? (
           <FormatProcessor />
-        ) : activeView === 'ai' ? (
-          <AiWorkspace workflowSettings={workflowSettings} apiKeys={apiKeys} producerName={userInfo.name} />
-        ) : activeView === 'dictionary' ? (
-          <GameDictionaryWorkspace />
         ) : (
-          <Flex h="100%" align="center" justify="center" p={40}>
-            <Card radius={32} p="xl" withBorder shadow="sm" maw={720}>
-              <Stack gap="sm">
-                <Badge color="teal" variant="light" w="fit-content">
-                  多维表格
-                </Badge>
-                <Title order={2}>表格版块</Title>
-                <Text c="dimmed">
-                  原来的后端功能已经全部放到“日常”版块。这里先保留为新界面占位区，后续按你的设计继续细化。
-                </Text>
-              </Stack>
-            </Card>
-          </Flex>
+          <FormatProcessor />
         )}
       </Box>
 
@@ -773,7 +818,7 @@ export default function App() {
                   mt={6}
                   style={{
                     borderRadius: 999,
-                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : ['red', 'pink'].includes(item.color) ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
+                    background: ['green', 'teal'].includes(item.color) ? 'var(--mantine-color-green-filled)' : item.color === 'red' ? 'var(--mantine-color-red-filled)' : ['orange', 'yellow'].includes(item.color) ? 'var(--mantine-color-orange-filled)' : 'var(--mantine-color-blue-filled)',
                     flexShrink: 0
                   }}
                 />

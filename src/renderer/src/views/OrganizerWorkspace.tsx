@@ -15,11 +15,10 @@ import {
   Badge,
   Paper,
   ThemeIcon,
-  ActionIcon,
   Tooltip,
   useComputedColorScheme,
 } from '@mantine/core';
-import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2, BookPlus } from 'lucide-react';
+import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
 import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
 import { isDarkColorScheme } from '../theme';
@@ -235,15 +234,16 @@ export function OrganizerWorkspace({
             : '点击下方“一键扫描”开始读取下载目录中的素材。';
 
   return (
-    <Box style={{ flex: 1, minWidth: 0, position: 'relative', height: '100%' }}>
+    <Box className="organizer-workspace" style={{ flex: 1, minWidth: 0, position: 'relative', height: '100%' }}>
       <Flex direction="column" h="100%">
         <Group
+          className="organizer-header"
           justify="space-between"
           px={30}
           h={102}
           style={{
             borderBottom: '1px solid var(--mantine-color-default-border)',
-            background: "var(--mantine-color-default)",
+            background: 'var(--mantine-color-default)',
           }}
         >
           <Stack gap="xs">
@@ -258,8 +258,9 @@ export function OrganizerWorkspace({
         </Group>
 
         <ScrollArea className="app-scroll" style={{ flex: 1 }}>
-          <Stack gap={22} px={30} py={18} pb={132}>
+          <Stack className="organizer-content" gap={22} px={30} py={18} pb={132}>
             <Card
+              className="organizer-overview"
               radius={30}
               p={30}
               withBorder
@@ -269,9 +270,9 @@ export function OrganizerWorkspace({
                 boxShadow: cardShadow,
               }}
             >
-              <Group wrap="nowrap" align="stretch" gap={30}>
+              <Group className="organizer-overview-grid" wrap="nowrap" align="stretch" gap={30}>
                 {/* 左侧 60% 系统状态 */}
-                <Box style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
+                <Box className="organizer-status-column" style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
                   <Group gap={8} mb="lg">
                     <FolderSearch size={14} color="var(--mantine-color-dimmed)" />
                     <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
@@ -365,7 +366,7 @@ export function OrganizerWorkspace({
                 </Box>
 
                 {/* 右侧 40% 快捷操作 */}
-                <Box style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
+                <Box className="organizer-actions-column" style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
                    <Group gap={8} mb="lg">
                     <FolderSearch size={14} color="var(--mantine-color-dimmed)" opacity={0} />
                     <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
@@ -560,33 +561,6 @@ export function OrganizerWorkspace({
                             </Group>
                           </Stack>
 
-                          {!isVideo && (
-                            <Tooltip label="提取为主图并添加到游戏库">
-                              <ActionIcon
-                                variant="light"
-                                color="pink"
-                                size="lg"
-                                style={{ flexShrink: 0, marginRight: 8 }}
-                                onClick={async () => {
-                                  try {
-                                    const localPath = await window.electronAPI.fs.saveImageToLocal({ sourcePath: file.filePath });
-                                    await window.electronAPI.db.insertGameMapping({
-                                      game_name: file.gameName,
-                                      image_path: localPath,
-                                      aliases: []
-                                    });
-                                    notify('green', '成功', `已将 ${file.gameName} 添加到游戏库`);
-                                  } catch (error) {
-                                    console.error(error);
-                                    notify('red', '失败', '添加到游戏库失败');
-                                  }
-                                }}
-                              >
-                                <BookPlus size={18} />
-                              </ActionIcon>
-                            </Tooltip>
-                          )}
-
                           <Box style={{ textAlign: 'right', flexShrink: 0 }}>
                             <Text size="xs" c="dimmed">将移至</Text>
                             <Text size="sm" fw={500} c="teal">{`${file.gameName}/${file.resolution}/`}</Text>
@@ -603,6 +577,7 @@ export function OrganizerWorkspace({
       </Flex>
 
       <Paper
+        className="organizer-floating-actions"
         radius={26}
         p={10}
         shadow="md"

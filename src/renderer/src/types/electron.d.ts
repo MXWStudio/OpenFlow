@@ -3,13 +3,21 @@
  * 所有通过 contextBridge 暴露的 API 都在这里声明类型
  */
 
+import type {
+  RenameBatchResult,
+  RenamePreview,
+  RenameRequest,
+  RenameSettingsV2,
+} from '../../../shared/renameTemplates.ts'
+
 /** 校验结果状态 */
-export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error'
+export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
 
 /** 单个文件的校验结果 */
 export interface ValidationResult {
   fileName: string
   filePath: string
+  folderName: string
   ext: string
   fileSize: number
   actualWidth: number
@@ -20,14 +28,7 @@ export interface ValidationResult {
   requiredQuantity?: number
   actualQuantity?: number
   missingCount?: number
-  error?: string
-}
-
-/** 单个文件的重命名结果 */
-export interface RenameResult {
-  oldFileName: string
-  newFileName: string
-  success: boolean
+  missingKind?: 'empty_folder'
   error?: string
 }
 
@@ -55,14 +56,34 @@ export interface RequirementProject {
   materialType?: string
 }
 
+export interface DailyRequirementSession {
+  importedAt: number
+  importedDateKey: string
+  fileName: string
+  sizes: string[]
+  projects: RequirementProject[]
+  producerName?: string
+  department?: string
+  email?: string
+  warnings?: string[]
+}
+
 /** 历史记录条目 */
 export interface HistoryEntry {
-  id: string
-  type: 'renamed' | 'validated' | 'imported'
-  projectName: string
-  fileCount: number
+  id: number
+  project: string
+  count: number
+  status: 'success' | 'warning' | 'error'
   timestamp: number
-  details?: string
+}
+
+/** 消息中心条目 */
+export interface NotificationHistoryEntry {
+  id: string
+  color: string
+  title: string
+  message?: string
+  timestamp: number
 }
 
 /** 用户账户信息 */
@@ -75,25 +96,42 @@ export interface UserInfo {
 
 /** 工作流预设配置 */
 export interface WorkflowPreset {
-  defaultOutputPath: string
-  renameTemplate: string
-  scanSubfolders: boolean
+  renameTemplates: Record<string, Array<{ type: string; value?: string }>>
+  renameSettings?: RenameSettingsV2
+  organizerFormats: string[]
 }
 
-/** API Keys 配置 */
-export interface ApiKeys {
-  gemini: string
-  stableDiffusion: string
+/** 系统设置 */
+export interface SystemSettings {
+  theme: 'dark' | 'light' | 'auto'
+  autoStart: boolean
+  closeToTray: boolean
 }
 
-/** 全局 App 配置（存储在 electron-store 中） */
+/** 素材整理路径设置 */
+export interface WorkspaceSettings {
+  sourceDir: string
+  destDir: string
+}
+
+/** 快捷键设置 */
+export interface ShortcutSettings {
+  togglePanel: string
+}
+
+/** 全局 App 配置（存储在本地 JSON 配置中） */
 export interface AppConfig {
   userInfo: UserInfo
   workflow: WorkflowPreset
-  apiKeys: ApiKeys
-  language: 'zh' | 'en' | 'ja'
-  theme: 'dark' | 'light'
+  systemSettings: SystemSettings
+  workspaceSettings: WorkspaceSettings
+  shortcutSettings: ShortcutSettings
   history: HistoryEntry[]
+  notificationHistory: NotificationHistoryEntry[]
+  dailyRequirementSession?: DailyRequirementSession
+  dailyLayoutLeft: string[]
+  dailyLayoutRight: string[]
+  renameTemplates?: WorkflowPreset['renameTemplates']
 }
 
 /** 解析的 JSON 需求文件结果 */
@@ -111,6 +149,11 @@ export interface ParsedRequirementJson {
 
 /** window.electronAPI 接口全量定义 */
 export interface ElectronAPI {
+  /** 应用启动状态 */
+  app: {
+    rendererReady: () => void
+  }
+
   /** Electron 辅助工具 */
   webUtils: {
     getPathForFile: (file: File) => string
@@ -120,33 +163,14 @@ export interface ElectronAPI {
   dialog: {
     /** 打开系统文件选择框，仅限 .json 文件 */
     openJson: () => Promise<ParsedRequirementJson | null>
-    /** 打开系统文件选择框，导入 Excel 数据 */
-    importExcel: () => Promise<{ fileName: string; data: any[] } | null>
     /** 打开文件夹选择框 */
     selectFolder: () => Promise<string | null>
     /** 导出错误日志到用户指定的文件路径 */
     exportLogs: () => Promise<{ success: boolean; path?: string }>
   }
 
-  /** 数据库相关 (SQLite) */
-  db: {
-    getImportedData: (batchId?: string) => Promise<any[]>
-    insertImportedData: (batchId: string, rowData: any) => Promise<number>
-    updateImportedData: (id: number, rowData: any) => Promise<boolean>
-    deleteImportedData: (id: number) => Promise<boolean>
-    deleteBatch: (batchId: string) => Promise<boolean>
-    clearAllImportedData: () => Promise<boolean>
-    getGameMappings: () => Promise<any[]>
-    insertGameMapping: (mapping: any) => Promise<number>
-    updateGameMapping: (id: number, mapping: any) => Promise<boolean>
-    deleteGameMapping: (id: number) => Promise<boolean>
-  }
-
   /** 文件系统相关 */
   fs: {
-    /** 保存图片到本地存储用于游戏库 */
-    saveImageToLocal: (args: { dataUrl?: string; sourcePath?: string }) => Promise<string>
-
     /**
      * 批量在选定目录下创建多项目文件夹结构（主进程内弹窗选择目标总目录）
      * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）
@@ -173,34 +197,20 @@ export interface ElectronAPI {
     /** 将单个素材文件移到系统废纸篓 */
     trashFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
 
-    /**
-     * 根据模板批量重命名文件
-     * @param files 通过校验的文件列表
-     * @param templates 4种重命名模板
-     * @param projectName 项目名称（用于填充 [Project] 变量）
-     * @param producer 制作人（用于填充 [Producer] 变量）
-     */
-    executeRename: (
-      files: ValidationResult[],
-      templates: {
-        videoRegular: any[];
-        videoSpecial: any[];
-        videoManual: any[];
-        imageRegular: any[];
-        imageSpecial: any[];
-        imageManual: any[];
-      },
-      projectName: string,
-      producer?: string,
-      isSpecialEnabled?: boolean,
-      isManualEnabled?: boolean
-    ) => Promise<RenameResult[]>
+    /** 生成真实文件名预检，不修改文件 */
+    previewRename: (request: RenameRequest) => Promise<RenamePreview>
+
+    /** 根据预检同源规则执行批量重命名 */
+    executeRename: (request: RenameRequest) => Promise<RenameBatchResult>
 
     /** 扫描素材整理目录 */
     scanOrganizerFolder: (sourceDir: string, allowedFormats: string[]) => Promise<any[]>
 
     /** 执行素材转移 */
     executeOrganize: (files: any[], destDir: string, isQimiEnabled?: boolean) => Promise<{ success: boolean; results?: any[]; error?: string; missingFolders?: string[] }>
+
+    /** 撤销上一次素材转移 */
+    undoOrganize: () => Promise<{ success: boolean; message?: string; error?: string }>
 
     /** 批量格式处理 */
     processFormat: (files: any[], config: any) => Promise<{ success: boolean; results: any[]; error?: string }>
@@ -213,7 +223,7 @@ export interface ElectronAPI {
     /** 设置指定 key 的配置值 */
     set: (key: string, value: unknown) => Promise<void>
     /** 获取所有配置 */
-    getAll: () => Promise<Partial<AppConfig>>
+    getAll: () => Promise<Partial<AppConfig> & Record<string, unknown>>
     /** 删除指定配置项 */
     delete: (key: string) => Promise<void>
   }
@@ -228,6 +238,14 @@ export interface ElectronAPI {
   /** Shell 调用系统能力 */
   shell: {
     openPath: (path: string) => Promise<string>
+  }
+
+  /** 受限 IPC 桥接，用于当前设置页调用少量主进程通道 */
+  ipcRenderer: {
+    invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
+    send: (channel: string, ...args: unknown[]) => void
+    on: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => void
+    removeListener: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => void
   }
 }
 
