@@ -29,6 +29,7 @@ describe('requirements', () => {
       extractedAt: '2026-06-01T00:00:00.000Z',
       source: { url: 'https://example.test/orders' },
       projects: [{
+        taskId: '20770001',
         projectName: '小火车',
         fullName: '赛诺斯-小火车-华为-0601',
         producerName: '孟祥伟',
@@ -43,10 +44,25 @@ describe('requirements', () => {
     }, '20260601-孟祥伟数据表.json')
 
     assert.strictEqual(result.projectName, '小火车')
+    assert.strictEqual(result.projects[0].taskId, '20770001')
     assert.strictEqual(result.producerName, '孟祥伟')
     assert.deepStrictEqual(result.sizes, ['1080*1920'])
     assert.strictEqual(result.projects[0].requirements[0].requiredQuantity, 3)
     assert.deepStrictEqual(result.warnings, [])
+  })
+
+  it('warns when a new extension export is incomplete or contains duplicate task IDs', () => {
+    const result = parseRequirementJson({
+      schemaVersion: 'openflow.requirements.v1',
+      extraction: { complete: false, failedCount: 1 },
+      projects: [
+        { taskId: 'same-id', projectName: '任务甲', requirements: [{ resolution: '720x1280', requiredQuantity: 1 }] },
+        { taskId: 'same-id', projectName: '任务乙', requirements: [{ resolution: '1080x1920', requiredQuantity: 1 }] },
+      ],
+    }, 'incomplete.json')
+
+    assert.match(result.warnings.join('\n'), /有 1 个任务抓取失败/)
+    assert.match(result.warnings.join('\n'), /任务ID重复：same-id/)
   })
 
   it('parses current plugin Chinese-key JSON arrays without losing quantity', () => {

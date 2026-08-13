@@ -68,7 +68,8 @@
             font-weight: 500;
         }
 
-        .setting-item textarea {
+        .setting-item textarea,
+        .setting-item select {
             width: 100%;
             border: 1px solid #D9D9D9;
             border-radius: 6px;
@@ -80,7 +81,8 @@
             transition: all 0.2s;
         }
 
-        .setting-item textarea:focus {
+        .setting-item textarea:focus,
+        .setting-item select:focus {
             border-color: #1677FF;
             box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
         }
@@ -361,13 +363,15 @@
             color: #A0A0A0;
         }
 
-        body.dark-theme .setting-item textarea {
+        body.dark-theme .setting-item textarea,
+        body.dark-theme .setting-item select {
             background: #1E1E1E;
             border-color: #3E3E42;
             color: #E0E0E0;
         }
 
-        body.dark-theme .setting-item textarea:focus {
+        body.dark-theme .setting-item textarea:focus,
+        body.dark-theme .setting-item select:focus {
             border-color: #007ACC;
             box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
         }
@@ -510,6 +514,13 @@
             <div class="setting-item">
                 <label>视频报表顶部字段 (逗号分隔)</label>
                 <textarea id="videoHeadersInput" rows="3"></textarea>
+            </div>
+            <div class="setting-item">
+                <label for="toolTagInput">工具标签</label>
+                <select id="toolTagInput">
+                    <option value="奇觅">奇觅</option>
+                    <option value="人工">人工</option>
+                </select>
             </div>
             <button id="saveSettingsBtn" class="btn btn-secondary" style="margin-top: 8px;">保存设置</button>
         </div>

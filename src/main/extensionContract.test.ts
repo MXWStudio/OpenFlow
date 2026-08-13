@@ -22,6 +22,10 @@ describe('OpenFlow Chrome extension contract', () => {
     const parsed = parseRequirementJson(fixture, 'openflow-requirements.json')
 
     assert.equal(parsed.projectName, '示例项目')
+    assert.equal(parsed.projects[0].taskId, '2077000000000000001')
+    assert.equal(fixture.projects[0]['视频总产出'], '6')
+    assert.equal(fixture.projects[0]['原创视频'], 3)
+    assert.equal(fixture.projects[0]['尺寸延展'], 3)
     assert.equal(parsed.producerName, '测试制作人')
     assert.deepEqual(parsed.sizes, ['1080*1920', '1920*1080'])
     assert.deepEqual(

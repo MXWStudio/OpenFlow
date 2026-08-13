@@ -18,6 +18,7 @@ export function getLocalDateKey(date: Date) {
 function normalizeProjects(projects: ParsedRequirementJson['projects']): RequirementProject[] {
   return Array.isArray(projects)
     ? projects.map((project) => ({
+        ...(project.taskId ? { taskId: project.taskId } : {}),
         projectName: project.projectName,
         sizes: [...(project.sizes || [])],
         ...(project.requirements ? { requirements: project.requirements.map((requirement) => ({ ...requirement })) } : {}),

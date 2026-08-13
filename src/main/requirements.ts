@@ -6,6 +6,7 @@ export interface RequirementDetail {
 }
 
 export interface RequirementProject {
+  taskId?: string
   projectName: string
   sizes: string[]
   requirements: RequirementDetail[]
@@ -191,8 +192,10 @@ function projectFromRecord(
     readString(record, ['producerName', 'producer_name', 'producer', '制作人', '制作者']) ||
     readString(other, ['制作人', '制作者'])
   const materialType = readString(record, ['materialType', '素材类型'])
+  const taskId = readString(record, ['taskId', 'task_id', '任务ID']) || readString(other, ['任务ID'])
 
   return {
+    ...(taskId ? { taskId } : {}),
     projectName,
     sizes,
     requirements,
@@ -266,6 +269,29 @@ export function parseRequirementJson(rawData: unknown, fileName = ''): ParsedReq
   if (projects.length === 0) {
     warnings.push('未解析到任何项目')
   }
+
+  if (isRecord(rawData)) {
+    const extraction = isRecord(rawData.extraction) ? rawData.extraction : null
+    if (extraction?.complete === false) {
+      const failedCount = typeof extraction.failedCount === 'number' && Number.isFinite(extraction.failedCount)
+        ? Math.max(0, Math.floor(extraction.failedCount))
+        : 0
+      warnings.push(failedCount > 0
+        ? `扩展导出不完整：有 ${failedCount} 个任务抓取失败`
+        : '扩展导出未通过完整性校验')
+    }
+  }
+
+  const seenTaskIds = new Map<string, string>()
+  projects.forEach((project) => {
+    if (!project.taskId) return
+    const previousProjectName = seenTaskIds.get(project.taskId)
+    if (previousProjectName) {
+      warnings.push(`${project.projectName} 与 ${previousProjectName} 的任务ID重复：${project.taskId}`)
+      return
+    }
+    seenTaskIds.set(project.taskId, project.projectName)
+  })
 
   if (!producerName) producerName = extractProducerFromFileName(fileName)
 

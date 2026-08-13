@@ -9,12 +9,23 @@
   "department": "创意中心",
   "email": "producer@example.test",
   "warnings": [],
+  "extraction": {
+    "deadline": "2026-08-12",
+    "matchedCount": 1,
+    "successCount": 1,
+    "failedCount": 0,
+    "complete": true
+  },
   "projects": [
     {
+      "taskId": "2077000000000000001",
       "projectName": "示例项目",
       "fullName": "示例项目-信息流-0812",
       "producerName": "测试制作人",
       "materialType": "视频",
+      "视频总产出": "6",
+      "原创视频": 3,
+      "尺寸延展": 3,
       "requirements": [
         {
           "resolution": "1080x1920",

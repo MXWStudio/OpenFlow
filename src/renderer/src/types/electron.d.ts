@@ -48,6 +48,7 @@ export interface RequirementDetail {
 }
 
 export interface RequirementProject {
+  taskId?: string
   projectName: string
   sizes: string[]
   requirements?: RequirementDetail[]

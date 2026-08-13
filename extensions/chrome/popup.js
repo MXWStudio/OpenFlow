@@ -8,6 +8,8 @@ const DEADLINE_FILTER_STORAGE_KEY = 'deadlineFilter';
 const KNOWN_CHANNELS = new Set(["华为", "穿山甲", "广点通", "快手", "腾讯", "抖音", "头条", "oppo", "vivo", "小米", "百度", "b站", "微信", "朋友圈", "优量汇", "巨量", "巨量引擎", "苹果", "ios", "安卓", "android"]);
 const COMMON_TAGS = new Set(["手动", "自动", "竖版", "横版", "测试", "常规", "首发", "图文", "视频", "平面", "自投", "代投"]);
 const SPECIAL_STYLE_HEADERS = new Set(["原创", "尺寸延展", "视频总产出", "原创视频"]);
+const ALLOWED_TOOL_TAGS = new Set(["奇觅", "人工"]);
+const DEFAULT_TOOL_TAG = "奇觅";
 
 /**
  * 助手函数：拆分项目名称，提取游戏名，灵活过滤冗余信息
@@ -164,14 +166,57 @@ function parseRequiredQuantity(value) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function calculateGraphicOutput(rawMaterialCount, details) {
+    const original = Number.isFinite(rawMaterialCount) && rawMaterialCount > 0
+        ? Math.floor(rawMaterialCount)
+        : 0;
+    const safeDetails = Array.isArray(details) ? details : [];
+    const explicitExtension = safeDetails.reduce(
+        (total, detail) => total + (parseRequiredQuantity(detail?.requiredQuantity) || 0),
+        0
+    );
+
+    return {
+        original,
+        sizeExtension: explicitExtension || (original * safeDetails.length)
+    };
+}
+
+function calculateVideoOutput(rawMaterialCount, details) {
+    const originalVideo = Number.isFinite(rawMaterialCount) && rawMaterialCount > 0
+        ? Math.floor(rawMaterialCount)
+        : 0;
+    const detailCount = Array.isArray(details) ? details.length : 0;
+    const sizeExtension = detailCount === 2
+        ? originalVideo
+        : detailCount > 2
+            ? originalVideo * 2
+            : 0;
+
+    return {
+        totalVideoOutput: originalVideo + sizeExtension,
+        originalVideo,
+        sizeExtension
+    };
+}
+
 function buildExtractionWarnings(dataList) {
     const warnings = [];
     if (!Array.isArray(dataList) || dataList.length === 0) {
         return ['未提取到任何任务'];
     }
 
+    const seenTaskIds = new Map();
     dataList.forEach((task, index) => {
         const projectName = task.projectName || task['项目名称'] || `第 ${index + 1} 个任务`;
+        const taskId = String(task.taskId || task['任务ID'] || '').trim();
+        if (!taskId) {
+            warnings.push(`${projectName} 缺少任务ID`);
+        } else if (seenTaskIds.has(taskId)) {
+            warnings.push(`${projectName} 与 ${seenTaskIds.get(taskId)} 的任务ID重复：${taskId}`);
+        } else {
+            seenTaskIds.set(taskId, projectName);
+        }
         const details = Array.isArray(task.details) ? task.details : [];
         if (details.length === 0) {
             warnings.push(`${projectName} 缺少尺寸要求`);
@@ -184,6 +229,33 @@ function buildExtractionWarnings(dataList) {
     });
 
     return warnings;
+}
+
+function normalizeToolTag(value) {
+    return ALLOWED_TOOL_TAGS.has(value) ? value : DEFAULT_TOOL_TAG;
+}
+
+function toSpreadsheetCellValue(value) {
+    const text = value == null ? '' : String(value);
+    return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function getExtractionBlockingReason() {
+    const failedTasks = Array.isArray(extractionMetadata.failedTasks) ? extractionMetadata.failedTasks : [];
+    if (failedTasks.length > 0) return `有 ${failedTasks.length} 个任务抓取失败，请重新提取后再导出`;
+    if (extractionMetadata.complete !== true) return '当前结果没有通过完整性校验，请重新提取后再导出';
+    if (Number.isFinite(extractionMetadata.matchedCount) && extractionMetadata.matchedCount !== extractedBulkData.length) {
+        return `匹配到 ${extractionMetadata.matchedCount} 个任务，但只有 ${extractedBulkData.length} 个通过校验`;
+    }
+    const identityWarnings = buildExtractionWarnings(extractedBulkData).filter(message => message.includes('任务ID'));
+    return identityWarnings[0] || '';
+}
+
+function ensureExtractionCanExport() {
+    const reason = getExtractionBlockingReason();
+    if (!reason) return true;
+    alert(reason);
+    return false;
 }
 
 function formatMetadataTime(value) {
@@ -266,7 +338,9 @@ async function loadSettings() {
             const settings = result[SETTINGS_STORAGE_KEY] || {};
             document.getElementById('graphicHeadersInput').value = settings.graphicHeaders || DEFAULT_GRAPHIC_HEADERS;
             document.getElementById('videoHeadersInput').value = settings.videoHeaders || DEFAULT_VIDEO_HEADERS;
-            resolve(settings);
+            const toolTag = normalizeToolTag(settings.toolTag);
+            document.getElementById('toolTagInput').value = toolTag;
+            resolve({ ...settings, toolTag });
         });
     });
 }
@@ -274,9 +348,11 @@ async function loadSettings() {
 function saveSettings() {
     const graphicHeaders = document.getElementById('graphicHeadersInput').value.trim();
     const videoHeaders = document.getElementById('videoHeadersInput').value.trim();
+    const toolTag = normalizeToolTag(document.getElementById('toolTagInput').value);
     const settings = {
         graphicHeaders: graphicHeaders || DEFAULT_GRAPHIC_HEADERS,
-        videoHeaders: videoHeaders || DEFAULT_VIDEO_HEADERS
+        videoHeaders: videoHeaders || DEFAULT_VIDEO_HEADERS,
+        toolTag
     };
     chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: settings }, () => {
         alert("设置已保存！");
@@ -360,7 +436,9 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
                         extractedAt: response.extractedAt || new Date().toISOString(),
                         warnings: response.warnings || buildExtractionWarnings(extractedBulkData),
                         deadline: response.deadline || deadline,
-                        matchedCount: response.matchedCount ?? extractedBulkData.length
+                        matchedCount: response.matchedCount ?? extractedBulkData.length,
+                        complete: response.complete === true,
+                        failedTasks: Array.isArray(response.failedTasks) ? response.failedTasks : []
                     };
 
                     try {
@@ -439,10 +517,15 @@ function renderPreview(dataList, options = {}) {
         statusHtml += '<div class="badge badge-red">' + escapeHtmlText(warnings.slice(0, 3).join('；')) + '</div>';
     }
 
+    const blockingReason = getExtractionBlockingReason();
+    if (blockingReason) {
+        statusHtml += '<div class="badge badge-red">⛔ ' + escapeHtmlText(blockingReason) + '</div>';
+    }
+
     document.getElementById('statusArea').innerHTML = statusHtml;
     document.getElementById('statusArea').style.display = 'flex';
     document.getElementById('listWrapper').style.display = 'block';
-    document.getElementById('exportActions').style.display = 'flex';
+    document.getElementById('exportActions').style.display = blockingReason ? 'none' : 'flex';
     setExtractButtonSecondaryState();
 
     const ul = document.getElementById('taskList');
@@ -526,11 +609,14 @@ function flattenDataForExport(dataList) {
 }
 
 // 3. 导出 JSON 功能
-document.getElementById('exportJsonBtn').addEventListener('click', () => {
+document.getElementById('exportJsonBtn').addEventListener('click', async () => {
     if (!extractedBulkData || extractedBulkData.length === 0) {
         alert("没有可导出的数据！");
         return;
     }
+    if (!ensureExtractionCanExport()) return;
+    const settings = await loadSettings();
+    const toolTag = normalizeToolTag(settings.toolTag);
 
     // 按目标结构重建 JSON 列表
     const formattedDataList = extractedBulkData.map(task => {
@@ -562,7 +648,8 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => {
 
         // 组装头部字段
         if (isGraphic) {
-            // 平面模板 (13个字段)
+            // 平面模板（14 个字段，使用原创/尺寸延展口径）
+            const graphicOutput = calculateGraphicOutput(rawMaterialCount, details);
             orderedData["日期"] = dateStr;
             orderedData["制作者"] = makerName;
             orderedData["项目名称"] = gameName;
@@ -575,12 +662,11 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => {
             orderedData["素材类型"] = "平面-买量素材-奇觅";
             orderedData["素材用途"] = task["需求属性"] || task["素材用途"] || "代投";
             orderedData["广告策略"] = "竞价";
-            orderedData["原创"] = rawMaterialCount;
-            // 尺寸延展 = 所有尺寸的所需数量之和
-            const totalExt = details.reduce((acc, d) => acc + (parseInt(d.requiredQuantity) || 0), 0);
-            orderedData["尺寸延展"] = totalExt || (rawMaterialCount * details.length);
+            orderedData["原创"] = graphicOutput.original;
+            orderedData["尺寸延展"] = graphicOutput.sizeExtension;
         } else {
-            // 视频模板 (13个字段)
+            // 视频模板（14 个字段，使用视频总产出/原创视频/尺寸延展口径）
+            const videoOutput = calculateVideoOutput(rawMaterialCount, details);
             orderedData["日期"] = dateStr;
             orderedData["制作人"] = makerName;
             orderedData["项目名称"] = gameName;
@@ -591,9 +677,10 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => {
             orderedData["需求属性"] = "代投";
             orderedData["渠道"] = mediaChannel;
             orderedData["素材类型"] = "视频";
-            orderedData["工具标签"] = "奇觅";
-            orderedData["视频总产出"] = String(rawMaterialCount);
-            orderedData["原创视频"] = rawMaterialCount;
+            orderedData["工具标签"] = toolTag;
+            orderedData["视频总产出"] = String(videoOutput.totalVideoOutput);
+            orderedData["原创视频"] = videoOutput.originalVideo;
+            orderedData["尺寸延展"] = videoOutput.sizeExtension;
         }
 
         // 收集附加属性（包含项目全名）
@@ -638,6 +725,7 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => {
 
         return {
             ...orderedData,
+            taskId: String(task.taskId || task["任务ID"] || ''),
             projectName: orderedData["项目名称"],
             fullName,
             producerName: makerName,
@@ -657,6 +745,13 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => {
         },
         extractedAt: extractionMetadata.extractedAt || new Date().toISOString(),
         warnings: metadataWarnings,
+        extraction: {
+            deadline: extractionMetadata.deadline || '',
+            matchedCount: extractionMetadata.matchedCount ?? formattedDataList.length,
+            successCount: formattedDataList.length,
+            failedCount: Array.isArray(extractionMetadata.failedTasks) ? extractionMetadata.failedTasks.length : 0,
+            complete: extractionMetadata.complete === true
+        },
         projects: formattedDataList
     };
     const jsonStr = JSON.stringify(exportPayload, null, 2);
@@ -677,6 +772,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         alert("没有可导出的数据！");
         return;
     }
+    if (!ensureExtractionCanExport()) return;
 
     if (typeof XLSX === 'undefined') {
         alert("Excel 导出库未加载，请刷新插件后重试！");
@@ -686,6 +782,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
     const settings = await loadSettings();
     const graphicHeadersStr = settings.graphicHeaders || DEFAULT_GRAPHIC_HEADERS;
     const videoHeadersStr = settings.videoHeaders || DEFAULT_VIDEO_HEADERS;
+    const toolTag = normalizeToolTag(settings.toolTag);
 
     const graphicHeaders = graphicHeadersStr.split(',').map(s => s.trim()).filter(Boolean);
     const videoHeaders = videoHeadersStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -789,7 +886,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
     const buildWorksheet = (headers, rows) => {
         const aoa = [
             headers,
-            ...rows.map(row => headers.map(header => row[header] == null ? '' : String(row[header])))
+            ...rows.map(row => headers.map(header => toSpreadsheetCellValue(row[header])))
         ];
 
         const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -860,7 +957,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         if (graphicTasks.length > 0) {
             const graphicRows = graphicTasks.map(task => {
                 const { dateStr, companyName, mediaChannel, gameName, rawMaterialCount, makerName, details } = getTaskExportBase(task);
-                const totalExt = details.reduce((acc, d) => acc + (parseInt(d.requiredQuantity, 10) || 0), 0) || (rawMaterialCount * details.length);
+                const graphicOutput = calculateGraphicOutput(rawMaterialCount, details);
 
                 const baseData = {
                     "日期": dateStr,
@@ -875,8 +972,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     "素材类型": "平面-买量素材-奇觅",
                     "素材用途": task["需求属性"] || task["素材用途"] || "代投",
                     "广告策略": "竞价",
-                    "原创": rawMaterialCount,
-                    "尺寸延展": totalExt
+                    "原创": graphicOutput.original,
+                    "尺寸延展": graphicOutput.sizeExtension
                 };
 
                 const finalRow = {};
@@ -896,16 +993,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         if (videoTasks.length > 0) {
             const videoRows = videoTasks.map(task => {
                 const { dateStr, companyName, mediaChannel, gameName, rawMaterialCount, makerName, details } = getTaskExportBase(task);
-
-                let totalExt = 0;
-                if (details && details.length === 2) {
-                    totalExt = rawMaterialCount;
-                } else if (details && details.length > 2) {
-                    totalExt = rawMaterialCount * 2;
-                } else if (details && details.length === 1) {
-                    // Fallback to 0 if only 1 detail, just in case (though user stated minimum is 2)
-                    totalExt = 0;
-                }
+                const videoOutput = calculateVideoOutput(rawMaterialCount, details);
 
                 const baseData = {
                     "日期": dateStr,
@@ -918,10 +1006,10 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     "需求属性": task["需求属性"] || "代投",
                     "渠道": mediaChannel,
                     "素材类型": "视频",
-                    "工具标签": "奇觅",
-                    "视频总产出": String(rawMaterialCount + totalExt),
-                    "原创视频": rawMaterialCount,
-                    "尺寸延展": totalExt
+                    "工具标签": toolTag,
+                    "视频总产出": String(videoOutput.totalVideoOutput),
+                    "原创视频": videoOutput.originalVideo,
+                    "尺寸延展": videoOutput.sizeExtension
                 };
 
                 const finalRow = {};
