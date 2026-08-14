@@ -11,14 +11,16 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build && electron-builder --win",
+    "build": "electron-vite build && electron-builder --win --publish never",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit",
     "check:extension": "node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs",
-    "test": "npm run check:extension && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
+    "check:release": "node --test scripts/release-contract.test.mjs",
+    "test": "npm run check:extension && npm run check:release && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
   },
   "build": {
     "appId": "com.openflow.studio",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "publish": [
       {
         "provider": "github",

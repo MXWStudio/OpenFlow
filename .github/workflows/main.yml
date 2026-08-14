@@ -12,31 +12,38 @@ jobs:
   build:
     name: Windows Build
     runs-on: windows-latest
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
         node-version: '22'
+        cache: npm
 
-    - name: Clean dependencies
-      run: |
-        rm -Force package-lock.json -ErrorAction SilentlyContinue
-        rm -Recurse -Force node_modules -ErrorAction SilentlyContinue
+    - name: Install locked dependencies
+      run: npm ci
 
-    - name: Install dependencies
-      run: npm install
+    - name: Run tests
+      run: npm test
+
+    - name: Run type checks
+      run: npm run lint
 
     - name: Build the application
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: npm run build
 
     - name: Archive Build Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: windows-build
-        path: build-dist/
+        path: |
+          build-dist/*.exe
+          build-dist/*.blockmap
+          build-dist/latest.yml
+        if-no-files-found: error
+        retention-days: 14
