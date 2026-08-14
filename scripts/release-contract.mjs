@@ -43,6 +43,35 @@ export function expectedReleaseArtifactNames(version, productName = 'openflow-st
   }
 }
 
+export function expectedExtensionArtifactNames(version) {
+  if (!VERSION_PATTERN.test(version)) throw new Error(`Invalid extension version: ${version}`)
+  return {
+    archive: `OpenFlow-Chrome-Extension-${version}.zip`,
+    manifest: 'extension-release.json'
+  }
+}
+
+export function validateExtensionReleaseArtifacts({ artifactDirectory }) {
+  const directory = resolve(artifactDirectory)
+  const manifestPath = resolve(directory, 'extension-release.json')
+  if (!existsSync(manifestPath) || statSync(manifestPath).size === 0) {
+    throw new Error(`Missing or empty extension release manifest: ${manifestPath}`)
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  if (manifest.schemaVersion !== 1 || !VERSION_PATTERN.test(manifest.extensionVersion ?? '')) {
+    throw new Error('Invalid extension release manifest')
+  }
+  if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
+    throw new Error('Extension release manifest contains no files')
+  }
+  const names = expectedExtensionArtifactNames(manifest.extensionVersion)
+  const archivePath = resolve(directory, names.archive)
+  if (!existsSync(archivePath) || statSync(archivePath).size === 0) {
+    throw new Error(`Missing or empty extension archive: ${archivePath}`)
+  }
+  return { version: manifest.extensionVersion, names, manifestPath, archivePath }
+}
+
 function readYamlScalar(source, pattern, label) {
   const match = source.match(pattern)
   if (!match) {
@@ -123,6 +152,8 @@ function runCli() {
       productName: packageJson.productName ?? packageJson.name
     })
     console.log(`Release artifacts verified: ${Object.values(result.names).join(', ')}`)
+    const extension = validateExtensionReleaseArtifacts({ artifactDirectory })
+    console.log(`Extension artifacts verified: ${Object.values(extension.names).join(', ')}`)
   }
 }
 

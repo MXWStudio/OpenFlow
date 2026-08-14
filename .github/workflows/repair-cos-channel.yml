@@ -1,0 +1,72 @@
+name: Repair Tencent COS Stable Channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published OpenFlow tag to promote, for example v2.6.0
+        required: true
+        type: string
+
+concurrency:
+  group: repair-cos-stable
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout the requested published version
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        ref: ${{ inputs.tag }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version: '22'
+        cache: npm
+
+    - name: Verify the requested release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPAIR_TAG: ${{ inputs.tag }}
+      run: |
+        node scripts/release-contract.mjs --tag "$env:REPAIR_TAG"
+        $release = gh release view $env:REPAIR_TAG `
+          --repo $env:GITHUB_REPOSITORY `
+          --json isDraft | ConvertFrom-Json
+        if ($release.isDraft) { throw "Only a published release can be promoted." }
+        New-Item -ItemType Directory -Force -Path repair-artifacts | Out-Null
+        gh release download $env:REPAIR_TAG `
+          --repo $env:GITHUB_REPOSITORY `
+          --pattern release.json `
+          --dir repair-artifacts
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Install locked dependencies
+      run: npm ci
+
+    - name: Promote the signed release on Tencent COS
+      env:
+        TENCENT_COS_SECRET_ID: ${{ secrets.TENCENT_COS_SECRET_ID }}
+        TENCENT_COS_SECRET_KEY: ${{ secrets.TENCENT_COS_SECRET_KEY }}
+        TENCENT_COS_SESSION_TOKEN: ${{ secrets.TENCENT_COS_SESSION_TOKEN }}
+        TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+        TENCENT_COS_REGION: ${{ vars.TENCENT_COS_REGION }}
+        OPENFLOW_COS_PUBLIC_BASE_URL: ${{ vars.OPENFLOW_COS_PUBLIC_BASE_URL }}
+        OPENFLOW_COS_PREFIX: ${{ vars.OPENFLOW_COS_PREFIX }}
+        OPENFLOW_COS_CHUNK_SIZE_MB: ${{ vars.OPENFLOW_COS_CHUNK_SIZE_MB }}
+        OPENFLOW_COS_CHUNK_PARALLEL: ${{ vars.OPENFLOW_COS_CHUNK_PARALLEL }}
+        OPENFLOW_COS_CHUNK_RETRIES: ${{ vars.OPENFLOW_COS_CHUNK_RETRIES }}
+        OPENFLOW_COS_OPERATION_ATTEMPTS: ${{ vars.OPENFLOW_COS_OPERATION_ATTEMPTS }}
+        OPENFLOW_COS_REQUEST_TIMEOUT_MS: ${{ vars.OPENFLOW_COS_REQUEST_TIMEOUT_MS }}
+        OPENFLOW_COS_FULL_READBACK: ${{ vars.OPENFLOW_COS_FULL_READBACK }}
+        OPENFLOW_COS_USE_ACCELERATE: ${{ vars.OPENFLOW_COS_USE_ACCELERATE }}
+        OPENFLOW_RELEASE_PRIVATE_KEY: ${{ secrets.OPENFLOW_RELEASE_PRIVATE_KEY }}
+        OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+      run: node scripts/sync-release-to-cos.mjs --promote repair-artifacts/release.json

@@ -9,6 +9,7 @@ import type {
   RenameRequest,
   RenameSettingsV2,
 } from '../../../shared/renameTemplates.ts'
+import type { UpdateViewState } from '../../../shared/updateContract.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -239,6 +240,16 @@ export interface ElectronAPI {
   /** Shell 调用系统能力 */
   shell: {
     openPath: (path: string) => Promise<string>
+  }
+
+  /** 桌面程序与 Chrome 扩展更新 */
+  updates: {
+    getState: () => Promise<UpdateViewState>
+    check: () => Promise<UpdateViewState>
+    install: () => Promise<boolean>
+    openExtensionFolder: () => Promise<string>
+    onState: (listener: (state: UpdateViewState) => void) => void
+    offState: (listener: (state: UpdateViewState) => void) => void
   }
 
   /** 受限 IPC 桥接，用于当前设置页调用少量主进程通道 */

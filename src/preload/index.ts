@@ -5,6 +5,12 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { RenameRequest } from '../shared/renameTemplates'
+import type { UpdateViewState } from '../shared/updateContract'
+
+const updateStateListeners = new WeakMap<
+  (state: UpdateViewState) => void,
+  (_event: Electron.IpcRendererEvent, state: UpdateViewState) => void
+>()
 
 // 将所有安全 API 暴露到 window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -104,6 +110,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ────────────────────────────────────────────────
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
+  },
+
+  updates: {
+    getState: () => ipcRenderer.invoke('updates:get-state'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    openExtensionFolder: () => ipcRenderer.invoke('updates:open-extension-folder'),
+    onState: (listener: (state: UpdateViewState) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, state: UpdateViewState) => listener(state)
+      updateStateListeners.set(listener, wrapped)
+      ipcRenderer.on('updates:state', wrapped)
+    },
+    offState: (listener: (state: UpdateViewState) => void) => {
+      const wrapped = updateStateListeners.get(listener)
+      if (wrapped) ipcRenderer.removeListener('updates:state', wrapped)
+      updateStateListeners.delete(listener)
+    },
   },
 
   ipcRenderer: {

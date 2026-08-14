@@ -1,0 +1,45 @@
+name: Verify Tencent COS Configuration
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-cos-configuration
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify upload and public readback
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+    - name: Set up Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version: '22'
+        cache: npm
+
+    - name: Install locked dependencies
+      run: npm ci
+
+    - name: Upload and read back the fixed verification file
+      env:
+        TENCENT_COS_SECRET_ID: ${{ secrets.TENCENT_COS_SECRET_ID }}
+        TENCENT_COS_SECRET_KEY: ${{ secrets.TENCENT_COS_SECRET_KEY }}
+        TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+        TENCENT_COS_REGION: ${{ vars.TENCENT_COS_REGION }}
+        OPENFLOW_COS_PUBLIC_BASE_URL: ${{ vars.OPENFLOW_COS_PUBLIC_BASE_URL }}
+        OPENFLOW_COS_PREFIX: ${{ vars.OPENFLOW_COS_PREFIX }}
+        OPENFLOW_COS_CHUNK_SIZE_MB: ${{ vars.OPENFLOW_COS_CHUNK_SIZE_MB }}
+        OPENFLOW_COS_CHUNK_PARALLEL: ${{ vars.OPENFLOW_COS_CHUNK_PARALLEL }}
+        OPENFLOW_COS_CHUNK_RETRIES: ${{ vars.OPENFLOW_COS_CHUNK_RETRIES }}
+        OPENFLOW_COS_OPERATION_ATTEMPTS: ${{ vars.OPENFLOW_COS_OPERATION_ATTEMPTS }}
+        OPENFLOW_COS_REQUEST_TIMEOUT_MS: ${{ vars.OPENFLOW_COS_REQUEST_TIMEOUT_MS }}
+        OPENFLOW_COS_FULL_READBACK: 'true'
+        OPENFLOW_COS_USE_ACCELERATE: ${{ vars.OPENFLOW_COS_USE_ACCELERATE }}
+      run: node scripts/sync-release-to-cos.mjs --verify-configuration

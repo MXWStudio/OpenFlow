@@ -12,10 +12,11 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 
 assert.equal(manifest.manifest_version, 3, 'Chrome extension must use Manifest V3')
 assert.equal(manifest.action?.default_popup, 'popup.html', 'Popup entry must stay explicit')
-assert.equal(manifest.background, undefined, 'Extension must not add a background worker without review')
-assert.equal(manifest.host_permissions, undefined, 'Extension must not request persistent host access')
+assert.equal(manifest.background?.service_worker, 'service-worker.js', 'Extension update worker is missing')
+assert.deepEqual(manifest.host_permissions, ['http://127.0.0.1/*'], 'Only the desktop loopback bridge may be persistent')
+assert.match(manifest.key ?? '', /^[A-Za-z0-9+/]+={0,2}$/, 'Extension requires a fixed public key and stable ID')
 
-const expectedPermissions = ['activeTab', 'downloads', 'scripting', 'storage']
+const expectedPermissions = ['activeTab', 'alarms', 'downloads', 'scripting', 'storage']
 assert.deepEqual(
   [...(manifest.permissions ?? [])].sort(),
   expectedPermissions,
@@ -23,6 +24,7 @@ assert.deepEqual(
 )
 
 const requiredFiles = [
+  'service-worker.js',
   'content.js',
   'popup.html',
   'popup.css',
@@ -49,7 +51,7 @@ for (const relativePath of localReferences) {
   assert.ok(existsSync(resolve(extensionRoot, relativePath)), `Broken popup resource reference: ${relativePath}`)
 }
 
-for (const scriptName of ['popup.js', 'content.js', 'xlsx.bundle.js']) {
+for (const scriptName of ['service-worker.js', 'popup.js', 'content.js', 'xlsx.bundle.js']) {
   const result = spawnSync(process.execPath, ['--check', resolve(extensionRoot, scriptName)], {
     encoding: 'utf8',
   })
@@ -142,5 +144,13 @@ assert.match(contentSource, /loadAllTaskCards/, 'Infinite task list loading is m
 assert.match(contentSource, /DUPLICATE_TASK_ID/, 'Duplicate task ID rejection is missing')
 assert.match(contentSource, /DETAIL_IDENTITY_NOT_CONFIRMED/, 'Stale detail rejection is missing')
 assert.match(contentSource, /referenceResources/, 'Reference attachment classification is missing')
+assert.match(contentSource, /OPENFLOW_EXTRACTION_STATE/, 'Extension update busy-state notification is missing')
+
+const serviceWorkerSource = readFileSync(resolve(extensionRoot, 'service-worker.js'), 'utf8')
+assert.match(serviceWorkerSource, /chrome\.runtime\.reload\(\)/, 'Extension self-reload is missing')
+assert.match(serviceWorkerSource, /crypto\.subtle\.digest\(['"]SHA-256['"]/, 'Extension file verification is missing')
+assert.match(serviceWorkerSource, /chrome\.tabs\.reload\(tabId\)/, 'Tracked page refresh is missing')
+assert.match(serviceWorkerSource, /await hasBusyExtraction\(\)/, 'Busy extraction update guard is missing')
+assert.match(serviceWorkerSource, /http:\/\/127\.0\.0\.1:/, 'Extension bridge must stay on loopback')
 
 console.log('Chrome extension checks passed.')

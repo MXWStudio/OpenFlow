@@ -5,6 +5,12 @@ const EXTRACTED_BULK_DATA_STORAGE_KEY = 'extractedBulkData';
 const EXTRACTED_BULK_META_STORAGE_KEY = 'extractedBulkDataMeta';
 const DEADLINE_FILTER_STORAGE_KEY = 'deadlineFilter';
 
+try {
+    chrome.runtime.sendMessage({ type: 'OPENFLOW_CHECK_FOR_UPDATES' }, () => void chrome.runtime.lastError);
+} catch {
+    // Desktop application may not be running; the popup remains fully usable.
+}
+
 const KNOWN_CHANNELS = new Set(["华为", "穿山甲", "广点通", "快手", "腾讯", "抖音", "头条", "oppo", "vivo", "小米", "百度", "b站", "微信", "朋友圈", "优量汇", "巨量", "巨量引擎", "苹果", "ios", "安卓", "android"]);
 const COMMON_TAGS = new Set(["手动", "自动", "竖版", "横版", "测试", "常规", "首发", "图文", "视频", "平面", "自投", "代投"]);
 const SPECIAL_STYLE_HEADERS = new Set(["原创", "尺寸延展", "视频总产出", "原创视频"]);

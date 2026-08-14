@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
+  Badge,
   Box,
+  Button,
   Card,
   Checkbox,
   Divider,
   Flex,
   Group,
+  Progress,
   Select,
   Stack,
   Switch,
@@ -18,10 +22,12 @@ import {
 } from '@mantine/core';
 import {
   FolderSearch,
+  FolderOpen,
   HardDrive,
   Info,
   Keyboard,
   MonitorPlay,
+  RefreshCw,
   Save,
   Settings,
   User,
@@ -36,6 +42,7 @@ import {
   type WorkspaceSettings,
 } from '../appState';
 import { RenameTemplateSettings } from './RenameTemplateSettings';
+import type { UpdateViewState } from '../../../shared/updateContract';
 
 interface SettingsWorkspaceProps {
   userInfo: UserInfo;
@@ -60,6 +67,25 @@ const organizerFormatOptions = [
   { label: 'MOV', value: 'mov' },
 ];
 
+const desktopUpdateLabels: Record<UpdateViewState['desktop']['status'], string> = {
+  disabled: '未启用',
+  idle: '等待检查',
+  checking: '检查中',
+  'up-to-date': '已是最新',
+  available: '发现新版',
+  downloading: '下载中',
+  downloaded: '等待安装',
+  error: '需要处理',
+};
+
+const extensionUpdateLabels: Record<UpdateViewState['extension']['status'], string> = {
+  preparing: '准备中',
+  ready: '已同步',
+  'waiting-reload': '等待 Chrome 空闲',
+  'rolled-back': '已恢复旧版',
+  error: '需要处理',
+};
+
 export function SettingsWorkspace({
   userInfo,
   setUserInfo,
@@ -80,8 +106,19 @@ export function SettingsWorkspace({
     togglePanel: false,
   });
   const [saveIndicatorVisible, setSaveIndicatorVisible] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateViewState | null>(null);
   const isInitialRender = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!window.electronAPI?.updates) return;
+    const handleState = (state: UpdateViewState) => setUpdateState(state);
+    window.electronAPI.updates.onState(handleState);
+    void window.electronAPI.updates.getState().then(handleState).catch((error) => {
+      console.error('Failed to read update state', error);
+    });
+    return () => window.electronAPI.updates.offState(handleState);
+  }, []);
 
   const checkShortcut = async (key: keyof ShortcutSettings, value: string) => {
     if (!window.electronAPI?.ipcRenderer) return;
@@ -141,6 +178,22 @@ export function SettingsWorkspace({
     if (!window.electronAPI?.dialog) return;
     const folderPath = await window.electronAPI.dialog.selectFolder();
     if (folderPath) setter(folderPath);
+  };
+
+  const checkForUpdates = async () => {
+    try {
+      setUpdateState(await window.electronAPI.updates.check());
+    } catch (error) {
+      console.error('Failed to check for updates', error);
+    }
+  };
+
+  const installDownloadedUpdate = async () => {
+    try {
+      await window.electronAPI.updates.install();
+    } catch (error) {
+      console.error('Failed to install update', error);
+    }
   };
 
   return (
@@ -354,15 +407,79 @@ export function SettingsWorkspace({
             <Stack gap="xl" maw={700}>
               <Box>
                 <Title order={4} mb="lg">关于 OpenFlow Studio</Title>
-                <Card withBorder radius="md" p="xl" ta="center">
-                  <Stack align="center" gap="md">
+                <Card withBorder radius="md" p="xl">
+                  <Stack align="center" gap="md" mb="xl">
                     <Box w={80} h={80} style={{ borderRadius: 20, backgroundColor: 'var(--mantine-color-blue-light)' }}>
                       <Flex h="100%" align="center" justify="center">
                         <Wrench size={40} color="var(--mantine-color-blue-6)" />
                       </Flex>
                     </Box>
                     <Title order={3}>OpenFlow Studio</Title>
-                    <Text c="dimmed">版本 1.0.0 (Beta)</Text>
+                    <Text c="dimmed">桌面版本 {updateState?.desktop.currentVersion || '读取中'}</Text>
+                  </Stack>
+
+                  <Divider mb="lg" />
+                  <Stack gap="lg">
+                    <Box>
+                      <Group justify="space-between" mb="xs">
+                        <Text fw={600}>桌面程序</Text>
+                        <Badge color={updateState?.desktop.status === 'error' ? 'red' : updateState?.desktop.status === 'downloaded' ? 'green' : 'blue'}>
+                          {updateState ? desktopUpdateLabels[updateState.desktop.status] : '读取中'}
+                        </Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {updateState?.desktop.message || '正在读取自动更新状态'}
+                      </Text>
+                      {updateState?.desktop.availableVersion && updateState.desktop.availableVersion !== updateState.desktop.currentVersion && (
+                        <Text size="sm" mt={6}>可用版本：{updateState.desktop.availableVersion}</Text>
+                      )}
+                      {updateState?.desktop.status === 'downloading' && (
+                        <Progress value={updateState.desktop.progressPercent || 0} mt="sm" animated />
+                      )}
+                      <Group mt="md">
+                        <Button
+                          leftSection={<RefreshCw size={16} />}
+                          variant="light"
+                          onClick={() => void checkForUpdates()}
+                          loading={updateState?.desktop.status === 'checking'}
+                          disabled={!updateState?.channelConfigured || updateState?.desktop.status === 'downloading'}
+                        >
+                          立即检查
+                        </Button>
+                        {updateState?.desktop.status === 'downloaded' && (
+                          <Button onClick={() => void installDownloadedUpdate()}>重启并安装</Button>
+                        )}
+                      </Group>
+                    </Box>
+
+                    <Divider />
+
+                    <Box>
+                      <Group justify="space-between" mb="xs">
+                        <Text fw={600}>Chrome 扩展</Text>
+                        <Badge color={updateState?.extension.status === 'error' ? 'red' : updateState?.extension.status === 'rolled-back' ? 'orange' : 'teal'}>
+                          {updateState ? extensionUpdateLabels[updateState.extension.status] : '读取中'}
+                        </Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {updateState?.extension.message || '桌面程序启动后会自动准备配套扩展'}
+                      </Text>
+                      <Text size="sm" mt={6}>
+                        已安装 {updateState?.extension.installedVersion || '—'}，安装包附带 {updateState?.extension.bundledVersion || '—'}
+                      </Text>
+                      <Button
+                        mt="md"
+                        leftSection={<FolderOpen size={16} />}
+                        variant="default"
+                        onClick={() => void window.electronAPI.updates.openExtensionFolder()}
+                      >
+                        打开扩展文件夹
+                      </Button>
+                    </Box>
+
+                    <Alert color="blue" title="首次使用只需操作一次">
+                      在 Chrome 的扩展管理页打开“开发者模式”，选择“加载已解压的扩展程序”，选中上面的扩展文件夹。以后扩展会随桌面程序自动同步，不需要再次选择。
+                    </Alert>
                   </Stack>
                 </Card>
               </Box>

@@ -5,7 +5,6 @@
 
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, screen } from 'electron'
 import { join, extname, basename, dirname } from 'path'
-import { autoUpdater } from 'electron-updater'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import sizeOf from 'image-size'
@@ -22,6 +21,8 @@ import { selectQimiFolderName } from './organize'
 import { getResolutionFolderContext, SIZE_FOLDER_REGEX } from './renameContext'
 import { executeRenameRequest, previewRenameRequest, type RenameRequest } from './rename'
 import { JsonConfigStore } from './configStore'
+import { DesktopUpdateManager } from './desktopUpdateManager'
+import { ExtensionUpdateManager } from './extensionUpdateManager'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
@@ -47,22 +48,11 @@ function showFatalError(title: string, error: unknown): void {
   dialog.showErrorBox(title, detail || '未知错误')
 }
 
-function isAutoUpdaterError(error: unknown): boolean {
-  const detail = normalizeError(error)
-  return detail.includes('github.com/MXWStudio/OpenFlow/releases/download') ||
-    detail.includes('Cannot download') ||
-    detail.includes('Auto Updater')
-}
-
 process.on('uncaughtException', (error) => {
   showFatalError('OpenFlow Studio 启动失败', error)
 })
 
 process.on('unhandledRejection', (reason) => {
-  if (isAutoUpdaterError(reason)) {
-    console.warn('Auto Updater Background Error:', normalizeError(reason))
-    return
-  }
   showFatalError('OpenFlow Studio 异步任务失败', reason)
 })
 
@@ -200,6 +190,8 @@ function getVideoInfo(
 // ─── 窗口创建 ───────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
+let extensionUpdateManager: ExtensionUpdateManager | null = null
+let desktopUpdateManager: DesktopUpdateManager | null = null
 
 let closeToTray = true // 默认为 true
 
@@ -402,31 +394,6 @@ async function getTogglePanelShortcut(): Promise<string> {
   return 'CommandOrControl+Shift+Space'
 }
 
-// ─── 自动更新 ────────────────────────────────────────────
-
-function setupAutoUpdater() {
-  autoUpdater.on('error', (err) => {
-    console.error('Auto Updater Error:', err)
-  })
-
-  autoUpdater.on('update-downloaded', async () => {
-    const result = await dialog.showMessageBox({
-      type: 'info',
-      title: '更新准备就绪',
-      message: '新版本已下载，是否立即重启安装？',
-      buttons: ['立即重启', '稍后重启']
-    })
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall()
-    }
-  })
-
-  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-    console.error('Auto Updater Check Error:', err)
-  })
-}
-
 // ─── 应用生命周期 ────────────────────────────────────────
 
 // 添加一个全局变量标记是否正在退出
@@ -441,7 +408,6 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
-  setupAutoUpdater()
 
   // 读取系统设置
   const systemSettings = await storeGetValue('systemSettings') as { autoStart?: boolean, closeToTray?: boolean } | undefined
@@ -480,7 +446,33 @@ app.whenReady().then(async () => {
     return net.fetch(fileUrl)
   })
 
+  const extensionSourceRoot = app.isPackaged
+    ? join(process.resourcesPath, 'chrome-extension')
+    : join(app.getAppPath(), '.openflow-build', 'chrome-extension')
+  const extensionTargetRoot = join(app.getPath('userData'), 'chrome-extension')
+  extensionUpdateManager = new ExtensionUpdateManager({
+    sourceRoot: extensionSourceRoot,
+    targetRoot: extensionTargetRoot,
+    statePath: join(app.getPath('userData'), 'chrome-extension-update-state.json'),
+    onStateChange: () => desktopUpdateManager?.notifyExtensionStateChanged(),
+  })
+  await extensionUpdateManager.start()
+
   createWindow()
+
+  desktopUpdateManager = new DesktopUpdateManager({
+    getWindow: () => mainWindow,
+    getExtensionState: () => extensionUpdateManager?.getState() ?? {
+      status: 'error',
+      bundledVersion: '',
+      installedVersion: '',
+      extensionPath: extensionTargetRoot,
+      message: '扩展更新服务未启动',
+    },
+    extensionPath: extensionTargetRoot,
+  })
+  await desktopUpdateManager.start()
+  desktopUpdateManager.notifyExtensionStateChanged()
 
   // Tray
   const iconPath = join(__dirname, '../../icons/icon.png')
@@ -517,6 +509,8 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  desktopUpdateManager?.stop()
+  void extensionUpdateManager?.stop()
 })
 
 app.on('window-all-closed', () => {

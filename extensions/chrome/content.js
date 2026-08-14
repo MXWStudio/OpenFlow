@@ -4,6 +4,16 @@ if (window.__OPENFLOW_CONTENT_READY__) {
 } else {
 window.__OPENFLOW_CONTENT_READY__ = true;
 
+function notifyOpenFlowUpdateState(message) {
+  try {
+    chrome.runtime.sendMessage(message, () => void chrome.runtime.lastError);
+  } catch {
+    // The extension may be reloading; extraction itself must remain usable.
+  }
+}
+
+notifyOpenFlowUpdateState({ type: 'OPENFLOW_PAGE_READY' });
+
 function extractDataFromPage() {
   try {
     // 1. 提取基础信息 (利用 querySelector 匹配网页中的具体结构)
@@ -622,6 +632,8 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
   let taskList = null;
   let originalScrollTop = 0;
 
+  notifyOpenFlowUpdateState({ type: 'OPENFLOW_EXTRACTION_STATE', busy: true });
+
   try {
     const extractedDataList = [];
     const extractionWarnings = [];
@@ -731,6 +743,7 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     sendResponse({ success: false, error: error.message, sourceUrl: location.href, extractedAt: new Date().toISOString() });
   } finally {
     if (taskList) taskList.scrollTop = originalScrollTop;
+    notifyOpenFlowUpdateState({ type: 'OPENFLOW_EXTRACTION_STATE', busy: false });
   }
 }
 

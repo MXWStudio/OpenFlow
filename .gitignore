@@ -8,5 +8,7 @@ coverage/
 .env*
 !.env.example
 build-dist/
+.openflow-build/
+.openflow-private/
 data/productivity.db
 .shapeup/001-ui-refactor-framing/frame.md

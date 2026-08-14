@@ -64,11 +64,40 @@ jobs:
     - name: Run type checks
       run: npm run lint
 
+    - name: Validate signed Tencent COS update configuration
+      env:
+        OPENFLOW_UPDATE_CHANNEL_URL: ${{ vars.OPENFLOW_UPDATE_CHANNEL_URL }}
+        OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+      run: node scripts/prepare-update-config.mjs --require
+
     - name: Build the application without publishing
+      env:
+        OPENFLOW_UPDATE_CHANNEL_URL: ${{ vars.OPENFLOW_UPDATE_CHANNEL_URL }}
+        OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
       run: npm run build
 
     - name: Validate release artifacts
       run: node scripts/release-contract.mjs --tag "$env:GITHUB_REF_NAME" --artifacts build-dist
+
+    - name: Stage immutable release files on Tencent COS
+      env:
+        TENCENT_COS_SECRET_ID: ${{ secrets.TENCENT_COS_SECRET_ID }}
+        TENCENT_COS_SECRET_KEY: ${{ secrets.TENCENT_COS_SECRET_KEY }}
+        TENCENT_COS_SESSION_TOKEN: ${{ secrets.TENCENT_COS_SESSION_TOKEN }}
+        TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+        TENCENT_COS_REGION: ${{ vars.TENCENT_COS_REGION }}
+        OPENFLOW_COS_PUBLIC_BASE_URL: ${{ vars.OPENFLOW_COS_PUBLIC_BASE_URL }}
+        OPENFLOW_COS_PREFIX: ${{ vars.OPENFLOW_COS_PREFIX }}
+        OPENFLOW_COS_CHUNK_SIZE_MB: ${{ vars.OPENFLOW_COS_CHUNK_SIZE_MB }}
+        OPENFLOW_COS_CHUNK_PARALLEL: ${{ vars.OPENFLOW_COS_CHUNK_PARALLEL }}
+        OPENFLOW_COS_CHUNK_RETRIES: ${{ vars.OPENFLOW_COS_CHUNK_RETRIES }}
+        OPENFLOW_COS_OPERATION_ATTEMPTS: ${{ vars.OPENFLOW_COS_OPERATION_ATTEMPTS }}
+        OPENFLOW_COS_REQUEST_TIMEOUT_MS: ${{ vars.OPENFLOW_COS_REQUEST_TIMEOUT_MS }}
+        OPENFLOW_COS_FULL_READBACK: ${{ vars.OPENFLOW_COS_FULL_READBACK }}
+        OPENFLOW_COS_USE_ACCELERATE: ${{ vars.OPENFLOW_COS_USE_ACCELERATE }}
+        OPENFLOW_RELEASE_PRIVATE_KEY: ${{ secrets.OPENFLOW_RELEASE_PRIVATE_KEY }}
+        OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+      run: node scripts/sync-release-to-cos.mjs --stage build-dist
 
     - name: Create one draft release
       shell: pwsh
@@ -93,7 +122,9 @@ jobs:
         $installer = "build-dist/$env:RELEASE_PRODUCT_NAME-Setup-$env:RELEASE_VERSION.exe"
         $blockmap = "$installer.blockmap"
         $manifest = "build-dist/latest.yml"
-        gh release upload $env:RELEASE_TAG $installer $blockmap $manifest `
+        $extensionVersion = (Get-Content -Raw -Encoding UTF8 "build-dist/extension-release.json" | ConvertFrom-Json).extensionVersion
+        $extensionArchive = "build-dist/OpenFlow-Chrome-Extension-$extensionVersion.zip"
+        gh release upload $env:RELEASE_TAG $installer $blockmap $manifest $extensionArchive "build-dist/extension-release.json" "build-dist/release.json" `
           --repo $env:GITHUB_REPOSITORY
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -105,7 +136,10 @@ jobs:
         $expectedAssets = @(
           "$env:RELEASE_PRODUCT_NAME-Setup-$env:RELEASE_VERSION.exe",
           "$env:RELEASE_PRODUCT_NAME-Setup-$env:RELEASE_VERSION.exe.blockmap",
-          "latest.yml"
+          "latest.yml",
+          "OpenFlow-Chrome-Extension-$((Get-Content -Raw -Encoding UTF8 'build-dist/extension-release.json' | ConvertFrom-Json).extensionVersion).zip",
+          "extension-release.json",
+          "release.json"
         ) | Sort-Object
         $release = gh release view $env:RELEASE_TAG `
           --repo $env:GITHUB_REPOSITORY `
@@ -132,6 +166,9 @@ jobs:
           build-dist/*.exe
           build-dist/*.blockmap
           build-dist/latest.yml
+          build-dist/OpenFlow-Chrome-Extension-*.zip
+          build-dist/extension-release.json
+          build-dist/release.json
         if-no-files-found: error
         retention-days: 14
 
@@ -143,7 +180,10 @@ jobs:
         $expectedAssets = @(
           "$env:RELEASE_PRODUCT_NAME-Setup-$env:RELEASE_VERSION.exe",
           "$env:RELEASE_PRODUCT_NAME-Setup-$env:RELEASE_VERSION.exe.blockmap",
-          "latest.yml"
+          "latest.yml",
+          "OpenFlow-Chrome-Extension-$((Get-Content -Raw -Encoding UTF8 'build-dist/extension-release.json' | ConvertFrom-Json).extensionVersion).zip",
+          "extension-release.json",
+          "release.json"
         ) | Sort-Object
         gh release edit $env:RELEASE_TAG `
           --repo $env:GITHUB_REPOSITORY `
@@ -164,6 +204,26 @@ jobs:
         ) {
           throw "Published release verification failed."
         }
+
+    - name: Promote the verified release on Tencent COS
+      env:
+        TENCENT_COS_SECRET_ID: ${{ secrets.TENCENT_COS_SECRET_ID }}
+        TENCENT_COS_SECRET_KEY: ${{ secrets.TENCENT_COS_SECRET_KEY }}
+        TENCENT_COS_SESSION_TOKEN: ${{ secrets.TENCENT_COS_SESSION_TOKEN }}
+        TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+        TENCENT_COS_REGION: ${{ vars.TENCENT_COS_REGION }}
+        OPENFLOW_COS_PUBLIC_BASE_URL: ${{ vars.OPENFLOW_COS_PUBLIC_BASE_URL }}
+        OPENFLOW_COS_PREFIX: ${{ vars.OPENFLOW_COS_PREFIX }}
+        OPENFLOW_COS_CHUNK_SIZE_MB: ${{ vars.OPENFLOW_COS_CHUNK_SIZE_MB }}
+        OPENFLOW_COS_CHUNK_PARALLEL: ${{ vars.OPENFLOW_COS_CHUNK_PARALLEL }}
+        OPENFLOW_COS_CHUNK_RETRIES: ${{ vars.OPENFLOW_COS_CHUNK_RETRIES }}
+        OPENFLOW_COS_OPERATION_ATTEMPTS: ${{ vars.OPENFLOW_COS_OPERATION_ATTEMPTS }}
+        OPENFLOW_COS_REQUEST_TIMEOUT_MS: ${{ vars.OPENFLOW_COS_REQUEST_TIMEOUT_MS }}
+        OPENFLOW_COS_FULL_READBACK: ${{ vars.OPENFLOW_COS_FULL_READBACK }}
+        OPENFLOW_COS_USE_ACCELERATE: ${{ vars.OPENFLOW_COS_USE_ACCELERATE }}
+        OPENFLOW_RELEASE_PRIVATE_KEY: ${{ secrets.OPENFLOW_RELEASE_PRIVATE_KEY }}
+        OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+      run: node scripts/sync-release-to-cos.mjs --promote build-dist/release.json
 
     - name: Remove this run's failed draft
       if: ${{ failure() && env.RELEASE_CREATED == 'true' }}

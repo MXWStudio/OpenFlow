@@ -10,12 +10,17 @@
   },
   "main": "out/main/index.js",
   "scripts": {
+    "prepare:extension": "node scripts/prepare-extension-package.mjs",
+    "prepare:update-config": "node scripts/prepare-update-config.mjs",
+    "release:generate-keys": "node scripts/generate-release-keypair.mjs",
+    "predev": "npm run prepare:extension && npm run prepare:update-config",
     "dev": "electron-vite dev",
-    "build": "electron-vite build && electron-builder --win --publish never",
+    "prebuild": "npm run prepare:extension && npm run prepare:update-config",
+    "build": "electron-vite build && electron-builder --win --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit",
     "check:extension": "node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs",
-    "check:release": "node --test scripts/release-contract.test.mjs",
+    "check:release": "node --test scripts/*.test.mjs",
     "test": "npm run check:extension && npm run check:release && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
   },
   "build": {
@@ -35,8 +40,12 @@
     ],
     "extraResources": [
       {
-        "from": "extensions/chrome",
+        "from": ".openflow-build/chrome-extension",
         "to": "chrome-extension"
+      },
+      {
+        "from": ".openflow-build/update-config.json",
+        "to": "update-config.json"
       }
     ],
     "win": {
@@ -64,7 +73,7 @@
     "@mantine/dropzone": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
-    "electron-updater": "^6.8.3",
+    "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
     "fluent-ffmpeg": "^2.1.3",
@@ -85,6 +94,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
+    "cos-nodejs-sdk-v5": "^3.0.0",
     "typescript": "~5.8.2"
   }
 }

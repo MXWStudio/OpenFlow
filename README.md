@@ -33,7 +33,7 @@ npm run dev
 1. 打开 `chrome://extensions/`。
 2. 开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”。
-4. 选择本仓库的 `extensions/chrome` 目录。
+4. 开发时选择本仓库的 `extensions/chrome` 目录；正式安装后，在桌面程序“设置中心 → 关于”中打开扩展文件夹并选择它。
 
 扩展的详细权限和使用说明见 [`extensions/chrome/README.md`](extensions/chrome/README.md)。
 
@@ -46,7 +46,9 @@ npm run lint
 npx electron-vite build
 ```
 
-`npm run build` 会生成 Windows 安装包，并把扩展复制到安装目录的 `resources/chrome-extension`，便于作为“已解压扩展”加载。安装包不会自动修改 Chrome，也不会自动启用扩展。
+`npm run build` 会生成 Windows 安装包、扩展压缩包和逐文件完整性清单。正式安装后，桌面程序会把配套扩展同步到固定的用户目录；用户第一次仍需在 Chrome 手动“加载已解压的扩展程序”，以后版本由桌面程序准备，扩展在空闲时自行重载。
+
+腾讯云 COS 与 GitHub 发布线路的首次配置见 [`docs/auto-update-setup.md`](docs/auto-update-setup.md)。
 
 ## 单仓库维护
 
