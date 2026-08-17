@@ -48,6 +48,8 @@ test('COS client enables bounded multipart retries, MD5 checking, and strict HTT
   assert.equal(receivedOptions.StrictSsl, true)
   assert.equal(configuration.operationAttempts, 4)
   assert.equal(configuration.fullPublicReadback, true)
+  assert.equal(configuration.chunkParallel, 4)
+  assert.equal(configuration.chunkAttempts, 6)
 })
 
 test('request wrapper retries temporary failures but does not retry denied access', async () => {
@@ -165,6 +167,91 @@ test('publisher uploads, checks COS headers, then hashes the public download', a
     assert.match(fixture.objects.get('openflow/release.json').headers['x-cos-meta-sha256'], /^[a-f0-9]{64}$/)
     assert.ok(fixture.logger.messages.some((message) => message.includes('COS upload 100%')))
     assert.ok(fixture.logger.messages.some((message) => message.includes('Public download verified')))
+  })
+})
+
+test('publisher uses least-privilege multipart APIs without listing bucket uploads', async () => {
+  await withFixture(async ({ filePath, fileBytes }) => {
+    let initializedHeaders
+    let storedObject
+    let uploadAttempts = 0
+    let activeUploads = 0
+    let maxActiveUploads = 0
+    const uploadedParts = new Map()
+    const cos = {
+      async headObject() {
+        if (!storedObject) {
+          const error = new Error('Not found')
+          error.code = 'NoSuchKey'
+          error.statusCode = 404
+          throw error
+        }
+        return { headers: storedObject.headers }
+      },
+      async uploadFile() {
+        throw new Error('Large files must not use resumable uploadFile')
+      },
+      async multipartList() {
+        throw new Error('Least-privilege publishing must not list bucket uploads')
+      },
+      async multipartInit(params) {
+        initializedHeaders = params.Headers
+        return { statusCode: 200, UploadId: 'upload-1' }
+      },
+      async multipartUpload(params) {
+        uploadAttempts += 1
+        if (params.PartNumber === 2 && uploadAttempts === 2) {
+          const error = new Error('temporary part failure')
+          error.code = 'ECONNRESET'
+          throw error
+        }
+        activeUploads += 1
+        maxActiveUploads = Math.max(maxActiveUploads, activeUploads)
+        await new Promise((resolve) => setImmediate(resolve))
+        uploadedParts.set(params.PartNumber, Buffer.from(params.Body))
+        activeUploads -= 1
+        return { statusCode: 200, ETag: `etag-${params.PartNumber}` }
+      },
+      async multipartComplete(params) {
+        assert.deepEqual(params.Parts.map((part) => part.PartNumber), [1, 2, 3])
+        const bytes = Buffer.concat([...uploadedParts.entries()].sort(([left], [right]) => left - right).map(([, body]) => body))
+        storedObject = {
+          bytes,
+          headers: {
+            ...initializedHeaders,
+            'content-length': String(bytes.length),
+          },
+        }
+        return { statusCode: 200 }
+      },
+      async multipartAbort() {
+        throw new Error('Successful multipart upload must not be aborted')
+      },
+    }
+    const logger = quietLogger()
+    const publisher = createCosReleasePublisher({
+      cos,
+      bucket: 'openflow-updates-123',
+      region: 'ap-guangzhou',
+      publicBaseUrl: 'https://downloads.example.test/base',
+      chunkSize: 8,
+      chunkParallel: 2,
+      chunkAttempts: 2,
+      operationAttempts: 2,
+      logger,
+      sleep: async () => {},
+      random: () => 0.5,
+      now: () => 1234,
+      fetchImpl: async () => new Response(storedObject?.bytes ?? 'missing', { status: storedObject ? 200 : 404 }),
+    })
+
+    const result = await publisher.uploadVerifiedFile(filePath, 'openflow/release.json', CACHE_CONTROL)
+
+    assert.equal(result.action, 'uploaded')
+    assert.equal(uploadAttempts, 4)
+    assert.ok(maxActiveUploads >= 1 && maxActiveUploads <= 2)
+    assert.deepEqual(storedObject.bytes, fileBytes)
+    assert.ok(logger.messages.some((message) => message.includes('retrying')))
   })
 })
 

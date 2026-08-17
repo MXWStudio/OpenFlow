@@ -46,6 +46,8 @@ const publisher = createCosReleasePublisher({
   region,
   publicBaseUrl,
   chunkSize: cosConfiguration.chunkSize,
+  chunkParallel: cosConfiguration.chunkParallel,
+  chunkAttempts: cosConfiguration.chunkAttempts,
   fullPublicReadback: cosConfiguration.fullPublicReadback,
   operationAttempts: cosConfiguration.operationAttempts,
 })

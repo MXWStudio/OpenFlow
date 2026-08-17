@@ -1,7 +1,7 @@
 import COS from 'cos-nodejs-sdk-v5'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { open, stat } from 'node:fs/promises'
 
 const MEBIBYTE = 1024 * 1024
 const TRANSIENT_ERROR_CODES = new Set([
@@ -49,6 +49,14 @@ export function createConfiguredCosClient(environment = process.env, CosConstruc
     minimum: 1,
     maximum: 64,
   }) * MEBIBYTE
+  const chunkParallel = integerEnvironment(environment, 'OPENFLOW_COS_CHUNK_PARALLEL', 3, {
+    minimum: 1,
+    maximum: 16,
+  })
+  const chunkRetries = integerEnvironment(environment, 'OPENFLOW_COS_CHUNK_RETRIES', 4, {
+    minimum: 0,
+    maximum: 10,
+  })
   const operationAttempts = integerEnvironment(environment, 'OPENFLOW_COS_OPERATION_ATTEMPTS', 3, {
     minimum: 1,
     maximum: 6,
@@ -59,14 +67,8 @@ export function createConfiguredCosClient(environment = process.env, CosConstruc
     SecretKey: requiredEnvironment(environment, 'TENCENT_COS_SECRET_KEY'),
     SecurityToken: (environment.TENCENT_COS_SESSION_TOKEN ?? '').trim() || undefined,
     FileParallelLimit: 1,
-    ChunkParallelLimit: integerEnvironment(environment, 'OPENFLOW_COS_CHUNK_PARALLEL', 3, {
-      minimum: 1,
-      maximum: 16,
-    }),
-    ChunkRetryTimes: integerEnvironment(environment, 'OPENFLOW_COS_CHUNK_RETRIES', 4, {
-      minimum: 0,
-      maximum: 10,
-    }),
+    ChunkParallelLimit: chunkParallel,
+    ChunkRetryTimes: chunkRetries,
     ChunkSize: chunkSize,
     SliceSize: chunkSize,
     ProgressInterval: 1000,
@@ -82,6 +84,8 @@ export function createConfiguredCosClient(environment = process.env, CosConstruc
   return {
     cos: new CosConstructor(clientOptions),
     chunkSize,
+    chunkParallel,
+    chunkAttempts: chunkRetries + 1,
     fullPublicReadback,
     operationAttempts,
   }
@@ -216,12 +220,37 @@ function progressReporter(key, logger, now) {
   }
 }
 
+async function readChunk(fileHandle, position, length) {
+  const buffer = Buffer.allocUnsafe(length)
+  let offset = 0
+  while (offset < length) {
+    const { bytesRead } = await fileHandle.read(buffer, offset, length - offset, position + offset)
+    if (bytesRead === 0) throw new Error(`Unexpected end of file at byte ${position + offset}`)
+    offset += bytesRead
+  }
+  return buffer
+}
+
+async function runConcurrently(count, limit, operation) {
+  let nextIndex = 0
+  const workers = Array.from({ length: Math.min(count, limit) }, async () => {
+    while (nextIndex < count) {
+      const index = nextIndex
+      nextIndex += 1
+      await operation(index)
+    }
+  })
+  await Promise.all(workers)
+}
+
 export function createCosReleasePublisher({
   cos,
   bucket,
   region,
   publicBaseUrl,
   chunkSize = 8 * MEBIBYTE,
+  chunkParallel = 3,
+  chunkAttempts = 5,
   fullPublicReadback = true,
   operationAttempts = 3,
   logger = console,
@@ -236,6 +265,82 @@ export function createCosReleasePublisher({
   publicObjectUrl(publicBaseUrl, 'health-check', 'configuration')
 
   const retryOptions = { attempts: operationAttempts, logger, sleep, random }
+  const chunkRetryOptions = { attempts: chunkAttempts, logger, sleep, random }
+
+  async function uploadMultipartFile(filePath, key, expected, headers) {
+    const initialization = await retryOperation(
+      `COS initialize multipart ${key}`,
+      () => cos.multipartInit({ Bucket: bucket, Region: region, Key: key, Headers: { ...headers } }),
+      retryOptions,
+    )
+    assertSuccessfulUpload(initialization, key)
+    const uploadId = initialization?.UploadId
+    if (!uploadId) throw new Error(`COS multipart upload returned no UploadId: ${key}`)
+
+    try {
+      const partCount = Math.ceil(expected.size / chunkSize)
+      const parts = new Array(partCount)
+      const fileHandle = await open(filePath, 'r')
+      const reportProgress = progressReporter(key, logger, now)
+      let uploadedBytes = 0
+      try {
+        reportProgress({ loaded: 0, total: expected.size, percent: 0 })
+        await runConcurrently(partCount, chunkParallel, async (index) => {
+          const partNumber = index + 1
+          const position = index * chunkSize
+          const length = Math.min(chunkSize, expected.size - position)
+          const body = await readChunk(fileHandle, position, length)
+          const uploaded = await retryOperation(
+            `COS upload part ${partNumber}/${partCount}: ${key}`,
+            () => cos.multipartUpload({
+              Bucket: bucket,
+              Region: region,
+              Key: key,
+              UploadId: uploadId,
+              PartNumber: partNumber,
+              Body: body,
+              ContentLength: body.length,
+              Headers: {},
+            }),
+            chunkRetryOptions,
+          )
+          assertSuccessfulUpload(uploaded, key)
+          if (!uploaded?.ETag) throw new Error(`COS multipart part returned no ETag: ${key}#${partNumber}`)
+          parts[index] = { PartNumber: partNumber, ETag: uploaded.ETag }
+          uploadedBytes += body.length
+          reportProgress({ loaded: uploadedBytes, total: expected.size, percent: uploadedBytes / expected.size })
+        })
+      } finally {
+        await fileHandle.close()
+      }
+
+      const completed = await retryOperation(
+        `COS complete multipart ${key}`,
+        () => cos.multipartComplete({
+          Bucket: bucket,
+          Region: region,
+          Key: key,
+          UploadId: uploadId,
+          Parts: parts,
+          Headers: {},
+        }),
+        retryOptions,
+      )
+      assertSuccessfulUpload(completed, key)
+      return completed
+    } catch (error) {
+      try {
+        await retryOperation(
+          `COS abort multipart ${key}`,
+          () => cos.multipartAbort({ Bucket: bucket, Region: region, Key: key, UploadId: uploadId, Headers: {} }),
+          retryOptions,
+        )
+      } catch (abortError) {
+        logger.warn(`COS multipart cleanup failed: ${key} (${abortError instanceof Error ? abortError.message : abortError})`)
+      }
+      throw error
+    }
+  }
 
   async function headObject(key, { optional = false } = {}) {
     try {
@@ -319,23 +424,26 @@ export function createCosReleasePublisher({
     }
 
     logger.info(`COS upload starting: ${key} (${expected.size} bytes)`)
-    const result = await retryOperation(
-      `COS upload ${key}`,
-      () => cos.uploadFile({
-        Bucket: bucket,
-        Region: region,
-        Key: key,
-        FilePath: filePath,
-        SliceSize: chunkSize,
-        Headers: {
-          'Content-Type': expected.contentType,
-          'Cache-Control': cacheControl,
-          'x-cos-meta-sha256': expected.sha256,
-        },
-        onProgress: progressReporter(key, logger, now),
-      }),
-      retryOptions,
-    )
+    const headers = {
+      'Content-Type': expected.contentType,
+      'Cache-Control': cacheControl,
+      'x-cos-meta-sha256': expected.sha256,
+    }
+    const result = expected.size > chunkSize
+      ? await uploadMultipartFile(filePath, key, expected, headers)
+      : await retryOperation(
+        `COS upload ${key}`,
+        () => cos.uploadFile({
+          Bucket: bucket,
+          Region: region,
+          Key: key,
+          FilePath: filePath,
+          SliceSize: chunkSize,
+          Headers: headers,
+          onProgress: progressReporter(key, logger, now),
+        }),
+        retryOptions,
+      )
     assertSuccessfulUpload(result, key)
 
     const head = await headObject(key)
