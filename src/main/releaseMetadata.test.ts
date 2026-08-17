@@ -11,6 +11,7 @@ function createSignedRelease(overrides: Partial<SignedDesktopRelease> = {}) {
     version: '2.6.0',
     publishedAt: '2026-08-14T00:00:00.000Z',
     feedUrl: 'https://example.cos.ap-shanghai.myqcloud.com/openflow/releases/v2.6.0/',
+    updateType: 'standard',
     desktop: {
       installer: 'openflow-studio-Setup-2.6.0.exe',
       size: 123,
@@ -54,6 +55,20 @@ test('signed release fields are validated after signature verification', () => {
   assert.throws(
     () => verifySignedReleaseEnvelope(release.envelope, release.publicKey),
     /must use HTTPS/,
+  )
+})
+
+test('release update types are signed and legacy manifests default to standard', () => {
+  const critical = createSignedRelease({ updateType: 'critical' })
+  assert.equal(verifySignedReleaseEnvelope(critical.envelope, critical.publicKey).updateType, 'critical')
+
+  const legacy = createSignedRelease({ updateType: undefined })
+  assert.equal(verifySignedReleaseEnvelope(legacy.envelope, legacy.publicKey).updateType, 'standard')
+
+  const invalid = createSignedRelease({ updateType: 'forced' as 'standard' })
+  assert.throws(
+    () => verifySignedReleaseEnvelope(invalid.envelope, invalid.publicKey),
+    /updateType is invalid/,
   )
 })
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { basename, resolve } from 'node:path'
@@ -10,6 +10,8 @@ import { compareReleaseVersions, verifySignedReleaseEnvelope } from './releaseMe
 const INITIAL_CHECK_DELAY_MS = 30 * 1000
 const PERIODIC_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 const RELEASE_RESPONSE_LIMIT = 256 * 1024
+const CRITICAL_AUTO_INSTALL_CHECK_INTERVAL_MS = 30 * 1000
+const DEFAULT_MANUAL_DOWNLOAD_URL = 'https://github.com/MXWStudio/OpenFlow/releases/latest'
 
 interface UpdateConfiguration {
   schemaVersion: 1
@@ -21,6 +23,10 @@ export interface DesktopUpdateManagerOptions {
   getWindow: () => BrowserWindow | null
   getExtensionState: () => ExtensionUpdateViewState
   extensionPath: string
+  canAutoInstallCritical?: () => boolean | Promise<boolean>
+  prepareForInstall?: () => Promise<void>
+  onStateChange?: (state: UpdateViewState) => void
+  manualDownloadUrl?: string
 }
 
 function toMessage(error: unknown): string {
@@ -45,7 +51,9 @@ export class DesktopUpdateManager {
   private checking: Promise<UpdateViewState> | null = null
   private initialTimer: NodeJS.Timeout | null = null
   private periodicTimer: NodeJS.Timeout | null = null
+  private criticalAutoInstallTimer: NodeJS.Timeout | null = null
   private handlersRegistered = false
+  private installing = false
   private desktopState: UpdateViewState['desktop'] = {
     status: 'disabled',
     currentVersion: app.getVersion(),
@@ -77,8 +85,10 @@ export class DesktopUpdateManager {
   stop(): void {
     if (this.initialTimer) clearTimeout(this.initialTimer)
     if (this.periodicTimer) clearInterval(this.periodicTimer)
+    if (this.criticalAutoInstallTimer) clearInterval(this.criticalAutoInstallTimer)
     this.initialTimer = null
     this.periodicTimer = null
+    this.criticalAutoInstallTimer = null
   }
 
   getState(): UpdateViewState {
@@ -101,11 +111,19 @@ export class DesktopUpdateManager {
     return this.checking
   }
 
-  installDownloadedUpdate(): boolean {
-    if (!this.updater || this.desktopState.status !== 'downloaded') return false
-    ;(app as typeof app & { isQuitting?: boolean }).isQuitting = true
-    setImmediate(() => this.updater?.quitAndInstall(false, true))
-    return true
+  async installDownloadedUpdate(): Promise<boolean> {
+    if (!this.updater || this.desktopState.status !== 'downloaded' || this.installing) return false
+    this.installing = true
+    try {
+      await this.options.prepareForInstall?.()
+      ;(app as typeof app & { isQuitting?: boolean }).isQuitting = true
+      setImmediate(() => this.updater?.quitAndInstall(false, true))
+      return true
+    } catch (error) {
+      this.installing = false
+      this.patchDesktopState({ message: `安装前保存失败：${toMessage(error)}` })
+      return false
+    }
   }
 
   private async performCheck(): Promise<UpdateViewState> {
@@ -143,6 +161,8 @@ export class DesktopUpdateManager {
         status: 'available',
         availableVersion: release.version,
         lastCheckedAt: checkedAt,
+        updateType: release.updateType,
+        installBehavior: release.updateType === 'critical' ? 'automatic-when-idle' : 'manual',
         message: `发现新版本 ${release.version}，正在自动下载`,
       })
       await this.startUpdater(release)
@@ -166,6 +186,7 @@ export class DesktopUpdateManager {
     updater.disableWebInstaller = true
 
     updater.on('error', (error) => {
+      this.stopCriticalAutoInstallTimer()
       this.patchDesktopState({ status: 'error', message: `下载安装包失败：${toMessage(error)}` })
     })
     updater.on('update-available', (info) => {
@@ -174,7 +195,12 @@ export class DesktopUpdateManager {
         this.patchDesktopState({ status: 'error', message: '腾讯云版本信息前后不一致，已停止更新' })
         return
       }
-      this.patchDesktopState({ status: 'downloading', message: `正在下载版本 ${info.version}` })
+      this.patchDesktopState({
+        status: 'downloading',
+        updateType: release.updateType,
+        installBehavior: release.updateType === 'critical' ? 'automatic-when-idle' : 'manual',
+        message: `正在后台下载版本 ${info.version}`,
+      })
     })
     updater.on('update-not-available', () => {
       this.patchDesktopState({ status: 'up-to-date', message: '当前已经是最新版本' })
@@ -202,27 +228,19 @@ export class DesktopUpdateManager {
         throw new Error('安装包完整性校验失败')
       }
       if (!this.updater) throw new Error('更新器状态已失效')
-      this.updater.autoInstallOnAppQuit = true
+      this.updater.autoInstallOnAppQuit = false
       this.patchDesktopState({
         status: 'downloaded',
         progressPercent: 100,
-        message: `版本 ${release.version} 已下载并验证，可以重启安装`,
+        updateType: release.updateType,
+        installBehavior: release.updateType === 'critical' ? 'automatic-when-idle' : 'manual',
+        message: release.updateType === 'critical'
+          ? `紧急修复 ${release.version} 已准备好，将在软件安全空闲时自动安装`
+          : `版本 ${release.version} 已准备好，请在设置中手动安装`,
       })
-      const window = this.options.getWindow()
-      const messageBoxOptions = {
-        type: 'info',
-        title: 'OpenFlow 更新已准备好',
-        message: `新版本 ${release.version} 已安全下载，是否现在重启安装？`,
-        detail: '选择“稍后”不会打断当前工作，退出软件时也会自动安装。',
-        buttons: ['现在重启安装', '稍后'],
-        defaultId: 0,
-        cancelId: 1,
-      } as const
-      const result = window
-        ? await dialog.showMessageBox(window, messageBoxOptions)
-        : await dialog.showMessageBox(messageBoxOptions)
-      if (result.response === 0) this.installDownloadedUpdate()
+      if (release.updateType === 'critical') this.startCriticalAutoInstallTimer()
     } catch (error) {
+      this.stopCriticalAutoInstallTimer()
       this.updater && (this.updater.autoInstallOnAppQuit = false)
       this.patchDesktopState({ status: 'error', message: `安装包验证失败：${toMessage(error)}` })
       await fs.remove(event.downloadedFile).catch(() => undefined)
@@ -250,6 +268,32 @@ export class DesktopUpdateManager {
     ipcMain.handle('updates:check', () => this.checkForUpdates())
     ipcMain.handle('updates:install', () => this.installDownloadedUpdate())
     ipcMain.handle('updates:open-extension-folder', () => shell.openPath(this.options.extensionPath))
+    ipcMain.handle('updates:open-manual-download', () => shell.openExternal(
+      this.options.manualDownloadUrl || DEFAULT_MANUAL_DOWNLOAD_URL,
+    ))
+  }
+
+  private startCriticalAutoInstallTimer(): void {
+    this.stopCriticalAutoInstallTimer()
+    this.criticalAutoInstallTimer = setInterval(
+      () => void this.tryInstallCriticalUpdate(),
+      CRITICAL_AUTO_INSTALL_CHECK_INTERVAL_MS,
+    )
+  }
+
+  private stopCriticalAutoInstallTimer(): void {
+    if (this.criticalAutoInstallTimer) clearInterval(this.criticalAutoInstallTimer)
+    this.criticalAutoInstallTimer = null
+  }
+
+  private async tryInstallCriticalUpdate(): Promise<void> {
+    if (this.desktopState.status !== 'downloaded' || this.desktopState.updateType !== 'critical') {
+      this.stopCriticalAutoInstallTimer()
+      return
+    }
+    if (!await this.options.canAutoInstallCritical?.()) return
+    this.stopCriticalAutoInstallTimer()
+    await this.installDownloadedUpdate()
   }
 
   private patchDesktopState(patch: Partial<UpdateViewState['desktop']>): void {
@@ -258,8 +302,10 @@ export class DesktopUpdateManager {
   }
 
   private broadcastState(): void {
+    const state = this.getState()
+    this.options.onStateChange?.(state)
     const window = this.options.getWindow()
     if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return
-    window.webContents.send('updates:state', this.getState())
+    window.webContents.send('updates:state', state)
   }
 }

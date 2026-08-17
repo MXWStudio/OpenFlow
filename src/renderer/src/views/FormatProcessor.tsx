@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   Box,
   Flex,
@@ -49,10 +49,19 @@ interface FormatConfig {
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif']);
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v']);
 
-export function FormatProcessor() {
+interface FormatProcessorProps {
+  onBusyChange?: (busy: boolean) => void;
+}
+
+export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(isProcessing || files.length > 0);
+    return () => onBusyChange?.(false);
+  }, [files.length, isProcessing, onBusyChange]);
 
   const [config, setConfig] = useState<FormatConfig>({
     resize: { enabled: false, mode: 'percentage', percentage: 50, width: 1920, height: 1080 },

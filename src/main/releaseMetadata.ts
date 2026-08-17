@@ -29,6 +29,11 @@ function assertReleasePayload(value: unknown): asserts value is SignedDesktopRel
   if (feedUrl.protocol !== 'https:' && feedUrl.hostname !== '127.0.0.1' && feedUrl.hostname !== 'localhost') {
     throw new Error('feedUrl must use HTTPS')
   }
+  const updateType = payload.updateType ?? 'standard'
+  if (updateType !== 'critical' && updateType !== 'standard') {
+    throw new Error('updateType is invalid')
+  }
+  payload.updateType = updateType
 
   if (!payload.desktop || typeof payload.desktop !== 'object') throw new Error('desktop release data is missing')
   assertSafeAssetName(payload.desktop.installer, 'desktop.installer')

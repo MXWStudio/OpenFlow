@@ -5,17 +5,35 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { RenameRequest } from '../shared/renameTemplates'
-import type { UpdateViewState } from '../shared/updateContract'
+import type { UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 
 const updateStateListeners = new WeakMap<
   (state: UpdateViewState) => void,
   (_event: Electron.IpcRendererEvent, state: UpdateViewState) => void
+>()
+const navigationListeners = new WeakMap<
+  (target: { view: string, settingsTab?: string }) => void,
+  (_event: Electron.IpcRendererEvent, target: { view: string, settingsTab?: string }) => void
+>()
+const prepareRestartListeners = new WeakMap<
+  () => void,
+  (_event: Electron.IpcRendererEvent) => void
 >()
 
 // 将所有安全 API 暴露到 window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     rendererReady: () => ipcRenderer.send('app:renderer-ready'),
+    onNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, target: { view: string, settingsTab?: string }) => listener(target)
+      navigationListeners.set(listener, wrapped)
+      ipcRenderer.on('app:navigate', wrapped)
+    },
+    offNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => {
+      const wrapped = navigationListeners.get(listener)
+      if (wrapped) ipcRenderer.removeListener('app:navigate', wrapped)
+      navigationListeners.delete(listener)
+    },
   },
   webUtils: {
     getPathForFile: (file: File) => webUtils.getPathForFile(file)
@@ -117,6 +135,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     check: () => ipcRenderer.invoke('updates:check'),
     install: () => ipcRenderer.invoke('updates:install'),
     openExtensionFolder: () => ipcRenderer.invoke('updates:open-extension-folder'),
+    openManualDownload: () => ipcRenderer.invoke('updates:open-manual-download'),
+    reportActivity: (activity: UpdateActivitySnapshot) => ipcRenderer.invoke('updates:report-activity', activity),
     onState: (listener: (state: UpdateViewState) => void) => {
       const wrapped = (_event: Electron.IpcRendererEvent, state: UpdateViewState) => listener(state)
       updateStateListeners.set(listener, wrapped)
@@ -126,6 +146,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const wrapped = updateStateListeners.get(listener)
       if (wrapped) ipcRenderer.removeListener('updates:state', wrapped)
       updateStateListeners.delete(listener)
+    },
+    onPrepareRestart: (listener: () => void) => {
+      const wrapped = () => listener()
+      prepareRestartListeners.set(listener, wrapped)
+      ipcRenderer.on('updates:prepare-restart', wrapped)
+    },
+    offPrepareRestart: (listener: () => void) => {
+      const wrapped = prepareRestartListeners.get(listener)
+      if (wrapped) ipcRenderer.removeListener('updates:prepare-restart', wrapped)
+      prepareRestartListeners.delete(listener)
     },
   },
 

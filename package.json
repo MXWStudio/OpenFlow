@@ -4,6 +4,9 @@
   "description": "OpenFlow Studio — AIGC 广告生产力工作流工具",
   "author": "mxw86",
   "private": true,
+  "openflowRelease": {
+    "updateType": "standard"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/MXWStudio/OpenFlow.git"

@@ -108,6 +108,8 @@ test('workflows keep builds reproducible and releases single-owner', () => {
     'COS stable pointer must be promoted only after GitHub publication'
   )
   assert.match(packageJson.scripts.build, /--publish never/)
+  assert.ok(['critical', 'standard'].includes(packageJson.openflowRelease?.updateType))
+  assert.match(readFileSync(resolve('scripts/sync-release-to-cos.mjs'), 'utf8'), /openflowRelease\?\.updateType/)
   assert.match(releaseWorkflow, /gh release create/)
   assert.match(releaseWorkflow, /gh release upload/)
   assert.match(releaseWorkflow, /--draft/)
@@ -137,4 +139,16 @@ test('workflows keep builds reproducible and releases single-owner', () => {
   assert.match(verifyCosWorkflow, /TENCENT_COS_SECRET_KEY/)
   assert.match(verifyCosWorkflow, /OPENFLOW_COS_FULL_READBACK: 'true'/)
   assert.doesNotMatch(verifyCosWorkflow, /gh release|--stage|--promote/)
+})
+
+test('desktop updates remain silent and respect the release install policy', () => {
+  const managerSource = readFileSync(resolve('src/main/desktopUpdateManager.ts'), 'utf8')
+  const policySource = readFileSync(resolve('src/main/updatePolicy.ts'), 'utf8')
+
+  assert.doesNotMatch(managerSource, /showMessageBox|checkForUpdatesAndNotify/)
+  assert.match(managerSource, /autoInstallOnAppQuit = false/)
+  assert.match(managerSource, /release\.updateType === 'critical'/)
+  assert.match(managerSource, /canAutoInstallCritical/)
+  assert.match(policySource, /!input\.windowFocused/)
+  assert.match(policySource, /CRITICAL_UPDATE_IDLE_MS/)
 })

@@ -8,6 +8,18 @@ export type DesktopUpdateStatus =
   | 'downloaded'
   | 'error'
 
+export type DesktopUpdateType = 'critical' | 'standard'
+
+export type RestorableAppView = 'daily' | 'organizer' | 'format' | 'settings'
+
+export interface UpdateActivitySnapshot {
+  activeView: RestorableAppView
+  busy: boolean
+  hasUnsavedChanges: boolean
+  lastUserActivityAt: number
+  rendererReady: boolean
+}
+
 export type ExtensionUpdateStatus =
   | 'preparing'
   | 'ready'
@@ -30,6 +42,8 @@ export interface UpdateViewState {
     availableVersion?: string
     progressPercent?: number
     lastCheckedAt?: string
+    updateType?: DesktopUpdateType
+    installBehavior?: 'automatic-when-idle' | 'manual'
     message?: string
   }
   extension: ExtensionUpdateViewState
@@ -53,6 +67,7 @@ export interface SignedDesktopRelease {
   version: string
   publishedAt: string
   feedUrl: string
+  updateType: DesktopUpdateType
   desktop: {
     installer: string
     size: number

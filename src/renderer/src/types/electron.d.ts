@@ -9,7 +9,7 @@ import type {
   RenameRequest,
   RenameSettingsV2,
 } from '../../../shared/renameTemplates.ts'
-import type { UpdateViewState } from '../../../shared/updateContract.ts'
+import type { UpdateActivitySnapshot, UpdateViewState } from '../../../shared/updateContract.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -131,6 +131,10 @@ export interface AppConfig {
   history: HistoryEntry[]
   notificationHistory: NotificationHistoryEntry[]
   dailyRequirementSession?: DailyRequirementSession
+  updateSession?: {
+    activeView: import('../../../shared/updateContract.ts').RestorableAppView
+    savedAt: number
+  }
   dailyLayoutLeft: string[]
   dailyLayoutRight: string[]
   renameTemplates?: WorkflowPreset['renameTemplates']
@@ -154,6 +158,8 @@ export interface ElectronAPI {
   /** 应用启动状态 */
   app: {
     rendererReady: () => void
+    onNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => void
+    offNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => void
   }
 
   /** Electron 辅助工具 */
@@ -248,8 +254,12 @@ export interface ElectronAPI {
     check: () => Promise<UpdateViewState>
     install: () => Promise<boolean>
     openExtensionFolder: () => Promise<string>
+    openManualDownload: () => Promise<void>
+    reportActivity: (activity: UpdateActivitySnapshot) => Promise<boolean>
     onState: (listener: (state: UpdateViewState) => void) => void
     offState: (listener: (state: UpdateViewState) => void) => void
+    onPrepareRestart: (listener: () => void) => void
+    offPrepareRestart: (listener: () => void) => void
   }
 
   /** 受限 IPC 桥接，用于当前设置页调用少量主进程通道 */

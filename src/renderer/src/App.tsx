@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Avatar,
@@ -68,8 +68,10 @@ import {
   type RenameRequest,
   type RenameSelection,
 } from '../../shared/renameTemplates.ts';
+import type { RestorableAppView, UpdateViewState } from '../../shared/updateContract.ts';
+import { normalizeRestorableView } from './updateSession';
 
-type ViewKey = 'daily' | 'organizer' | 'format' | 'settings';
+type ViewKey = RestorableAppView;
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
@@ -107,6 +109,11 @@ export default function App() {
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE);
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(DEFAULT_SHORTCUTS);
+  const [updateState, setUpdateState] = useState<UpdateViewState | null>(null);
+  const [organizerBusy, setOrganizerBusy] = useState(false);
+  const [formatBusy, setFormatBusy] = useState(false);
+  const [requestedSettingsTab, setRequestedSettingsTab] = useState('system');
+  const lastUserActivityAtRef = useRef(Date.now());
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
   const validationPresentation = useMemo(
@@ -123,6 +130,14 @@ export default function App() {
   const hasExtraIssues = hasValidated && validationPresentation.summary.hasExtraIssues;
   const validationCanRename = hasValidated && validationPresentation.summary.canRenamePassedFiles;
   const canRename = validationCanRename && renamePreview?.canExecute === true;
+  const hasActiveWork = isChangingJson
+    || isValidating
+    || isRenaming
+    || organizerBusy
+    || formatBusy
+    || folderPaths.length > 0
+    || validationResults.length > 0;
+  const hasUnsavedChanges = workflowSaveState === 'saving' || workflowSaveState === 'error';
   const regularRenamePreset = workflowSettings.renameSettings.presets.find((preset) => preset.kind === 'regular');
   const canFallbackToRegular = Boolean(regularRenamePreset && validateRenamePreset(regularRenamePreset).length === 0);
   const selectedRenamePreset = useMemo(() => {
@@ -236,6 +251,10 @@ export default function App() {
       }
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
+      if (config.updateSession && typeof config.updateSession === 'object') {
+        const session = config.updateSession as { activeView?: unknown };
+        setActiveView(normalizeRestorableView(session.activeView));
+      }
 
       if (config.dailyRequirementSession && typeof config.dailyRequirementSession === 'object') {
         const session = config.dailyRequirementSession as DailyRequirementSession;
@@ -260,6 +279,60 @@ export default function App() {
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
     }).finally(() => setIsAppReady(true));
   }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.updates) return;
+    const handleState = (state: UpdateViewState) => setUpdateState(state);
+    window.electronAPI.updates.onState(handleState);
+    void window.electronAPI.updates.getState().then(handleState).catch((error) => {
+      console.error('Failed to read global update state', error);
+    });
+    return () => window.electronAPI.updates.offState(handleState);
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.app) return;
+    const handleNavigate = (target: { view: string; settingsTab?: string }) => {
+      const nextView = normalizeRestorableView(target.view);
+      if (nextView === 'settings' && target.settingsTab) setRequestedSettingsTab(target.settingsTab);
+      setActiveView(nextView);
+    };
+    window.electronAPI.app.onNavigate(handleNavigate);
+    return () => window.electronAPI.app.offNavigate(handleNavigate);
+  }, []);
+
+  useEffect(() => {
+    if (!isAppReady || !window.electronAPI?.updates) return;
+    let lastReportAt = 0;
+    const reportActivity = (markUserActive: boolean) => {
+      const now = Date.now();
+      if (markUserActive) lastUserActivityAtRef.current = now;
+      if (markUserActive && now - lastReportAt < 15_000) return;
+      lastReportAt = now;
+      void window.electronAPI.updates.reportActivity({
+        activeView,
+        busy: hasActiveWork,
+        hasUnsavedChanges,
+        lastUserActivityAt: lastUserActivityAtRef.current,
+        rendererReady: true,
+      });
+    };
+    const handleUserActivity = () => reportActivity(true);
+    const handlePrepareRestart = () => {
+      void window.electronAPI.store.set('updateSession', { activeView, savedAt: Date.now() });
+      reportActivity(false);
+    };
+    window.addEventListener('pointerdown', handleUserActivity, true);
+    window.addEventListener('keydown', handleUserActivity, true);
+    window.electronAPI.updates.onPrepareRestart(handlePrepareRestart);
+    void window.electronAPI.store.set('updateSession', { activeView, savedAt: Date.now() });
+    reportActivity(false);
+    return () => {
+      window.removeEventListener('pointerdown', handleUserActivity, true);
+      window.removeEventListener('keydown', handleUserActivity, true);
+      window.electronAPI.updates.offPrepareRestart(handlePrepareRestart);
+    };
+  }, [activeView, formatBusy, hasActiveWork, hasUnsavedChanges, isAppReady, organizerBusy]);
 
   useEffect(() => {
     if (!isAppReady || !window.electronAPI) return;
@@ -575,6 +648,8 @@ export default function App() {
   const sidebarActiveColor = isDarkTheme
     ? 'var(--mantine-color-blue-1)'
     : 'var(--mantine-color-blue-8)';
+  const updateNeedsAttention = Boolean(updateState && ['available', 'downloading', 'downloaded'].includes(updateState.desktop.status));
+  const updateAttentionColor = updateState?.desktop.updateType === 'critical' ? 'red' : 'orange';
 
   return (
     <Flex className="app-shell" h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
@@ -682,24 +757,30 @@ export default function App() {
                 <Bell size={22} />
               </ActionIcon>
             </Indicator>
-            <ActionIcon
-              variant="subtle"
-              onClick={() => setActiveView('settings')}
-              styles={{
-                root: {
-                  width: 46,
-                  height: 46,
-                  color: activeView === 'settings' ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
-                  background: activeView === 'settings' ? sidebarActiveBackground : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 12,
-                },
-              }}
-            >
-              <Settings size={22} />
-            </ActionIcon>
+            <Indicator color={updateAttentionColor} size={9} offset={5} disabled={!updateNeedsAttention} processing={updateState?.desktop.status === 'downloading'}>
+              <ActionIcon
+                variant="subtle"
+                aria-label={updateNeedsAttention ? '设置中心，有新版本' : '设置中心'}
+                onClick={() => {
+                  setRequestedSettingsTab(updateNeedsAttention ? 'about' : 'system');
+                  setActiveView('settings');
+                }}
+                styles={{
+                  root: {
+                    width: 46,
+                    height: 46,
+                    color: activeView === 'settings' ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
+                    background: activeView === 'settings' ? sidebarActiveBackground : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 12,
+                  },
+                }}
+              >
+                <Settings size={22} />
+              </ActionIcon>
+            </Indicator>
           </Stack>
         </Flex>
       </Box>
@@ -774,6 +855,7 @@ export default function App() {
             }}
             isQimiEnabled={isQimiEnabled}
             onToggleQimiEnabled={setIsQimiEnabled}
+            onBusyChange={setOrganizerBusy}
           />
         ) : activeView === 'settings' ? (
           <SettingsWorkspace
@@ -789,11 +871,12 @@ export default function App() {
             setShortcutSettings={setShortcutSettings}
             producerName={userInfo.name}
             workflowSaveState={workflowSaveState}
+            requestedTab={requestedSettingsTab}
           />
         ) : activeView === 'format' ? (
-          <FormatProcessor />
+          <FormatProcessor onBusyChange={setFormatBusy} />
         ) : (
-          <FormatProcessor />
+          <FormatProcessor onBusyChange={setFormatBusy} />
         )}
       </Box>
 

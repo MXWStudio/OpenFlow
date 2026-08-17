@@ -58,6 +58,10 @@ const STABLE_CACHE_CONTROL = 'no-cache, no-store, must-revalidate'
 async function stage(artifactDirectory) {
   const packageJson = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
   const version = packageJson.version
+  const updateType = packageJson.openflowRelease?.updateType ?? 'standard'
+  if (!['critical', 'standard'].includes(updateType)) {
+    throw new Error('package.json openflowRelease.updateType must be critical or standard')
+  }
   const desktop = validateReleaseArtifacts({
     artifactDirectory,
     version,
@@ -76,6 +80,7 @@ async function stage(artifactDirectory) {
     version,
     publishedAt: new Date().toISOString(),
     feedUrl,
+    updateType,
     desktop: {
       installer: desktop.names.installer,
       size: desktop.installerSize,
@@ -133,6 +138,9 @@ async function promote(releasePath) {
   const payload = JSON.parse(payloadBytes.toString('utf8'))
   if (!/^\d+\.\d+\.\d+$/.test(payload.version ?? '')) {
     throw new Error('Cannot promote a release with an invalid version')
+  }
+  if (!['critical', 'standard'].includes(payload.updateType ?? 'standard')) {
+    throw new Error('Cannot promote a release with an invalid update type')
   }
   const versionedKey = `${prefix}/releases/v${payload.version}/release.json`
   await publisher.verifyExistingFile(releasePath, versionedKey, IMMUTABLE_CACHE_CONTROL, {

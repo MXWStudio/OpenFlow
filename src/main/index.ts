@@ -3,7 +3,7 @@
  * 负责：窗口管理、所有 IPC 通道处理、底层 Node.js 能力
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, screen, type NativeImage } from 'electron'
 import { join, extname, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
@@ -22,12 +22,25 @@ import { executeRenameRequest, previewRenameRequest, type RenameRequest } from '
 import { JsonConfigStore } from './configStore'
 import { DesktopUpdateManager } from './desktopUpdateManager'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
+import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
+import type { RestorableAppView, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
 app.disableHardwareAcceleration()
 
 let tray: Tray | null = null
+let trayStatusIcons: { normal: NativeImage, red: NativeImage, orange: NativeImage } | null = null
+let latestUpdateState: UpdateViewState | null = null
+
+const initialUpdateActivity: UpdateActivitySnapshot = {
+  activeView: 'daily',
+  busy: true,
+  hasUnsavedChanges: true,
+  lastUserActivityAt: Date.now(),
+  rendererReady: false,
+}
+let rendererUpdateActivity: UpdateActivitySnapshot = initialUpdateActivity
 
 function normalizeError(error: unknown): string {
   if (error instanceof Error) {
@@ -191,6 +204,76 @@ function getVideoInfo(
 let mainWindow: BrowserWindow | null = null
 let extensionUpdateManager: ExtensionUpdateManager | null = null
 let desktopUpdateManager: DesktopUpdateManager | null = null
+
+async function createTrayStatusIcons(iconPath: string): Promise<typeof trayStatusIcons> {
+  const createIcon = async (color?: string): Promise<NativeImage> => {
+    let pipeline = getSharp()(iconPath).resize(16, 16)
+    if (color) {
+      const badge = Buffer.from(
+        `<svg width="8" height="8" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="4" r="3.25" fill="${color}" stroke="#ffffff" stroke-width="1.5"/></svg>`,
+      )
+      pipeline = pipeline.composite([{ input: badge, left: 8, top: 0 }])
+    }
+    return nativeImage.createFromBuffer(await pipeline.png().toBuffer())
+  }
+
+  return {
+    normal: await createIcon(),
+    red: await createIcon('#fa5252'),
+    orange: await createIcon('#fd7e14'),
+  }
+}
+
+function openUpdateSettings(): void {
+  restoreMainWindow()
+  const send = () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('app:navigate', { view: 'settings', settingsTab: 'about' })
+    }
+  }
+  if (mainWindow?.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', send)
+  else send()
+}
+
+function buildTrayContextMenu(state: UpdateViewState | null): Electron.MenuItemConstructorOptions[] {
+  const attention = state ? updateAttentionColor(state.desktop) : null
+  const updateLabel = state?.desktop.status === 'downloaded'
+    ? state.desktop.updateType === 'critical'
+      ? '紧急修复已准备，安全空闲时安装'
+      : '新版本已准备，请在设置中安装'
+    : state?.desktop.status === 'downloading'
+      ? `正在后台下载 ${Math.round(state.desktop.progressPercent || 0)}%`
+      : state?.desktop.status === 'available'
+        ? '发现新版本'
+        : null
+
+  return [
+    ...(attention && updateLabel ? [{ label: updateLabel, click: openUpdateSettings }, { type: 'separator' as const }] : []),
+    { label: '打开主面板', click: restoreMainWindow },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        (app as typeof app & { isQuitting?: boolean }).isQuitting = true
+        app.quit()
+      },
+    },
+  ]
+}
+
+function refreshTrayUpdateState(state: UpdateViewState): void {
+  latestUpdateState = state
+  if (!tray) return
+  const attention = updateAttentionColor(state.desktop)
+  const nextIcon = attention && trayStatusIcons ? trayStatusIcons[attention] : trayStatusIcons?.normal
+  if (nextIcon) tray.setImage(nextIcon)
+  tray.setToolTip(attention
+    ? state.desktop.updateType === 'critical'
+      ? 'OpenFlow Studio - 紧急修复已准备'
+      : 'OpenFlow Studio - 新版本已准备'
+    : 'OpenFlow Studio')
+  tray.setContextMenu(Menu.buildFromTemplate(buildTrayContextMenu(state)))
+}
 
 let closeToTray = true // 默认为 true
 
@@ -393,6 +476,45 @@ async function getTogglePanelShortcut(): Promise<string> {
   return 'CommandOrControl+Shift+Space'
 }
 
+const RESTORABLE_APP_VIEWS = new Set<RestorableAppView>(['daily', 'organizer', 'format', 'settings'])
+
+function normalizeUpdateActivity(value: unknown): UpdateActivitySnapshot {
+  if (!value || typeof value !== 'object') return initialUpdateActivity
+  const input = value as Partial<UpdateActivitySnapshot>
+  const lastUserActivityAt = typeof input.lastUserActivityAt === 'number' && Number.isFinite(input.lastUserActivityAt)
+    ? Math.min(Date.now(), Math.max(0, input.lastUserActivityAt))
+    : Date.now()
+  return {
+    activeView: typeof input.activeView === 'string' && RESTORABLE_APP_VIEWS.has(input.activeView as RestorableAppView)
+      ? input.activeView as RestorableAppView
+      : 'daily',
+    busy: input.busy !== false,
+    hasUnsavedChanges: input.hasUnsavedChanges !== false,
+    lastUserActivityAt,
+    rendererReady: input.rendererReady === true,
+  }
+}
+
+function canAutoInstallCritical(): boolean {
+  if (!desktopUpdateManager || !mainWindow || mainWindow.isDestroyed()) return false
+  return canInstallCriticalUpdate({
+    state: desktopUpdateManager.getState().desktop,
+    activity: rendererUpdateActivity,
+    windowFocused: mainWindow.isFocused(),
+  })
+}
+
+async function prepareForUpdateInstall(): Promise<void> {
+  await storeSetValue('updateSession', {
+    activeView: rendererUpdateActivity.activeView,
+    savedAt: Date.now(),
+  })
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('updates:prepare-restart')
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+}
+
 // ─── 应用生命周期 ────────────────────────────────────────
 
 // 添加一个全局变量标记是否正在退出
@@ -469,31 +591,27 @@ app.whenReady().then(async () => {
       message: '扩展更新服务未启动',
     },
     extensionPath: extensionTargetRoot,
+    canAutoInstallCritical,
+    prepareForInstall: prepareForUpdateInstall,
+    onStateChange: refreshTrayUpdateState,
   })
   await desktopUpdateManager.start()
   desktopUpdateManager.notifyExtensionStateChanged()
 
   // Tray
   const iconPath = join(__dirname, '../../icons/icon.png')
-  // dynamically resize to 16x16 to fix stretched appearance on macOS menu bar
-  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  try {
+    trayStatusIcons = await createTrayStatusIcons(iconPath)
+  } catch (error) {
+    console.warn('Unable to prepare tray status icons:', normalizeError(error))
+  }
+  const trayIcon = trayStatusIcons?.normal || nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(trayIcon)
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '打开主面板', click: () => {
-        restoreMainWindow()
-      }
-    },
-    { type: 'separator' },
-    { label: '退出', click: () => {
-        (app as any).isQuitting = true
-        app.quit()
-      }
-    }
-  ])
   tray.setToolTip('OpenFlow Studio')
-  tray.setContextMenu(contextMenu)
+  tray.setContextMenu(Menu.buildFromTemplate(buildTrayContextMenu(latestUpdateState)))
   tray.on('click', restoreMainWindow)
   tray.on('double-click', restoreMainWindow)
+  refreshTrayUpdateState(desktopUpdateManager.getState())
 
   const togglePanelShortcut = await getTogglePanelShortcut()
   const registered = globalShortcut.register(togglePanelShortcut, toggleMainWindow)
@@ -1382,6 +1500,11 @@ ipcMain.handle('store:getAll', async () => {
 
 ipcMain.handle('store:delete', async (_, key: string) => {
   await storeDeleteKey(key)
+})
+
+ipcMain.handle('updates:report-activity', async (_, value: unknown) => {
+  rendererUpdateActivity = normalizeUpdateActivity(value)
+  return true
 })
 
 /**

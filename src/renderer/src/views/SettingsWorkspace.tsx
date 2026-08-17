@@ -57,6 +57,7 @@ interface SettingsWorkspaceProps {
   setShortcutSettings: React.Dispatch<React.SetStateAction<ShortcutSettings>>;
   producerName: string;
   workflowSaveState: 'idle' | 'saving' | 'saved' | 'error';
+  requestedTab?: string;
 }
 
 const organizerFormatOptions = [
@@ -99,6 +100,7 @@ export function SettingsWorkspace({
   setShortcutSettings,
   producerName,
   workflowSaveState,
+  requestedTab,
 }: SettingsWorkspaceProps) {
   const { setColorScheme } = useMantineColorScheme();
   const [activeTab, setActiveTab] = useState<string>('system');
@@ -119,6 +121,10 @@ export function SettingsWorkspace({
     });
     return () => window.electronAPI.updates.offState(handleState);
   }, []);
+
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const checkShortcut = async (key: keyof ShortcutSettings, value: string) => {
     if (!window.electronAPI?.ipcRenderer) return;
@@ -193,6 +199,14 @@ export function SettingsWorkspace({
       await window.electronAPI.updates.install();
     } catch (error) {
       console.error('Failed to install update', error);
+    }
+  };
+
+  const openManualDownload = async () => {
+    try {
+      await window.electronAPI.updates.openManualDownload();
+    } catch (error) {
+      console.error('Failed to open manual download page', error);
     }
   };
 
@@ -423,13 +437,30 @@ export function SettingsWorkspace({
                     <Box>
                       <Group justify="space-between" mb="xs">
                         <Text fw={600}>桌面程序</Text>
-                        <Badge color={updateState?.desktop.status === 'error' ? 'red' : updateState?.desktop.status === 'downloaded' ? 'green' : 'blue'}>
+                        <Badge color={
+                          updateState?.desktop.status === 'error'
+                            ? 'red'
+                            : updateState && ['available', 'downloading', 'downloaded'].includes(updateState.desktop.status)
+                              ? updateState.desktop.updateType === 'critical' ? 'red' : 'orange'
+                              : 'blue'
+                        }>
                           {updateState ? desktopUpdateLabels[updateState.desktop.status] : '读取中'}
                         </Badge>
                       </Group>
                       <Text size="sm" c="dimmed">
                         {updateState?.desktop.message || '正在读取自动更新状态'}
                       </Text>
+                      {updateState?.desktop.updateType && ['available', 'downloading', 'downloaded'].includes(updateState.desktop.status) && (
+                        <Alert
+                          mt="md"
+                          color={updateState.desktop.updateType === 'critical' ? 'red' : 'orange'}
+                          title={updateState.desktop.updateType === 'critical' ? '紧急修复' : '普通更新'}
+                        >
+                          {updateState.desktop.updateType === 'critical'
+                            ? '下载完成后会等待软件安全空闲 10 分钟，再自动安装、重新打开并恢复当前页面。正在编辑或处理任务时不会安装。'
+                            : '下载完成后不会自动安装。请在方便时回到这里，手动点击“安装并重启”。'}
+                        </Alert>
+                      )}
                       {updateState?.desktop.availableVersion && updateState.desktop.availableVersion !== updateState.desktop.currentVersion && (
                         <Text size="sm" mt={6}>可用版本：{updateState.desktop.availableVersion}</Text>
                       )}
@@ -447,7 +478,15 @@ export function SettingsWorkspace({
                           立即检查
                         </Button>
                         {updateState?.desktop.status === 'downloaded' && (
-                          <Button onClick={() => void installDownloadedUpdate()}>重启并安装</Button>
+                          <Button
+                            color={updateState.desktop.updateType === 'critical' ? 'red' : 'blue'}
+                            onClick={() => void installDownloadedUpdate()}
+                          >
+                            {updateState.desktop.updateType === 'critical' ? '立即安装紧急修复' : '安装并重启'}
+                          </Button>
+                        )}
+                        {updateState?.desktop.status === 'error' && (
+                          <Button variant="default" onClick={() => void openManualDownload()}>GitHub 备用下载</Button>
                         )}
                       </Group>
                     </Box>

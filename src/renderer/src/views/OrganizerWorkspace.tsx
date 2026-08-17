@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -30,6 +30,7 @@ interface OrganizerWorkspaceProps {
   workspaceSettings: WorkspaceSettings;
   onOpenSettings: () => void;
   onChangeWorkspaceSettings?: (settings: Partial<WorkspaceSettings>) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 interface ScannedFile {
@@ -47,7 +48,7 @@ interface ScannedFile {
 
 export function OrganizerWorkspace({
   isQimiEnabled,
-  onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings }: OrganizerWorkspaceProps) {
+  onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings, onBusyChange }: OrganizerWorkspaceProps) {
   const resolvedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const isDarkTheme = isDarkColorScheme(resolvedColorScheme);
   const [files, setFiles] = useState<ScannedFile[]>([]);
@@ -55,6 +56,11 @@ export function OrganizerWorkspace({
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [hasOrganized, setHasOrganized] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(isScanning || isOrganizing || (files.length > 0 && !hasOrganized));
+    return () => onBusyChange?.(false);
+  }, [files.length, hasOrganized, isOrganizing, isScanning, onBusyChange]);
 
   const { organizerFormats } = workflowSettings;
   const { sourceDir: organizerSourceDir, destDir: organizerDestDir } = workspaceSettings;
