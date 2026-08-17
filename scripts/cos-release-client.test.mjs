@@ -83,6 +83,24 @@ test('request wrapper retries temporary failures but does not retry denied acces
   assert.equal(deniedAttempts, 1)
 })
 
+test('request wrapper retries Tencent COS socket timeouts', async () => {
+  const logger = quietLogger()
+  let attempts = 0
+  const result = await retryOperation('COS part upload', async () => {
+    attempts += 1
+    if (attempts === 1) {
+      const error = new Error('socket upload timed out')
+      error.code = 'ESOCKETTIMEDOUT'
+      throw error
+    }
+    return 'ok'
+  }, { attempts: 2, logger, sleep: async () => {}, random: () => 0.5 })
+
+  assert.equal(result, 'ok')
+  assert.equal(attempts, 2)
+  assert.ok(logger.messages.some((message) => message.includes('retrying')))
+})
+
 async function withFixture(run) {
   const directory = await mkdtemp(join(tmpdir(), 'openflow-cos-publisher-'))
   const filePath = join(directory, 'release.json')

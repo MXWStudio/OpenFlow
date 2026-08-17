@@ -11,6 +11,7 @@ const TRANSIENT_ERROR_CODES = new Set([
   'ECONNRESET',
   'EHOSTUNREACH',
   'EPIPE',
+  'ESOCKETTIMEDOUT',
   'ETIMEDOUT',
   'InternalError',
   'NetworkingError',
