@@ -7,7 +7,6 @@ import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortc
 import { join, extname, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
-import sizeOf from 'image-size'
 import ffmpeg from 'fluent-ffmpeg'
 import {
   getMissingRequirements,
@@ -983,9 +982,9 @@ ipcMain.handle('fs:startValidation', async (_, { folderPath, targetSizes }) => {
 
     try {
       if (isImage) {
-        const dim = sizeOf(filePath)
-        actualWidth = dim.width || 0
-        actualHeight = dim.height || 0
+        const metadata = await getSharp()(filePath).metadata()
+        actualWidth = metadata.width || 0
+        actualHeight = metadata.height || 0
       } else if (isVideo) {
         const info = await getVideoInfo(filePath)
         actualWidth = info.width
