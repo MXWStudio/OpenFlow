@@ -196,8 +196,8 @@ export function OrganizerWorkspace({
 
   const allSelected = files.length > 0 && files.every(f => f.selected);
   const indeterminate = files.some(f => f.selected) && !allSelected;
-  const cardShadow = isDarkTheme ? '0 18px 44px rgba(0, 0, 0, 0.22)' : '0 12px 30px rgba(15, 23, 42, 0.04)';
-  const floatingShadow = isDarkTheme ? '0 18px 44px rgba(0, 0, 0, 0.36)' : '0 16px 40px rgba(15, 23, 42, 0.12)';
+  const cardShadow = 'var(--openflow-shadow-card)';
+  const floatingShadow = 'var(--openflow-shadow-floating)';
   const deepSurface = isDarkTheme ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-default)';
   const statusSurface = isDarkTheme
     ? 'linear-gradient(135deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-8) 100%)'
@@ -609,7 +609,6 @@ export function OrganizerWorkspace({
               root: {
                 height: 58,
                 paddingInline: 32,
-                background: 'var(--mantine-primary-color-filled)',
                 fontSize: 18,
                 fontWeight: 900,
                 boxShadow: isDarkTheme ? '0 12px 28px rgba(34, 139, 230, 0.18)' : '0 12px 28px rgba(17, 26, 52, 0.2)',
@@ -630,10 +629,8 @@ export function OrganizerWorkspace({
               root: {
                 height: 58,
                 paddingInline: 32,
-                background: 'var(--mantine-color-green-filled)',
                 fontSize: 18,
                 fontWeight: 900,
-                boxShadow: '0 12px 28px rgba(25, 195, 125, 0.22)',
               },
             }}
           >

@@ -335,6 +335,14 @@ export default function App() {
   }, [activeView, formatBusy, hasActiveWork, hasUnsavedChanges, isAppReady, organizerBusy]);
 
   useEffect(() => {
+    if (!isAppReady) return;
+    const frame = window.requestAnimationFrame(() => {
+      window.electronAPI?.app?.rendererReady();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isAppReady]);
+
+  useEffect(() => {
     if (!isAppReady || !window.electronAPI) return;
     setWorkflowSaveState('saving');
     const timeout = window.setTimeout(() => {
@@ -638,9 +646,7 @@ export default function App() {
     { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
   ];
 
-  if (!isAppReady) {
-    return <Flex h="100vh" align="center" justify="center"><Text>Loading...</Text></Flex>;
-  }
+  if (!isAppReady) return null;
 
   const sidebarActiveBackground = isDarkTheme
     ? 'rgba(34, 139, 230, 0.18)'
@@ -652,14 +658,14 @@ export default function App() {
   const updateAttentionColor = updateState?.desktop.updateType === 'critical' ? 'red' : 'orange';
 
   return (
-    <Flex className="app-shell" h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
+    <Flex data-openflow-app-ready="true" className="app-shell" h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
       <Box
         className="app-sidebar"
         w={92}
         style={{
           background: isDarkTheme ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
           borderRight: `1px solid ${isDarkTheme ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-3)'}`,
-          boxShadow: isDarkTheme ? '2px 0 18px rgba(0, 0, 0, 0.18)' : '4px 0 24px rgba(15, 23, 42, 0.12)',
+          boxShadow: 'var(--openflow-shadow-sidebar)',
           zIndex: 20,
         }}
       >

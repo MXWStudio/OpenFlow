@@ -537,7 +537,7 @@ export function SettingsWorkspace({
             color: 'white',
             padding: '8px 16px',
             borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            boxShadow: 'var(--openflow-shadow-card-compact)',
             zIndex: 100,
             animation: 'fadeInOut 2s ease-in-out forwards',
             display: 'flex',

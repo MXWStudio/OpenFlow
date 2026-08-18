@@ -29,7 +29,3 @@ createRoot(root).render(
     </MantineProvider>
   </StrictMode>,
 );
-
-requestAnimationFrame(() => {
-  window.electronAPI?.app?.rendererReady();
-});

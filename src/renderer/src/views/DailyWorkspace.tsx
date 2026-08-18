@@ -114,12 +114,12 @@ interface DailyWorkspaceProps {
 const cardStyle = {
   borderColor: 'var(--mantine-color-default-border)',
   background: 'var(--mantine-color-default)',
-  boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
+  boxShadow: 'var(--openflow-shadow-card)',
 } as const;
 
 const compactCardStyle = {
   ...cardStyle,
-  boxShadow: '0 8px 20px rgba(15, 23, 42, 0.04)',
+  boxShadow: 'var(--openflow-shadow-card-compact)',
 } as const;
 
 function SectionTitle({
@@ -1193,13 +1193,13 @@ export function DailyWorkspace({
           bottom: 24,
           background: 'var(--mantine-color-default)',
           border: '1px solid var(--mantine-color-default-border)',
-          boxShadow: '0 16px 38px rgba(15, 23, 42, 0.12)',
+          boxShadow: 'var(--openflow-shadow-floating)',
         }}
       >
         <Group gap={12}>
           <Button
             radius={8}
-            color="dark"
+            color="blue"
             size="lg"
             leftSection={<Play size={18} fill="currentColor" />}
             onClick={onValidate}
@@ -1208,7 +1208,6 @@ export function DailyWorkspace({
               root: {
                 height: 54,
                 paddingInline: 30,
-                background: 'var(--mantine-primary-color-filled)',
                 fontSize: 17,
                 fontWeight: 900,
               },
@@ -1228,7 +1227,6 @@ export function DailyWorkspace({
               root: {
                 height: 54,
                 paddingInline: 30,
-                background: 'var(--mantine-color-green-filled)',
                 fontSize: 17,
                 fontWeight: 900,
               },

@@ -5,10 +5,32 @@ body,
   margin: 0;
 }
 
+:root[data-mantine-color-scheme='light'] {
+  color-scheme: light;
+  --openflow-shadow-card: 0 12px 28px rgba(15, 23, 42, 0.05);
+  --openflow-shadow-card-compact: 0 8px 20px rgba(15, 23, 42, 0.04);
+  --openflow-shadow-floating: 0 16px 38px rgba(15, 23, 42, 0.12);
+  --openflow-shadow-sidebar: 4px 0 24px rgba(15, 23, 42, 0.12);
+  --openflow-scrollbar: var(--mantine-color-gray-4);
+  --openflow-scrollbar-hover: var(--mantine-color-gray-5);
+  --openflow-drag-surface: rgba(34, 139, 230, 0.06);
+}
+
+:root[data-mantine-color-scheme='dark'] {
+  color-scheme: dark;
+  --openflow-shadow-card: 0 14px 32px rgba(0, 0, 0, 0.22);
+  --openflow-shadow-card-compact: 0 10px 24px rgba(0, 0, 0, 0.18);
+  --openflow-shadow-floating: 0 18px 44px rgba(0, 0, 0, 0.36);
+  --openflow-shadow-sidebar: 2px 0 18px rgba(0, 0, 0, 0.18);
+  --openflow-scrollbar: var(--mantine-color-dark-4);
+  --openflow-scrollbar-hover: var(--mantine-color-dark-3);
+  --openflow-drag-surface: rgba(34, 139, 230, 0.14);
+}
+
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-  background: #f5f7fb;
-  color: #0f172a;
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -353,10 +375,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--openflow-scrollbar);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--openflow-scrollbar-hover);
+}
+
+.mantine-Button-root:disabled {
+  box-shadow: none !important;
 }

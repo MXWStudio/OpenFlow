@@ -3,7 +3,7 @@
  * 负责：窗口管理、所有 IPC 通道处理、底层 Node.js 能力
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, screen, type NativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, Tray, Menu, nativeImage, nativeTheme, screen, type NativeImage } from 'electron'
 import { join, extname, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import fs from 'fs-extra'
@@ -24,6 +24,12 @@ import { DesktopUpdateManager } from './desktopUpdateManager'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
 import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
 import type { RestorableAppView, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
+import {
+  getWindowBackgroundColor,
+  normalizeColorSchemePreference,
+  toNativeThemeSource,
+  type ColorSchemePreference,
+} from '../shared/theme.ts'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
@@ -41,6 +47,24 @@ const initialUpdateActivity: UpdateActivitySnapshot = {
   rendererReady: false,
 }
 let rendererUpdateActivity: UpdateActivitySnapshot = initialUpdateActivity
+
+function getResolvedNativeColorScheme(): 'light' | 'dark' {
+  return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+}
+
+function syncWindowBackground(): void {
+  const backgroundColor = getWindowBackgroundColor(getResolvedNativeColorScheme())
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(backgroundColor)
+  }
+}
+
+function applyThemePreference(preference: unknown): ColorSchemePreference {
+  const normalizedPreference = normalizeColorSchemePreference(preference)
+  nativeTheme.themeSource = toNativeThemeSource(normalizedPreference)
+  syncWindowBackground()
+  return normalizedPreference
+}
 
 function normalizeError(error: unknown): string {
   if (error instanceof Error) {
@@ -288,7 +312,7 @@ async function hasMountedRenderer(window: BrowserWindow): Promise<boolean> {
   if (!isUsableWindow(window)) return false
   try {
     return await window.webContents.executeJavaScript(
-      "Boolean(document.getElementById('root')?.childElementCount)",
+      "Boolean(document.querySelector('[data-openflow-app-ready=\"true\"]'))",
       true,
     ) as boolean
   } catch (error) {
@@ -299,6 +323,9 @@ async function hasMountedRenderer(window: BrowserWindow): Promise<boolean> {
 
 async function showRendererLoadFailure(window: BrowserWindow): Promise<void> {
   if (!isUsableWindow(window)) return
+  const isDarkTheme = nativeTheme.shouldUseDarkColors
+  const textColor = isDarkTheme ? '#e9ecef' : '#1f2937'
+  const backgroundColor = getWindowBackgroundColor(isDarkTheme ? 'dark' : 'light')
   try {
     await window.webContents.executeJavaScript(`
       (() => {
@@ -310,8 +337,8 @@ async function showRendererLoadFailure(window: BrowserWindow): Promise<void> {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '32px',
-          color: '#e2e8f0',
-          background: '#0f172a',
+          color: '${textColor}',
+          background: '${backgroundColor}',
           fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif',
           textAlign: 'center'
         });
@@ -336,7 +363,7 @@ function createWindow(): void {
     minHeight: 640,
     show: false, // 先隐藏，等 ready-to-show 再显示，避免白屏
     autoHideMenuBar: true,
-    backgroundColor: '#0f172a', // slate-900，防止加载时白色闪烁
+    backgroundColor: getWindowBackgroundColor(getResolvedNativeColorScheme()),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true, // 安全：隔离上下文
@@ -531,7 +558,9 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
 
   // 读取系统设置
-  const systemSettings = await storeGetValue('systemSettings') as { autoStart?: boolean, closeToTray?: boolean } | undefined
+  const systemSettings = await storeGetValue('systemSettings') as { theme?: unknown, autoStart?: boolean, closeToTray?: boolean } | undefined
+  applyThemePreference(systemSettings?.theme)
+  nativeTheme.on('updated', syncWindowBackground)
   if (systemSettings) {
     if (systemSettings.closeToTray !== undefined) {
       closeToTray = systemSettings.closeToTray
@@ -653,7 +682,10 @@ ipcMain.handle('shortcut:check', (_, accelerator: string) => {
   return globalShortcut.isRegistered(accelerator)
 })
 
-ipcMain.handle('settings:applySystem', async (_, settings: { autoStart?: boolean, closeToTray?: boolean }) => {
+ipcMain.handle('settings:applySystem', async (_, settings: { theme?: unknown, autoStart?: boolean, closeToTray?: boolean }) => {
+  if (settings.theme !== undefined) {
+    applyThemePreference(settings.theme)
+  }
   if (settings.closeToTray !== undefined) {
     closeToTray = settings.closeToTray
   }

@@ -240,7 +240,7 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
     <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
       <Group justify="space-between">
          <Box>
-            <Title order={3} c="#1d2230">格式处理</Title>
+            <Title order={3} c="var(--mantine-color-text)">格式处理</Title>
             <Text size="sm" c="dimmed">批量调整分辨率、压缩质量、转换格式</Text>
          </Box>
       </Group>
@@ -256,8 +256,8 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            borderColor: isDragging ? '#4f8dff' : undefined,
-            backgroundColor: isDragging ? 'rgba(79, 141, 255, 0.05)' : undefined,
+            borderColor: isDragging ? 'var(--mantine-primary-color-filled)' : undefined,
+            backgroundColor: isDragging ? 'var(--openflow-drag-surface)' : undefined,
             transition: 'all 0.2s'
           }}
           onDragEnter={handleDragEnter}
@@ -304,7 +304,7 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
 
         {/* 右侧：动作流配置区 */}
         <Card className="format-settings-card" radius="xl" withBorder shadow="sm" w={340} style={{ display: 'flex', flexDirection: 'column' }}>
-          <Title order={5} mb="md" c="#22324c" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Title order={5} mb="md" c="var(--mantine-color-text)" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Settings size={18} /> 处理动作流
           </Title>
 
@@ -389,7 +389,7 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
 
               {/* 导出设置 */}
               <Box>
-                 <Title order={6} mb="sm" c="#22324c">导出设置</Title>
+                 <Title order={6} mb="sm" c="var(--mantine-color-text)">导出设置</Title>
                  <Stack gap="sm">
                     <Checkbox
                        label="使用动作拼接文件夹名"
