@@ -23,7 +23,7 @@ import { JsonConfigStore } from './configStore'
 import { DesktopUpdateManager } from './desktopUpdateManager'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
 import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
-import type { RestorableAppView, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
+import type { RestorableAppView, RestorableSettingsTab, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 import {
   getWindowBackgroundColor,
   normalizeColorSchemePreference,
@@ -41,6 +41,7 @@ let latestUpdateState: UpdateViewState | null = null
 
 const initialUpdateActivity: UpdateActivitySnapshot = {
   activeView: 'daily',
+  settingsTab: 'system',
   busy: true,
   hasUnsavedChanges: true,
   lastUserActivityAt: Date.now(),
@@ -230,8 +231,10 @@ let extensionUpdateManager: ExtensionUpdateManager | null = null
 let desktopUpdateManager: DesktopUpdateManager | null = null
 
 async function createTrayStatusIcons(iconPath: string): Promise<typeof trayStatusIcons> {
+  // Electron can read files inside app.asar, while Sharp's native path loader cannot.
+  const iconBytes = await fs.readFile(iconPath)
   const createIcon = async (color?: string): Promise<NativeImage> => {
-    let pipeline = getSharp()(iconPath).resize(16, 16)
+    let pipeline = getSharp()(iconBytes).resize(16, 16)
     if (color) {
       const badge = Buffer.from(
         `<svg width="8" height="8" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="4" r="3.25" fill="${color}" stroke="#ffffff" stroke-width="1.5"/></svg>`,
@@ -504,6 +507,14 @@ async function getTogglePanelShortcut(): Promise<string> {
 }
 
 const RESTORABLE_APP_VIEWS = new Set<RestorableAppView>(['daily', 'organizer', 'format', 'settings'])
+const RESTORABLE_SETTINGS_TABS = new Set<RestorableSettingsTab>([
+  'system',
+  'account',
+  'workspace',
+  'templates',
+  'shortcuts',
+  'about',
+])
 
 function normalizeUpdateActivity(value: unknown): UpdateActivitySnapshot {
   if (!value || typeof value !== 'object') return initialUpdateActivity
@@ -515,6 +526,9 @@ function normalizeUpdateActivity(value: unknown): UpdateActivitySnapshot {
     activeView: typeof input.activeView === 'string' && RESTORABLE_APP_VIEWS.has(input.activeView as RestorableAppView)
       ? input.activeView as RestorableAppView
       : 'daily',
+    settingsTab: typeof input.settingsTab === 'string' && RESTORABLE_SETTINGS_TABS.has(input.settingsTab as RestorableSettingsTab)
+      ? input.settingsTab as RestorableSettingsTab
+      : 'system',
     busy: input.busy !== false,
     hasUnsavedChanges: input.hasUnsavedChanges !== false,
     lastUserActivityAt,
@@ -534,6 +548,7 @@ function canAutoInstallCritical(): boolean {
 async function prepareForUpdateInstall(): Promise<void> {
   await storeSetValue('updateSession', {
     activeView: rendererUpdateActivity.activeView,
+    settingsTab: rendererUpdateActivity.settingsTab,
     savedAt: Date.now(),
   })
   if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
@@ -604,6 +619,7 @@ app.whenReady().then(async () => {
     sourceRoot: extensionSourceRoot,
     targetRoot: extensionTargetRoot,
     statePath: join(app.getPath('userData'), 'chrome-extension-update-state.json'),
+    getDesktopVersion: () => app.getVersion(),
     onStateChange: () => desktopUpdateManager?.notifyExtensionStateChanged(),
   })
   await extensionUpdateManager.start()

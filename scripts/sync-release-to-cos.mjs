@@ -67,7 +67,10 @@ async function stage(artifactDirectory) {
     version,
     productName: packageJson.productName ?? packageJson.name,
   })
-  const extension = validateExtensionReleaseArtifacts({ artifactDirectory })
+  const extension = validateExtensionReleaseArtifacts({
+    artifactDirectory,
+    desktopVersion: version,
+  })
   const extensionNames = expectedExtensionArtifactNames(extension.version)
   const archivePath = resolve(artifactDirectory, extensionNames.archive)
   const extensionManifestPath = resolve(artifactDirectory, extensionNames.manifest)

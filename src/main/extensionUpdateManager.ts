@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { dirname, resolve } from 'node:path'
 import fs from 'fs-extra'
 import type { ExtensionUpdateViewState } from '../shared/updateContract'
@@ -7,12 +6,12 @@ import {
   installExtensionTransaction,
   rollbackExtensionInstall,
   validateExtensionPackage,
-} from './extensionInstaller'
+} from './extensionInstaller.ts'
 import {
   LocalUpdateBridge,
   type ExtensionBridgeAcknowledgement,
   type ExtensionBridgeStatus,
-} from './localUpdateBridge'
+} from './localUpdateBridge.ts'
 
 const EXTENSION_ID = 'lphkbjbbpafcehckpdminkhidjojmhke'
 const ACK_TIMEOUT_MS = 2 * 60 * 1000
@@ -30,6 +29,8 @@ export interface ExtensionUpdateManagerOptions {
   sourceRoot: string
   targetRoot: string
   statePath: string
+  getDesktopVersion: () => string
+  acknowledgementTimeoutMs?: number
   onStateChange?: (state: ExtensionUpdateViewState) => void
 }
 
@@ -38,13 +39,15 @@ function errorMessage(error: unknown): string {
 }
 
 export class ExtensionUpdateManager {
+  private readonly options: ExtensionUpdateManagerOptions
   private state: ExtensionUpdateViewState
   private pending: PendingExtensionUpdate | null = null
   private bridge: LocalUpdateBridge | null = null
   private bridgeConfig: { port: number; token: string } | null = null
   private timeout: NodeJS.Timeout | null = null
 
-  constructor(private readonly options: ExtensionUpdateManagerOptions) {
+  constructor(options: ExtensionUpdateManagerOptions) {
+    this.options = options
     this.state = {
       status: 'preparing',
       bundledVersion: '',
@@ -164,19 +167,20 @@ export class ExtensionUpdateManager {
       return {
         pending: false,
         targetVersion: this.state.installedVersion,
-        desktopVersion: app.getVersion(),
+        desktopVersion: this.options.getDesktopVersion(),
         action: 'none',
       }
     }
     if (!this.pending.acknowledgementDeadline) {
-      this.pending.acknowledgementDeadline = new Date(Date.now() + ACK_TIMEOUT_MS).toISOString()
+      const timeoutMs = this.options.acknowledgementTimeoutMs ?? ACK_TIMEOUT_MS
+      this.pending.acknowledgementDeadline = new Date(Date.now() + timeoutMs).toISOString()
       await this.savePendingState()
       this.armAcknowledgementTimeout()
     }
     return {
       pending: true,
       targetVersion: this.pending.targetVersion,
-      desktopVersion: app.getVersion(),
+      desktopVersion: this.options.getDesktopVersion(),
       action: currentVersion === this.pending.targetVersion ? 'acknowledge' : 'reload',
       message: '桌面端已准备好新版扩展',
     }

@@ -51,7 +51,7 @@ export function expectedExtensionArtifactNames(version) {
   }
 }
 
-export function validateExtensionReleaseArtifacts({ artifactDirectory }) {
+export function validateExtensionReleaseArtifacts({ artifactDirectory, desktopVersion }) {
   const directory = resolve(artifactDirectory)
   const manifestPath = resolve(directory, 'extension-release.json')
   if (!existsSync(manifestPath) || statSync(manifestPath).size === 0) {
@@ -60,6 +60,11 @@ export function validateExtensionReleaseArtifacts({ artifactDirectory }) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   if (manifest.schemaVersion !== 1 || !VERSION_PATTERN.test(manifest.extensionVersion ?? '')) {
     throw new Error('Invalid extension release manifest')
+  }
+  if (manifest.extensionVersion !== desktopVersion) {
+    throw new Error(
+      `Extension release version ${manifest.extensionVersion} does not match desktop version ${desktopVersion}`
+    )
   }
   if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
     throw new Error('Extension release manifest contains no files')
@@ -152,7 +157,10 @@ function runCli() {
       productName: packageJson.productName ?? packageJson.name
     })
     console.log(`Release artifacts verified: ${Object.values(result.names).join(', ')}`)
-    const extension = validateExtensionReleaseArtifacts({ artifactDirectory })
+    const extension = validateExtensionReleaseArtifacts({
+      artifactDirectory,
+      desktopVersion: packageJson.version,
+    })
     console.log(`Extension artifacts verified: ${Object.values(extension.names).join(', ')}`)
   }
 }

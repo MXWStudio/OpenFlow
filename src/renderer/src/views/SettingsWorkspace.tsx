@@ -43,6 +43,7 @@ import {
 } from '../appState';
 import { RenameTemplateSettings } from './RenameTemplateSettings';
 import type { UpdateViewState } from '../../../shared/updateContract';
+import type { RestorableSettingsTab } from '../../../shared/updateContract';
 
 interface SettingsWorkspaceProps {
   userInfo: UserInfo;
@@ -57,7 +58,8 @@ interface SettingsWorkspaceProps {
   setShortcutSettings: React.Dispatch<React.SetStateAction<ShortcutSettings>>;
   producerName: string;
   workflowSaveState: 'idle' | 'saving' | 'saved' | 'error';
-  requestedTab?: string;
+  requestedTab?: RestorableSettingsTab;
+  onActiveTabChange?: (tab: RestorableSettingsTab) => void;
 }
 
 const organizerFormatOptions = [
@@ -101,9 +103,10 @@ export function SettingsWorkspace({
   producerName,
   workflowSaveState,
   requestedTab,
+  onActiveTabChange,
 }: SettingsWorkspaceProps) {
   const { setColorScheme } = useMantineColorScheme();
-  const [activeTab, setActiveTab] = useState<string>('system');
+  const [activeTab, setActiveTab] = useState<RestorableSettingsTab>('system');
   const [shortcutConflicts, setShortcutConflicts] = useState<Record<keyof ShortcutSettings, boolean>>({
     togglePanel: false,
   });
@@ -223,7 +226,11 @@ export function SettingsWorkspace({
         <Tabs
           className="settings-tabs"
           value={activeTab}
-          onChange={(value) => setActiveTab(value || 'system')}
+          onChange={(value) => {
+            const nextTab = (value || 'system') as RestorableSettingsTab;
+            setActiveTab(nextTab);
+            onActiveTabChange?.(nextTab);
+          }}
           orientation="vertical"
           variant="pills"
           p="md"

@@ -9,8 +9,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const extensionRoot = resolve(root, 'extensions/chrome')
 const manifestPath = resolve(extensionRoot, 'manifest.json')
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 
 assert.equal(manifest.manifest_version, 3, 'Chrome extension must use Manifest V3')
+assert.equal(
+  manifest.version,
+  packageJson.version,
+  'Chrome extension version must match the desktop package version',
+)
 assert.equal(manifest.action?.default_popup, 'popup.html', 'Popup entry must stay explicit')
 assert.equal(manifest.background?.service_worker, 'service-worker.js', 'Extension update worker is missing')
 assert.deepEqual(manifest.host_permissions, ['http://127.0.0.1/*'], 'Only the desktop loopback bridge may be persistent')

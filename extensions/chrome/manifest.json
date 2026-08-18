@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "openflow",
-  "version": "1.2.0",
+  "version": "2.5.3",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlNOt/qg8KJqPLwzsH/UrxMFBqRqkn58OWKFD5a3OjAqQTZmnJ91ludIPnspeqreoooIgdCHmYFX+dO8/D31N+xozjUW/zQp+q1Fg9/Nv5YEUtqOLrl5fKOt7xIx1OefZIvcDVhuxNUNm0K4a7fX7viuZ20+tC1TYRJqdYdlhTANj5wv5rfAtqXMAWUsnAJw0ygJqo89DMpwpgMpsMsB5/EgaZGp4OyNb3kbKAK4FIu3BPC684+70aaOoRsXuzs0sTASgbwC/Sl6PL8AdbM3E49N24lwXUCid6L7DPxQfzAkXCQbQCK6vakLyqebWhMpyGfjYDY5UUB/1OUyUoCqIpQIDAQAB",
   "description": "一键提取网页上的素材需求结构化数据，并导出 Excel 与 JSON。",
   "icons": {

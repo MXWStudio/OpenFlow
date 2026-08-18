@@ -12,8 +12,17 @@ export type DesktopUpdateType = 'critical' | 'standard'
 
 export type RestorableAppView = 'daily' | 'organizer' | 'format' | 'settings'
 
+export type RestorableSettingsTab =
+  | 'system'
+  | 'account'
+  | 'workspace'
+  | 'templates'
+  | 'shortcuts'
+  | 'about'
+
 export interface UpdateActivitySnapshot {
   activeView: RestorableAppView
+  settingsTab: RestorableSettingsTab
   busy: boolean
   hasUnsavedChanges: boolean
   lastUserActivityAt: number

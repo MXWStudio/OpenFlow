@@ -1,6 +1,6 @@
 {
   "name": "openflow-studio",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "OpenFlow Studio — AIGC 广告生产力工作流工具",
   "author": "mxw86",
   "private": true,
@@ -13,8 +13,12 @@
   },
   "main": "out/main/index.js",
   "scripts": {
+    "sync:extension-version": "node scripts/extension-version.mjs",
+    "check:extension-version": "node scripts/extension-version.mjs --check",
     "prepare:extension": "node scripts/prepare-extension-package.mjs",
     "prepare:update-config": "node scripts/prepare-update-config.mjs",
+    "prepare:update-feed-local": "node scripts/prepare-local-update-feed.mjs",
+    "serve:update-feed-local": "node scripts/serve-local-update-feed.mjs",
     "release:generate-keys": "node scripts/generate-release-keypair.mjs",
     "predev": "npm run prepare:extension && npm run prepare:update-config",
     "dev": "electron-vite dev",
@@ -22,9 +26,10 @@
     "build": "electron-vite build && electron-builder --win --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit",
-    "check:extension": "node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs",
+    "check:extension": "npm run check:extension-version && node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs && node scripts/test-chrome-update-flow.mjs",
     "check:release": "node --test scripts/*.test.mjs",
-    "test": "npm run check:extension && npm run check:release && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts"
+    "test": "npm run check:extension && npm run check:release && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts",
+    "version": "npm run sync:extension-version"
   },
   "build": {
     "appId": "com.openflow.studio",

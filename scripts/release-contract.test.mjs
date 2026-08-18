@@ -66,14 +66,24 @@ test('release artifacts must agree with latest.yml', () => {
 test('extension release artifacts include a versioned archive and integrity manifest', () => {
   const directory = mkdtempSync(join(tmpdir(), 'openflow-extension-release-contract-'))
   try {
-    const names = expectedExtensionArtifactNames('1.2.0')
+    const names = expectedExtensionArtifactNames('2.5.3')
     writeFileSync(join(directory, names.archive), 'extension zip')
     writeFileSync(join(directory, names.manifest), JSON.stringify({
       schemaVersion: 1,
-      extensionVersion: '1.2.0',
+      extensionVersion: '2.5.3',
       files: [{ path: 'manifest.json', size: 1, sha256: 'a'.repeat(64) }]
     }))
-    assert.deepEqual(validateExtensionReleaseArtifacts({ artifactDirectory: directory }).names, names)
+    assert.deepEqual(validateExtensionReleaseArtifacts({
+      artifactDirectory: directory,
+      desktopVersion: '2.5.3'
+    }).names, names)
+    assert.throws(
+      () => validateExtensionReleaseArtifacts({
+        artifactDirectory: directory,
+        desktopVersion: '2.5.4'
+      }),
+      /does not match desktop version/
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

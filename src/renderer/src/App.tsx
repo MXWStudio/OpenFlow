@@ -68,8 +68,8 @@ import {
   type RenameRequest,
   type RenameSelection,
 } from '../../shared/renameTemplates.ts';
-import type { RestorableAppView, UpdateViewState } from '../../shared/updateContract.ts';
-import { normalizeRestorableView } from './updateSession';
+import type { RestorableAppView, RestorableSettingsTab, UpdateViewState } from '../../shared/updateContract.ts';
+import { normalizeRestorableSettingsTab, normalizeRestorableView } from './updateSession';
 
 type ViewKey = RestorableAppView;
 
@@ -112,7 +112,7 @@ export default function App() {
   const [updateState, setUpdateState] = useState<UpdateViewState | null>(null);
   const [organizerBusy, setOrganizerBusy] = useState(false);
   const [formatBusy, setFormatBusy] = useState(false);
-  const [requestedSettingsTab, setRequestedSettingsTab] = useState('system');
+  const [requestedSettingsTab, setRequestedSettingsTab] = useState<RestorableSettingsTab>('system');
   const lastUserActivityAtRef = useRef(Date.now());
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
@@ -252,8 +252,9 @@ export default function App() {
       if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
       if (config.updateSession && typeof config.updateSession === 'object') {
-        const session = config.updateSession as { activeView?: unknown };
+        const session = config.updateSession as { activeView?: unknown; settingsTab?: unknown };
         setActiveView(normalizeRestorableView(session.activeView));
+        setRequestedSettingsTab(normalizeRestorableSettingsTab(session.settingsTab));
       }
 
       if (config.dailyRequirementSession && typeof config.dailyRequirementSession === 'object') {
@@ -294,7 +295,9 @@ export default function App() {
     if (!window.electronAPI?.app) return;
     const handleNavigate = (target: { view: string; settingsTab?: string }) => {
       const nextView = normalizeRestorableView(target.view);
-      if (nextView === 'settings' && target.settingsTab) setRequestedSettingsTab(target.settingsTab);
+      if (nextView === 'settings' && target.settingsTab) {
+        setRequestedSettingsTab(normalizeRestorableSettingsTab(target.settingsTab));
+      }
       setActiveView(nextView);
     };
     window.electronAPI.app.onNavigate(handleNavigate);
@@ -311,6 +314,7 @@ export default function App() {
       lastReportAt = now;
       void window.electronAPI.updates.reportActivity({
         activeView,
+        settingsTab: requestedSettingsTab,
         busy: hasActiveWork,
         hasUnsavedChanges,
         lastUserActivityAt: lastUserActivityAtRef.current,
@@ -319,20 +323,20 @@ export default function App() {
     };
     const handleUserActivity = () => reportActivity(true);
     const handlePrepareRestart = () => {
-      void window.electronAPI.store.set('updateSession', { activeView, savedAt: Date.now() });
+      void window.electronAPI.store.set('updateSession', { activeView, settingsTab: requestedSettingsTab, savedAt: Date.now() });
       reportActivity(false);
     };
     window.addEventListener('pointerdown', handleUserActivity, true);
     window.addEventListener('keydown', handleUserActivity, true);
     window.electronAPI.updates.onPrepareRestart(handlePrepareRestart);
-    void window.electronAPI.store.set('updateSession', { activeView, savedAt: Date.now() });
+    void window.electronAPI.store.set('updateSession', { activeView, settingsTab: requestedSettingsTab, savedAt: Date.now() });
     reportActivity(false);
     return () => {
       window.removeEventListener('pointerdown', handleUserActivity, true);
       window.removeEventListener('keydown', handleUserActivity, true);
       window.electronAPI.updates.offPrepareRestart(handlePrepareRestart);
     };
-  }, [activeView, formatBusy, hasActiveWork, hasUnsavedChanges, isAppReady, organizerBusy]);
+  }, [activeView, formatBusy, hasActiveWork, hasUnsavedChanges, isAppReady, organizerBusy, requestedSettingsTab]);
 
   useEffect(() => {
     if (!isAppReady) return;
@@ -878,6 +882,7 @@ export default function App() {
             producerName={userInfo.name}
             workflowSaveState={workflowSaveState}
             requestedTab={requestedSettingsTab}
+            onActiveTabChange={setRequestedSettingsTab}
           />
         ) : activeView === 'format' ? (
           <FormatProcessor onBusyChange={setFormatBusy} />

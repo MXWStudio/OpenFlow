@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto'
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { syncExtensionVersion } from './extension-version.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoot = resolve(root, 'extensions/chrome')
 const outputRoot = resolve(root, '.openflow-build/chrome-extension')
+
+await syncExtensionVersion()
 
 async function listFiles(current = sourceRoot) {
   const entries = await readdir(current, { withFileTypes: true })

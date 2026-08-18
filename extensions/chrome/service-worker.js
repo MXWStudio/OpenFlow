@@ -151,10 +151,10 @@ async function refreshTrackedTabs(version) {
     if (Number.isFinite(timestamp) && now - timestamp < TRACKED_TAB_MAX_AGE_MS) tabIds.push(Number(tabId));
     else delete state.trackedTabs[tabId];
   }
+  await Promise.allSettled(tabIds.filter(Number.isInteger).map((tabId) => chrome.tabs.reload(tabId)));
   state.lastRefreshedVersion = version;
   state.busyTabs = {};
   await storageSet(RUNTIME_STATE_KEY, state);
-  await Promise.allSettled(tabIds.filter(Number.isInteger).map((tabId) => chrome.tabs.reload(tabId)));
 }
 
 async function runUpdateCheck() {
@@ -180,8 +180,8 @@ async function runUpdateCheck() {
     try {
       const currentVersion = chrome.runtime.getManifest().version;
       await verifyInstalledPackage(currentVersion);
-      await acknowledge(config, 'ready');
       await refreshTrackedTabs(currentVersion);
+      await acknowledge(config, 'ready');
     } catch (error) {
       const result = await acknowledge(config, 'failed', error instanceof Error ? error.message : error);
       if (result?.reload) setTimeout(() => chrome.runtime.reload(), 100);
