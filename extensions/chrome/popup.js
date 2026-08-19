@@ -5,6 +5,22 @@ const EXTRACTED_BULK_DATA_STORAGE_KEY = 'extractedBulkData';
 const EXTRACTED_BULK_META_STORAGE_KEY = 'extractedBulkDataMeta';
 const DEADLINE_FILTER_STORAGE_KEY = 'deadlineFilter';
 
+function reportPopupDiagnostic(type, severity, payload) {
+    try {
+        chrome.runtime.sendMessage({
+            type: 'OPENFLOW_DIAGNOSTIC_EVENT',
+            event: {
+                type,
+                severity,
+                occurredAt: new Date().toISOString(),
+                payload
+            }
+        }, () => void chrome.runtime.lastError);
+    } catch {
+        // Automatic diagnostics must never interrupt the popup workflow.
+    }
+}
+
 try {
     chrome.runtime.sendMessage({ type: 'OPENFLOW_CHECK_FOR_UPDATES' }, () => void chrome.runtime.lastError);
 } catch {
@@ -431,6 +447,13 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
                 setExtractButtonPrimaryState();
 
                 if (chrome.runtime.lastError) {
+                    reportPopupDiagnostic('extension.popup_connection_error', 'error', {
+                        deadline,
+                        message: chrome.runtime.lastError.message,
+                        pageOrigin: (() => {
+                            try { return new URL(tab.url || '').origin; } catch { return ''; }
+                        })()
+                    });
                     alert("无法连接到页面脚本，请刷新页面后重试。\n错误信息: " + chrome.runtime.lastError.message);
                     return;
                 }
@@ -460,6 +483,10 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
                         renderPreview(extractedBulkData, { metadata: extractionMetadata });
                     }
                 } else {
+                    reportPopupDiagnostic('extension.popup_extraction_error', 'error', {
+                        deadline,
+                        message: response?.error || '未知错误'
+                    });
                     alert("提取失败！\n" + (response?.error || '未知错误'));
                 }
             });
@@ -467,6 +494,11 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
     } catch (err) {
         setExtractButtonPrimaryState();
+        reportPopupDiagnostic('extension.popup_execution_error', 'error', {
+            deadline,
+            message: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined
+        });
         alert("执行脚本发生错误：" + err.message);
     }
 });

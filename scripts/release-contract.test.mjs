@@ -101,6 +101,19 @@ test('workflows keep builds reproducible and releases single-owner', () => {
   assert.match(releaseWorkflow, /npm ci/)
   assert.match(releaseWorkflow, /npm run build/)
   assert.match(releaseWorkflow, /prepare-update-config\.mjs --require/)
+  assert.match(releaseWorkflow, /OPENFLOW_SENTRY_DSN/)
+  assert.match(releaseWorkflow, /SENTRY_AUTH_TOKEN/)
+  assert.match(releaseWorkflow, /SENTRY_ORG/)
+  assert.match(releaseWorkflow, /SENTRY_PROJECT/)
+  assert.match(releaseWorkflow, /OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES/)
+  assert.match(
+    releaseWorkflow,
+    /Validate signed Tencent COS update configuration[\s\S]*OPENFLOW_SENTRY_DSN[\s\S]*prepare-update-config\.mjs --require/,
+  )
+  assert.match(
+    releaseWorkflow,
+    /Build the application without publishing[\s\S]*OPENFLOW_SENTRY_DSN[\s\S]*SENTRY_AUTH_TOKEN[\s\S]*npm run build/,
+  )
   assert.match(releaseWorkflow, /sync-release-to-cos\.mjs --stage build-dist/)
   assert.match(releaseWorkflow, /sync-release-to-cos\.mjs --promote build-dist\/release\.json/)
   assert.match(releaseWorkflow, /OPENFLOW_RELEASE_PRIVATE_KEY/)

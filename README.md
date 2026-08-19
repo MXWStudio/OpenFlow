@@ -50,6 +50,8 @@ npx electron-vite build
 
 腾讯云 COS 与 GitHub 发布线路的首次配置见 [`docs/auto-update-setup.md`](docs/auto-update-setup.md)。
 
+桌面端和扩展会自动把抓取数量不闭合、运行异常与更新失败写入脱敏的本地诊断队列，并按发布配置的时间间隔批量发送到 OpenFlow 的 Sentry 项目；未配置 DSN 或网络暂时不可用时只在本机保留并自动重试，不影响正常工作。Sentry 与隐私配置见 [`docs/auto-update-setup.md`](docs/auto-update-setup.md#6-自动诊断回传)。
+
 ## 单仓库维护
 
 Electron 桌面端和 Chrome 扩展均在本仓库维护，`extensions/chrome` 是扩展的唯一源码入口。扩展不是 Git 子模块，也不依赖其他源码仓库；已废弃的第一代 Python 桌面端原型不属于当前产品，也不随主工程构建。

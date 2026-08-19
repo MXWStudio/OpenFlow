@@ -4,6 +4,7 @@ import { createReadStream } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { NsisUpdater, type UpdateDownloadedEvent } from 'electron-updater'
 import fs from 'fs-extra'
+import type { DiagnosticEventInput, DiagnosticsViewState } from '../shared/diagnosticsContract'
 import type { ExtensionUpdateViewState, SignedDesktopRelease, UpdateViewState } from '../shared/updateContract'
 import { compareReleaseVersions, verifySignedReleaseEnvelope } from './releaseMetadata'
 
@@ -22,10 +23,12 @@ interface UpdateConfiguration {
 export interface DesktopUpdateManagerOptions {
   getWindow: () => BrowserWindow | null
   getExtensionState: () => ExtensionUpdateViewState
+  getDiagnosticsState?: () => DiagnosticsViewState
   extensionPath: string
   canAutoInstallCritical?: () => boolean | Promise<boolean>
   prepareForInstall?: () => Promise<void>
   onStateChange?: (state: UpdateViewState) => void
+  captureDiagnostic?: (event: DiagnosticEventInput) => void | Promise<void>
   manualDownloadUrl?: string
 }
 
@@ -95,11 +98,22 @@ export class DesktopUpdateManager {
     return {
       desktop: { ...this.desktopState },
       extension: this.options.getExtensionState(),
+      diagnostics: this.options.getDiagnosticsState?.() ?? {
+        status: 'local-only',
+        pendingCount: 0,
+        uploadIntervalMinutes: 30,
+        sentryConfigured: false,
+        message: '自动诊断正在准备',
+      },
       channelConfigured: Boolean(this.configuration?.channelUrl && this.configuration?.releasePublicKey),
     }
   }
 
   notifyExtensionStateChanged(): void {
+    this.broadcastState()
+  }
+
+  notifyDiagnosticsStateChanged(): void {
     this.broadcastState()
   }
 
@@ -297,7 +311,24 @@ export class DesktopUpdateManager {
   }
 
   private patchDesktopState(patch: Partial<UpdateViewState['desktop']>): void {
+    const previousStatus = this.desktopState.status
+    const previousMessage = this.desktopState.message
     this.desktopState = { ...this.desktopState, ...patch }
+    if (
+      this.desktopState.status === 'error' &&
+      (previousStatus !== 'error' || previousMessage !== this.desktopState.message)
+    ) {
+      void this.options.captureDiagnostic?.({
+        type: 'desktop.update_error',
+        severity: 'error',
+        payload: {
+          message: this.desktopState.message,
+          currentVersion: this.desktopState.currentVersion,
+          availableVersion: this.desktopState.availableVersion,
+          updateType: this.desktopState.updateType,
+        },
+      })
+    }
     this.broadcastState()
   }
 

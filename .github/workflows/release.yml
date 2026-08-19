@@ -68,12 +68,19 @@ jobs:
       env:
         OPENFLOW_UPDATE_CHANNEL_URL: ${{ vars.OPENFLOW_UPDATE_CHANNEL_URL }}
         OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+        OPENFLOW_SENTRY_DSN: ${{ vars.OPENFLOW_SENTRY_DSN }}
+        OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES: ${{ vars.OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES }}
       run: node scripts/prepare-update-config.mjs --require
 
     - name: Build the application without publishing
       env:
         OPENFLOW_UPDATE_CHANNEL_URL: ${{ vars.OPENFLOW_UPDATE_CHANNEL_URL }}
         OPENFLOW_UPDATE_PUBLIC_KEY: ${{ vars.OPENFLOW_UPDATE_PUBLIC_KEY }}
+        OPENFLOW_SENTRY_DSN: ${{ vars.OPENFLOW_SENTRY_DSN }}
+        OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES: ${{ vars.OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES }}
+        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+        SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
       run: npm run build
 
     - name: Validate release artifacts

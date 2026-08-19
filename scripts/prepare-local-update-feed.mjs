@@ -130,6 +130,10 @@ export async function prepareLocalUpdateFeed({
     schemaVersion: 1,
     channelUrl: `${localBaseUrl}/stable/release.json`,
     releasePublicKey: publicKey,
+    diagnostics: {
+      sentryDsn: '',
+      uploadIntervalMinutes: 30,
+    },
   }
   await writeFile(
     resolve(output, 'update-config.json'),

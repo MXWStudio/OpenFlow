@@ -32,6 +32,10 @@ npm run release:generate-keys
 - `OPENFLOW_COS_PREFIX`：建议填写 `openflow`。
 - `OPENFLOW_UPDATE_CHANNEL_URL`：填写 `<下载根地址>/<目录>/stable/release.json`。
 - `OPENFLOW_UPDATE_PUBLIC_KEY`：粘贴公钥文本文件的整行内容。
+- `OPENFLOW_SENTRY_DSN`：OpenFlow 专用 Sentry 项目的客户端 DSN。DSN 会进入安装包，只能使用项目提供的公开客户端 DSN，不能填 Auth Token。
+- `OPENFLOW_DIAGNOSTICS_UPLOAD_INTERVAL_MINUTES`：收集后批量回传的时间间隔，允许 5–1440 分钟，建议使用默认值 `30`。
+- `SENTRY_ORG`：Sentry 组织标识，用于构建时上传 Source Map。
+- `SENTRY_PROJECT`：OpenFlow 的 Sentry 项目标识，用于构建时上传 Source Map。
 
 再增加以下机密配置：
 
@@ -39,6 +43,7 @@ npm run release:generate-keys
 - `TENCENT_COS_SECRET_KEY`
 - `TENCENT_COS_SESSION_TOKEN`：仅使用临时凭证时填写。
 - `OPENFLOW_RELEASE_PRIVATE_KEY`：粘贴私钥 PEM 的完整内容。
+- `SENTRY_AUTH_TOKEN`：仅供 GitHub Actions 上传 Source Map，授予对应组织/项目所需的最小权限；不会写入安装包。
 
 ## 4. 发布顺序
 
@@ -74,3 +79,22 @@ npm run release:generate-keys
 - `OPENFLOW_COS_USE_ACCELERATE`：是否使用腾讯云全球加速，默认关闭；仅在存储桶已开通该能力后开启。
 
 GitHub 配置完成后，可在 Actions 手动运行“Verify Tencent COS Configuration”。它只会覆盖 `openflow/verification/configuration.json` 这一份小文件，用来确认上传密钥、最小权限、文件信息和公开下载回读是否同时可用；不会创建版本、切换最新版或触发客户端更新。
+
+## 6. 自动诊断回传
+
+桌面端和 Chrome 扩展会自动记录以下事件：
+
+- 抓取匹配数、成功数、失败数不闭合；
+- 详情校验失败、重复任务 ID 和抓取异常；
+- 桌面界面未处理异常、渲染进程退出；
+- 桌面端或扩展自动更新失败及回滚。
+
+扩展先把事件保存到自己的本地队列，再通过带随机令牌的 `127.0.0.1` 桥接交给桌面端。桌面端将脱敏事件原子写入用户数据目录的 `diagnostics/pending`，默认每 30 分钟批量发送到 Sentry。桌面程序或 Sentry 暂时不可用时不会影响抓取和更新，队列会保留并按退避时间自动重试。单机最多保留 500 条，扩展侧最多保留 100 条。
+
+自动事件不包含完整网页、素材、浏览器资料、Cookie、更新桥接令牌、账号密码或完整本地路径。网址只保留来源站点，邮箱、本地路径和敏感字段会在写入前脱敏；单条事件与单批请求都有大小上限。
+
+Electron 主进程、渲染进程未处理异常、无响应和原生崩溃由 Sentry SDK 自动捕获，并使用 SDK 自带离线缓存。扩展抓取遗漏、更新失败和恢复状态仍经过 OpenFlow 的定时队列，只有警告、错误及恢复事件进入 Sentry；正常成功摘要仅留在本地，避免产生噪声。
+
+所有事件关闭用户信息、请求内容、Cookie、Breadcrumb、截图、性能追踪、栈变量和源码上下文。生产构建生成隐藏 Source Map，上传成功后会在打包前从本地构建输出删除；安装包中不会包含 `.map` 文件或 `SENTRY_AUTH_TOKEN`。
+
+未配置 `OPENFLOW_SENTRY_DSN` 时，自动收集仍然生效，但状态显示为“本机留存”，不会声称已经发送。配置 OpenFlow 专用 DSN 并发布新安装包后，已有本地队列会自动补传。开发人员在 Sentry 的 Issues 中按 `diagnostic_type`、`desktop_version`、`extension_version` 查看和筛选问题。

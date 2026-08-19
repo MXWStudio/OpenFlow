@@ -22,6 +22,7 @@ export default defineConfig({
   // ── 主进程配置 ─────────────────────────────────────────
   main: {
     plugins: [externalizeDepsPlugin()],
+    build: { sourcemap: 'hidden' },
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -32,6 +33,7 @@ export default defineConfig({
   // ── Preload 脚本配置 ────────────────────────────────────
   preload: {
     plugins: [externalizeDepsPlugin()],
+    build: { sourcemap: 'hidden' },
   },
 
   // ── 渲染进程配置（React）────────────────────────────────
@@ -41,6 +43,7 @@ export default defineConfig({
       host: '127.0.0.1'
     },
     build: {
+      sourcemap: 'hidden',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),

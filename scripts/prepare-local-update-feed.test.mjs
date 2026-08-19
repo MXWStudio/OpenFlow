@@ -63,6 +63,9 @@ test('local feed copies verified artifacts and signs a loopback-only release', a
     assert.equal(result.channelUrl, 'http://127.0.0.1:18765/stable/release.json')
     assert.equal(result.feedUrl, 'http://127.0.0.1:18765/releases/v2.5.3/')
 
+    const updateConfiguration = JSON.parse(await readFile(resolve(fixture.output, 'update-config.json'), 'utf8'))
+    assert.deepEqual(updateConfiguration.diagnostics, { sentryDsn: '', uploadIntervalMinutes: 30 })
+
     const stableSource = await readFile(resolve(fixture.output, 'stable/release.json'), 'utf8')
     const versionedSource = await readFile(
       resolve(fixture.output, 'releases/v2.5.3/release.json'),

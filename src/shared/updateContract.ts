@@ -1,3 +1,5 @@
+import type { DiagnosticsViewState } from './diagnosticsContract'
+
 export type DesktopUpdateStatus =
   | 'disabled'
   | 'idle'
@@ -56,6 +58,7 @@ export interface UpdateViewState {
     message?: string
   }
   extension: ExtensionUpdateViewState
+  diagnostics: DiagnosticsViewState
   channelConfigured: boolean
 }
 

@@ -10,6 +10,7 @@ import type {
   RenameSettingsV2,
 } from '../../../shared/renameTemplates.ts'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../../../shared/updateContract.ts'
+import type { DiagnosticEventInput } from '../../../shared/diagnosticsContract.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -234,6 +235,11 @@ export interface ElectronAPI {
     getAll: () => Promise<Partial<AppConfig> & Record<string, unknown>>
     /** 删除指定配置项 */
     delete: (key: string) => Promise<void>
+  }
+
+  /** 自动诊断事件上报到本机持久队列 */
+  diagnostics: {
+    report: (event: DiagnosticEventInput) => Promise<boolean>
   }
 
   /** 窗口控制 */

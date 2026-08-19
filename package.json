@@ -23,7 +23,7 @@
     "predev": "npm run prepare:extension && npm run prepare:update-config",
     "dev": "electron-vite dev",
     "prebuild": "npm run prepare:extension && npm run prepare:update-config",
-    "build": "electron-vite build && electron-builder --win --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
+    "build": "electron-vite build && node scripts/upload-sentry-sourcemaps.mjs && electron-builder --win --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit",
     "check:extension": "npm run check:extension-version && node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs && node scripts/test-chrome-update-flow.mjs",
@@ -81,6 +81,7 @@
     "@mantine/dropzone": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
+    "@sentry/electron": "7.16.0",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
@@ -93,15 +94,16 @@
     "sharp": "^0.35.3"
   },
   "devDependencies": {
+    "@sentry/cli": "3.6.2",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.14.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "cos-nodejs-sdk-v5": "^3.0.0",
     "electron": "^33.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
-    "cos-nodejs-sdk-v5": "^3.0.0",
     "typescript": "~5.8.2"
   }
 }

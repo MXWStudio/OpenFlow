@@ -5,6 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { RenameRequest } from '../shared/renameTemplates'
+import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 
 const updateStateListeners = new WeakMap<
@@ -112,6 +113,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /** 删除指定配置项 */
     delete: (key: string) => ipcRenderer.invoke('store:delete', key),
+  },
+
+  diagnostics: {
+    report: (event: DiagnosticEventInput) => ipcRenderer.invoke('diagnostics:report', event),
   },
 
   // ────────────────────────────────────────────────

@@ -1,7 +1,9 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 
-const MAX_REQUEST_BYTES = 16 * 1024
+const MAX_REQUEST_BYTES = 128 * 1024
+const MAX_DIAGNOSTIC_EVENTS = 25
 
 export interface ExtensionBridgeStatus {
   pending: boolean
@@ -21,6 +23,17 @@ export interface LocalUpdateBridgeOptions {
   extensionId: string
   getStatus: (currentVersion: string) => Promise<ExtensionBridgeStatus>
   acknowledge: (acknowledgement: ExtensionBridgeAcknowledgement) => Promise<{ reload: boolean }>
+  captureDiagnostics?: (events: DiagnosticEventInput[], extensionVersion: string) => Promise<{ accepted: number }>
+}
+
+function isDiagnosticEvent(value: unknown): value is DiagnosticEventInput {
+  if (!value || typeof value !== 'object') return false
+  const event = value as Partial<DiagnosticEventInput>
+  return typeof event.type === 'string' &&
+    event.type.length > 0 &&
+    event.type.length <= 80 &&
+    (event.severity === undefined || event.severity === 'info' || event.severity === 'warning' || event.severity === 'error') &&
+    (event.occurredAt === undefined || typeof event.occurredAt === 'string')
 }
 
 function sendJson(response: ServerResponse, statusCode: number, body: unknown, allowedOrigin?: string): void {
@@ -118,9 +131,9 @@ export class LocalUpdateBridge {
     }
 
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
+    const versionHeader = request.headers['x-openflow-extension-version']
+    const currentVersion = Array.isArray(versionHeader) ? versionHeader[0] : versionHeader ?? ''
     if (request.method === 'GET' && url.pathname === '/v1/status') {
-      const versionHeader = request.headers['x-openflow-extension-version']
-      const currentVersion = Array.isArray(versionHeader) ? versionHeader[0] : versionHeader ?? ''
       sendJson(response, 200, await this.options.getStatus(currentVersion), allowedOrigin)
       return
     }
@@ -135,6 +148,29 @@ export class LocalUpdateBridge {
         return
       }
       sendJson(response, 200, await this.options.acknowledge(body as ExtensionBridgeAcknowledgement), allowedOrigin)
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/diagnostics') {
+      if (!this.options.captureDiagnostics) {
+        sendJson(response, 503, { error: 'Diagnostics collector is unavailable' }, allowedOrigin)
+        return
+      }
+      const body = await readJsonBody(request) as { events?: unknown }
+      if (
+        !Array.isArray(body.events) ||
+        body.events.length === 0 ||
+        body.events.length > MAX_DIAGNOSTIC_EVENTS ||
+        !body.events.every(isDiagnosticEvent)
+      ) {
+        sendJson(response, 400, { error: 'Invalid diagnostics batch' }, allowedOrigin)
+        return
+      }
+      sendJson(
+        response,
+        200,
+        await this.options.captureDiagnostics(body.events, currentVersion),
+        allowedOrigin,
+      )
       return
     }
     sendJson(response, 404, { error: 'Not found' }, allowedOrigin)

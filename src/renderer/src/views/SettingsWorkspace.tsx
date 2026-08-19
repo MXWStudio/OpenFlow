@@ -89,6 +89,14 @@ const extensionUpdateLabels: Record<UpdateViewState['extension']['status'], stri
   error: '需要处理',
 };
 
+const diagnosticsLabels: Record<UpdateViewState['diagnostics']['status'], string> = {
+  'local-only': '本机留存',
+  idle: '自动运行',
+  queued: '等待批量回传',
+  uploading: '正在回传',
+  error: '等待重试',
+};
+
 export function SettingsWorkspace({
   userInfo,
   setUserInfo,
@@ -521,6 +529,39 @@ export function SettingsWorkspace({
                       >
                         打开扩展文件夹
                       </Button>
+                    </Box>
+
+                    <Divider />
+
+                    <Box>
+                      <Group justify="space-between" mb="xs">
+                        <Text fw={600}>Sentry 自动诊断反馈</Text>
+                        <Badge color={
+                          updateState?.diagnostics.status === 'error'
+                            ? 'orange'
+                            : updateState?.diagnostics.status === 'local-only'
+                              ? 'gray'
+                              : 'teal'
+                        }>
+                          {updateState ? diagnosticsLabels[updateState.diagnostics.status] : '读取中'}
+                        </Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {updateState?.diagnostics.message || '正在准备自动诊断收集'}
+                      </Text>
+                      <Text size="sm" mt={6}>
+                        待发送 {updateState?.diagnostics.pendingCount ?? 0} 条
+                        {' · '}
+                        每 {updateState?.diagnostics.uploadIntervalMinutes ?? 30} 分钟批量处理
+                      </Text>
+                      {updateState?.diagnostics.lastUploadedAt && (
+                        <Text size="xs" c="dimmed" mt={4}>
+                          最近成功发送：{new Date(updateState.diagnostics.lastUploadedAt).toLocaleString()}
+                        </Text>
+                      )}
+                      <Text size="xs" c="dimmed" mt={8}>
+                        仅收集版本、数量闭环、错误码和脱敏后的运行现场；不上传完整网页、素材、浏览器资料、截图或本机令牌。
+                      </Text>
                     </Box>
 
                     <Alert color="blue" title="首次使用只需操作一次">

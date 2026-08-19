@@ -21,8 +21,11 @@ import { getResolutionFolderContext, SIZE_FOLDER_REGEX } from './renameContext'
 import { executeRenameRequest, previewRenameRequest, type RenameRequest } from './rename'
 import { JsonConfigStore } from './configStore'
 import { DesktopUpdateManager } from './desktopUpdateManager'
+import { DiagnosticsManager } from './diagnosticsManager'
+import { initializeOpenFlowSentry } from './sentryRuntime'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
 import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
+import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 import type { RestorableAppView, RestorableSettingsTab, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 import {
   getWindowBackgroundColor,
@@ -35,9 +38,15 @@ import {
 // 禁用硬件加速，解决部分环境下的黑屏问题
 app.disableHardwareAcceleration()
 
+const updateConfigurationPath = app.isPackaged
+  ? join(process.resourcesPath, 'update-config.json')
+  : join(app.getAppPath(), '.openflow-build', 'update-config.json')
+const sentryRuntime = initializeOpenFlowSentry(updateConfigurationPath, `openflow-studio@${app.getVersion()}`)
+
 let tray: Tray | null = null
 let trayStatusIcons: { normal: NativeImage, red: NativeImage, orange: NativeImage } | null = null
 let latestUpdateState: UpdateViewState | null = null
+let diagnosticsManager: DiagnosticsManager | null = null
 
 const initialUpdateActivity: UpdateActivitySnapshot = {
   activeView: 'daily',
@@ -82,7 +91,19 @@ function normalizeError(error: unknown): string {
 function showFatalError(title: string, error: unknown): void {
   const detail = normalizeError(error)
   console.error(title, detail)
+  captureDesktopDiagnostic({
+    type: 'desktop.fatal_error',
+    severity: 'error',
+    payload: { title, detail },
+  })
   dialog.showErrorBox(title, detail || '未知错误')
+}
+
+function captureDesktopDiagnostic(event: DiagnosticEventInput): void {
+  if (!diagnosticsManager) return
+  void diagnosticsManager.record('desktop', event).catch((error) => {
+    console.warn('Unable to persist diagnostic event:', error instanceof Error ? error.message : error)
+  })
 }
 
 process.on('uncaughtException', (error) => {
@@ -421,11 +442,45 @@ function createWindow(): void {
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === -3) return // -3 = ERR_ABORTED，由正常跳转或重载触发
     console.error('Renderer load failed:', { errorCode, errorDescription, validatedURL })
+    captureDesktopDiagnostic({
+      type: 'renderer.load_failed',
+      severity: 'error',
+      payload: { errorCode, errorDescription, validatedURL },
+    })
     verifyRendererMounted()
   })
 
   window.webContents.on('render-process-gone', (_event, details) => {
     console.error('Renderer process exited:', details)
+    captureDesktopDiagnostic({
+      type: 'renderer.process_gone',
+      severity: 'error',
+      payload: details,
+    })
+  })
+  let rendererUnresponsiveAt = 0
+  window.on('unresponsive', () => {
+    rendererUnresponsiveAt = Date.now()
+    captureDesktopDiagnostic({
+      type: 'renderer.unresponsive',
+      severity: 'error',
+      payload: {
+        url: window.webContents.getURL(),
+        isLoading: window.webContents.isLoading(),
+        isVisible: window.isVisible(),
+        isFocused: window.isFocused(),
+      },
+    })
+  })
+  window.on('responsive', () => {
+    captureDesktopDiagnostic({
+      type: 'renderer.responsive',
+      severity: 'info',
+      payload: {
+        recoveredAfterMs: rendererUnresponsiveAt ? Date.now() - rendererUnresponsiveAt : null,
+      },
+    })
+    rendererUnresponsiveAt = 0
   })
   ipcMain.on('app:renderer-ready', handleRendererReady)
 
@@ -615,12 +670,47 @@ app.whenReady().then(async () => {
     ? join(process.resourcesPath, 'chrome-extension')
     : join(app.getAppPath(), '.openflow-build', 'chrome-extension')
   const extensionTargetRoot = join(app.getPath('userData'), 'chrome-extension')
+  diagnosticsManager = new DiagnosticsManager({
+    rootPath: join(app.getPath('userData'), 'diagnostics'),
+    configurationPath: updateConfigurationPath,
+    desktopVersion: app.getVersion(),
+    platform: process.platform,
+    architecture: process.arch,
+    locale: app.getLocale(),
+    uploadBatch: sentryRuntime.uploadBatch,
+    getExtensionVersion: () => extensionUpdateManager?.getState().installedVersion,
+    onStateChange: () => desktopUpdateManager?.notifyDiagnosticsStateChanged(),
+  })
+  await diagnosticsManager.start()
+
+  let lastExtensionDiagnostic = ''
   extensionUpdateManager = new ExtensionUpdateManager({
     sourceRoot: extensionSourceRoot,
     targetRoot: extensionTargetRoot,
     statePath: join(app.getPath('userData'), 'chrome-extension-update-state.json'),
     getDesktopVersion: () => app.getVersion(),
-    onStateChange: () => desktopUpdateManager?.notifyExtensionStateChanged(),
+    captureDiagnostics: async (events, extensionVersion) => ({
+      accepted: await diagnosticsManager!.recordBatch('extension', events, extensionVersion),
+    }),
+    onStateChange: (state) => {
+      desktopUpdateManager?.notifyExtensionStateChanged()
+      if ((state.status === 'error' || state.status === 'rolled-back') && state.message) {
+        const fingerprint = `${state.status}:${state.message}`
+        if (fingerprint !== lastExtensionDiagnostic) {
+          lastExtensionDiagnostic = fingerprint
+          captureDesktopDiagnostic({
+            type: 'extension.update_error',
+            severity: state.status === 'error' ? 'error' : 'warning',
+            payload: {
+              status: state.status,
+              message: state.message,
+              bundledVersion: state.bundledVersion,
+              installedVersion: state.installedVersion,
+            },
+          })
+        }
+      }
+    },
   })
   await extensionUpdateManager.start()
 
@@ -635,9 +725,19 @@ app.whenReady().then(async () => {
       extensionPath: extensionTargetRoot,
       message: '扩展更新服务未启动',
     },
+    getDiagnosticsState: () => diagnosticsManager?.getState() ?? {
+      status: 'local-only',
+      pendingCount: 0,
+      uploadIntervalMinutes: 30,
+      sentryConfigured: false,
+      message: '自动诊断正在准备',
+    },
     extensionPath: extensionTargetRoot,
     canAutoInstallCritical,
     prepareForInstall: prepareForUpdateInstall,
+    captureDiagnostic: async (event) => {
+      if (diagnosticsManager) await diagnosticsManager.record('desktop', event)
+    },
     onStateChange: refreshTrayUpdateState,
   })
   await desktopUpdateManager.start()
@@ -673,6 +773,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   desktopUpdateManager?.stop()
   void extensionUpdateManager?.stop()
+  diagnosticsManager?.stop()
 })
 
 app.on('window-all-closed', () => {
@@ -1550,6 +1651,19 @@ ipcMain.handle('store:delete', async (_, key: string) => {
   await storeDeleteKey(key)
 })
 
+ipcMain.handle('diagnostics:report', async (_, value: unknown) => {
+  if (!diagnosticsManager || !value || typeof value !== 'object') return false
+  const input = value as Partial<DiagnosticEventInput>
+  if (typeof input.type !== 'string' || input.type.length === 0 || input.type.length > 80) return false
+  await diagnosticsManager.record('renderer', {
+    type: input.type,
+    severity: input.severity,
+    occurredAt: input.occurredAt,
+    payload: input.payload,
+  })
+  return true
+})
+
 ipcMain.handle('updates:report-activity', async (_, value: unknown) => {
   rendererUpdateActivity = normalizeUpdateActivity(value)
   return true
@@ -1557,25 +1671,16 @@ ipcMain.handle('updates:report-activity', async (_, value: unknown) => {
 
 /**
  * dialog:exportLogs
- * 弹出“另存为”对话框，导出模拟日志文本到用户指定路径
+ * 弹出“另存为”对话框，导出当前已脱敏的诊断现场
  */
 ipcMain.handle('dialog:exportLogs', async () => {
   const result = await dialog.showSaveDialog({
     title: '导出错误日志',
-    defaultPath: `openflow-logs-${new Date().toISOString().slice(0, 10)}.txt`,
-    filters: [{ name: 'Text Files', extensions: ['txt'] }],
+    defaultPath: `openflow-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON Files', extensions: ['json'] }],
   })
   if (result.canceled || !result.filePath) return { success: false }
-
-  const mockLog = `OpenFlow Studio - 系统日志
-导出时间: ${new Date().toISOString()}
-----------------------------------------
-[INFO] 应用启动完成
-[INFO] 配置加载成功
-[INFO] 无错误记录
-----------------------------------------
-（此文件为模拟导出，用于测试“导出错误日志”功能）
-`
-  await fs.writeFile(result.filePath, mockLog, 'utf-8')
+  if (!diagnosticsManager) return { success: false }
+  await diagnosticsManager.exportSnapshot(result.filePath)
   return { success: true, path: result.filePath }
 })

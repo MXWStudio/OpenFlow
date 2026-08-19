@@ -151,6 +151,9 @@ assert.match(contentSource, /DUPLICATE_TASK_ID/, 'Duplicate task ID rejection is
 assert.match(contentSource, /DETAIL_IDENTITY_NOT_CONFIRMED/, 'Stale detail rejection is missing')
 assert.match(contentSource, /referenceResources/, 'Reference attachment classification is missing')
 assert.match(contentSource, /OPENFLOW_EXTRACTION_STATE/, 'Extension update busy-state notification is missing')
+assert.match(contentSource, /OPENFLOW_DIAGNOSTIC_EVENT/, 'Automatic extraction diagnostics are missing')
+assert.match(contentSource, /loadedCardCount/, 'Extraction diagnostics must preserve loaded-card count closure')
+assert.match(contentSource, /taskLoadState/, 'Extraction diagnostics must preserve frozen task-list loading state')
 
 const serviceWorkerSource = readFileSync(resolve(extensionRoot, 'service-worker.js'), 'utf8')
 assert.match(serviceWorkerSource, /chrome\.runtime\.reload\(\)/, 'Extension self-reload is missing')
@@ -158,5 +161,7 @@ assert.match(serviceWorkerSource, /crypto\.subtle\.digest\(['"]SHA-256['"]/, 'Ex
 assert.match(serviceWorkerSource, /chrome\.tabs\.reload\(tabId\)/, 'Tracked page refresh is missing')
 assert.match(serviceWorkerSource, /await hasBusyExtraction\(\)/, 'Busy extraction update guard is missing')
 assert.match(serviceWorkerSource, /http:\/\/127\.0\.0\.1:/, 'Extension bridge must stay on loopback')
+assert.match(serviceWorkerSource, /openflowDiagnosticQueue/, 'Extension diagnostics must survive desktop downtime')
+assert.match(serviceWorkerSource, /\/v1\/diagnostics/, 'Extension diagnostics bridge upload is missing')
 
 console.log('Chrome extension checks passed.')

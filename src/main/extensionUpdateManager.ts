@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import fs from 'fs-extra'
+import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 import type { ExtensionUpdateViewState } from '../shared/updateContract'
 import {
   finalizeExtensionInstall,
@@ -32,6 +33,7 @@ export interface ExtensionUpdateManagerOptions {
   getDesktopVersion: () => string
   acknowledgementTimeoutMs?: number
   onStateChange?: (state: ExtensionUpdateViewState) => void
+  captureDiagnostics?: (events: DiagnosticEventInput[], extensionVersion: string) => Promise<{ accepted: number }>
 }
 
 function errorMessage(error: unknown): string {
@@ -145,6 +147,7 @@ export class ExtensionUpdateManager {
       extensionId: EXTENSION_ID,
       getStatus: (currentVersion) => this.getBridgeStatus(currentVersion),
       acknowledge: (acknowledgement) => this.acknowledge(acknowledgement),
+      captureDiagnostics: this.options.captureDiagnostics,
     })
     this.bridgeConfig = await this.bridge.start()
     await this.writeBridgeConfig()

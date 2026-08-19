@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash, webcrypto } from 'node:crypto'
+import { createHash, randomUUID, webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -33,10 +33,14 @@ async function runWorker({
   status,
   corruptPackage = false,
   acknowledgementResult = { reload: false },
+  diagnosticQueue = [],
+  diagnosticEvent,
+  diagnosticsAvailable = true,
 }) {
   const events = []
   const stored = {
     openflowUpdateRuntime: clone(runtimeState),
+    openflowDiagnosticQueue: clone(diagnosticQueue),
   }
   const listeners = {}
   const bridgeConfig = {
@@ -99,15 +103,22 @@ async function runWorker({
       events.push(`ack:${body.status}:${body.version}`)
       return jsonResponse(acknowledgementResult)
     }
+    if (source === `http://127.0.0.1:${bridgeConfig.port}/v1/diagnostics`) {
+      if (!diagnosticsAvailable) throw new Error('desktop unavailable')
+      const body = JSON.parse(options.body)
+      events.push(`diagnostics:${body.events.length}`)
+      return jsonResponse({ accepted: body.events.length })
+    }
     throw new Error(`Unexpected fetch: ${source}`)
   }
 
   const sandbox = {
     chrome,
     console,
-    crypto: webcrypto,
+    crypto: { subtle: webcrypto.subtle, randomUUID },
     fetch,
     Response,
+    TextEncoder,
     setTimeout: (callback) => {
       callback()
       return 1
@@ -117,6 +128,11 @@ async function runWorker({
   vm.createContext(sandbox)
   vm.runInContext(workerSource, sandbox, { filename: 'service-worker.js' })
   await vm.runInContext('checkForUpdates()', sandbox)
+  if (diagnosticEvent) {
+    sandbox.__diagnosticEvent = diagnosticEvent
+    await vm.runInContext('queueDiagnosticEvent(__diagnosticEvent)', sandbox)
+    await vm.runInContext('flushDiagnostics()', sandbox)
+  }
   await Promise.resolve()
   return { events, stored, listeners }
 }
@@ -167,5 +183,32 @@ assert.deepEqual(rollbackStep.events, [
   `ack:failed:${targetVersion}`,
   'runtime.reload',
 ])
+
+const diagnosticStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: { trackedTabs: {}, busyTabs: {}, lastRefreshedVersion: targetVersion },
+  status: { pending: false, targetVersion, desktopVersion: '2.5.3', action: 'none' },
+  diagnosticEvent: {
+    type: 'extension.extraction_summary',
+    severity: 'warning',
+    payload: { matchedCount: 3, successCount: 2 },
+  },
+})
+assert.ok(diagnosticStep.events.includes('diagnostics:1'))
+assert.deepEqual(diagnosticStep.stored.openflowDiagnosticQueue, [])
+
+const offlineDiagnosticStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: { trackedTabs: {}, busyTabs: {}, lastRefreshedVersion: targetVersion },
+  status: { pending: false, targetVersion, desktopVersion: '2.5.3', action: 'none' },
+  diagnosticEvent: {
+    type: 'extension.extraction_exception',
+    severity: 'error',
+    payload: { message: 'detail timeout' },
+  },
+  diagnosticsAvailable: false,
+})
+assert.equal(offlineDiagnosticStep.stored.openflowDiagnosticQueue.length, 1)
+assert.equal(offlineDiagnosticStep.stored.openflowDiagnosticQueue[0].type, 'extension.extraction_exception')
 
 console.log(`Chrome update flow checks passed for extension ${targetVersion}.`)

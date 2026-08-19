@@ -12,6 +12,26 @@ function notifyOpenFlowUpdateState(message) {
   }
 }
 
+function reportOpenFlowDiagnostic(type, severity, payload) {
+  notifyOpenFlowUpdateState({
+    type: 'OPENFLOW_DIAGNOSTIC_EVENT',
+    event: {
+      type,
+      severity,
+      occurredAt: new Date().toISOString(),
+      payload
+    }
+  });
+}
+
+function getDiagnosticSourceOrigin() {
+  try {
+    return location.origin;
+  } catch {
+    return '';
+  }
+}
+
 notifyOpenFlowUpdateState({ type: 'OPENFLOW_PAGE_READY' });
 
 function extractDataFromPage() {
@@ -423,15 +443,29 @@ function panelLooksUseful(panel) {
 }
 
 async function loadAllTaskCards(taskList, timeoutMs = 20000) {
+  const startedAt = Date.now();
+  const snapshot = (cards, complete, timedOut = false, stableHits = 0) => ({
+    cards,
+    complete,
+    timedOut,
+    stableHits,
+    durationMs: Date.now() - startedAt,
+    scrollTop: taskList?.scrollTop || 0,
+    clientHeight: taskList?.clientHeight || 0,
+    scrollHeight: taskList?.scrollHeight || 0,
+    reachedBottom: taskList
+      ? Math.ceil(taskList.scrollTop + taskList.clientHeight) >= taskList.scrollHeight - 2
+      : false
+  });
+
   if (!taskList) {
-    return Array.from(document.querySelectorAll('.p-4.cursor-pointer'));
+    return snapshot(Array.from(document.querySelectorAll('.p-4.cursor-pointer')), false);
   }
 
   if (Math.ceil(taskList.scrollTop + taskList.clientHeight) >= taskList.scrollHeight - 2) {
-    return Array.from(taskList.querySelectorAll('.p-4.cursor-pointer'));
+    return snapshot(Array.from(taskList.querySelectorAll('.p-4.cursor-pointer')), true);
   }
 
-  const startedAt = Date.now();
   let previousCount = -1;
   let stableHits = 0;
 
@@ -442,7 +476,7 @@ async function loadAllTaskCards(taskList, timeoutMs = 20000) {
 
     if (currentCount === previousCount && reachedBottom) {
       stableHits += 1;
-      if (stableHits >= 3) return cards;
+      if (stableHits >= 3) return snapshot(cards, true, false, stableHits);
     } else {
       stableHits = 0;
     }
@@ -453,7 +487,7 @@ async function loadAllTaskCards(taskList, timeoutMs = 20000) {
     await sleep(400);
   }
 
-  return Array.from(taskList.querySelectorAll('.p-4.cursor-pointer'));
+  return snapshot(Array.from(taskList.querySelectorAll('.p-4.cursor-pointer')), false, true, stableHits);
 }
 
 function getTaskId(extraData) {
@@ -631,6 +665,9 @@ async function captureTaskDescriptor(taskList, descriptor, options = {}) {
 async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
   let taskList = null;
   let originalScrollTop = 0;
+  let loadedCardCount = 0;
+  const extractionStartedAt = Date.now();
+  const requestedDeadline = String(options.deadline || '').trim();
 
   notifyOpenFlowUpdateState({ type: 'OPENFLOW_EXTRACTION_STATE', busy: true });
 
@@ -638,8 +675,12 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     const extractedDataList = [];
     const extractionWarnings = [];
 
-    const deadline = String(options.deadline || '').trim();
+    const deadline = requestedDeadline;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      reportOpenFlowDiagnostic('extension.extraction_invalid_request', 'warning', {
+        deadline,
+        sourceOrigin: getDiagnosticSourceOrigin()
+      });
       sendResponse({ success: false, error: '请指定有效的截止日期', sourceUrl: location.href, extractedAt: new Date().toISOString() });
       return;
     }
@@ -647,20 +688,42 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     // 先触发无限列表加载到底，再按用户指定的截止日期匹配卡片，不限制状态。
     taskList = document.querySelector('.TaskListScroll');
     originalScrollTop = taskList?.scrollTop || 0;
-    const allTaskCards = await loadAllTaskCards(taskList);
+    const taskLoadState = await loadAllTaskCards(taskList);
+    const allTaskCards = taskLoadState.cards;
+    loadedCardCount = allTaskCards.length;
     const matchedDescriptors = getTaskDescriptors(allTaskCards).filter(descriptor => descriptor.deadline === deadline);
+    const taskLoadWarning = taskLoadState.complete
+      ? ''
+      : taskLoadState.timedOut
+        ? '任务列表在规定时间内未能稳定加载到底，本次结果可能不完整'
+        : '未识别到任务列表容器，本次结果可能不完整';
 
     if (matchedDescriptors.length === 0) {
       console.log(`[SmartAd 助手] 当前已加载列表中没有截止日期为 ${deadline} 的任务`);
+      reportOpenFlowDiagnostic('extension.extraction_summary', taskLoadState.complete ? 'info' : 'warning', {
+        deadline,
+        sourceOrigin: getDiagnosticSourceOrigin(),
+        loadedCardCount,
+        matchedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        complete: taskLoadState.complete,
+        taskLoadState,
+        durationMs: Date.now() - extractionStartedAt
+      });
       sendResponse({
         success: true,
         data: [],
-        warnings: [`当前已加载列表中没有截止日期为 ${deadline} 的任务`],
+        warnings: [
+          ...(taskLoadWarning ? [taskLoadWarning] : []),
+          `当前已加载列表中没有截止日期为 ${deadline} 的任务`
+        ],
         sourceUrl: location.href,
         extractedAt: new Date().toISOString(),
         deadline,
         matchedCount: 0,
-        complete: true,
+        complete: taskLoadState.complete,
+        taskLoadState,
         failedTasks: []
       });
       return;
@@ -678,7 +741,13 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         if (!capture.success) {
           const message = `${descriptor.projectName} 抓取失败：${capture.errors.join('、')}`;
           extractionWarnings.push(message);
-          failedTasks.push({ projectName: descriptor.projectName, code: 'DETAIL_IDENTITY_NOT_CONFIRMED', message, attempts: capture.attempts });
+          failedTasks.push({
+            projectName: descriptor.projectName,
+            code: 'DETAIL_IDENTITY_NOT_CONFIRMED',
+            message,
+            attempts: capture.attempts,
+            reasons: capture.errors.slice(0, 5)
+          });
           continue;
         }
 
@@ -690,7 +759,13 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         if (previousDescriptor) {
           const message = `${descriptor.projectName} 与 ${previousDescriptor.projectName} 返回了相同任务ID ${taskId}`;
           extractionWarnings.push(message);
-          failedTasks.push({ projectName: descriptor.projectName, code: 'DUPLICATE_TASK_ID', message, attempts: capture.attempt });
+          failedTasks.push({
+            projectName: descriptor.projectName,
+            code: 'DUPLICATE_TASK_ID',
+            message,
+            attempts: capture.attempts,
+            reasons: ['多个任务返回相同任务ID']
+          });
           continue;
         }
         seenTaskIds.set(taskId, descriptor);
@@ -712,7 +787,10 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         });
     }
 
-    const warnings = [...extractionWarnings];
+    const warnings = [
+      ...(taskLoadWarning ? [taskLoadWarning] : []),
+      ...extractionWarnings
+    ];
     extractedDataList.forEach((task, index) => {
         const label = task.projectName || `第 ${index + 1} 个任务`;
         const details = Array.isArray(task.details) ? task.details : [];
@@ -725,6 +803,28 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     });
 
     console.log('[SmartAd 助手] 批量提取完成！', extractedDataList);
+    const complete = taskLoadState.complete && failedTasks.length === 0 && extractedDataList.length === matchedDescriptors.length;
+    reportOpenFlowDiagnostic(
+      'extension.extraction_summary',
+      complete && warnings.length === 0 ? 'info' : failedTasks.length > 0 ? 'error' : 'warning',
+      {
+        deadline,
+        sourceOrigin: getDiagnosticSourceOrigin(),
+        loadedCardCount,
+        matchedCount: matchedDescriptors.length,
+        successCount: extractedDataList.length,
+        failedCount: failedTasks.length,
+        complete,
+        taskLoadState,
+        warningCount: warnings.length,
+        failures: failedTasks.map((failure) => ({
+          code: failure.code,
+          attempts: failure.attempts,
+          reasons: failure.reasons
+        })),
+        durationMs: Date.now() - extractionStartedAt
+      }
+    );
     // 所有循环结束后，返回最终数据
     sendResponse({
         success: true,
@@ -734,12 +834,21 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         extractedAt: new Date().toISOString(),
         deadline,
         matchedCount: matchedDescriptors.length,
-        complete: failedTasks.length === 0 && extractedDataList.length === matchedDescriptors.length,
+        complete,
+        taskLoadState,
         failedTasks
       });
 
   } catch (error) {
     console.error('[SmartAd 助手] 抓取过程中发生异常:', error);
+    reportOpenFlowDiagnostic('extension.extraction_exception', 'error', {
+      deadline: requestedDeadline,
+      sourceOrigin: getDiagnosticSourceOrigin(),
+      loadedCardCount,
+      durationMs: Date.now() - extractionStartedAt,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     sendResponse({ success: false, error: error.message, sourceUrl: location.href, extractedAt: new Date().toISOString() });
   } finally {
     if (taskList) taskList.scrollTop = originalScrollTop;
