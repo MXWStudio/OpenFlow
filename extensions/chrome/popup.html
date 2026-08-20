@@ -16,7 +16,7 @@
             font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
             display: flex;
             justify-content: center;
-            padding: 12px;
+            padding: 8px;
         }
 
         .popup-container {
@@ -24,19 +24,25 @@
             background: #FFFFFF;
             border-radius: 12px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-            padding: 16px;
+            padding: 14px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 10px;
         }
 
         .header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 10px;
             font-size: 16px;
             color: #1F1F1F;
             font-weight: 600;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .header-actions {
@@ -87,42 +93,45 @@
             box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
         }
 
-        .extraction-filter {
+        .deadline-action {
             background: #FAFAFA;
             border: 1px solid #E8E8E8;
             border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
         }
 
-        .extraction-filter label {
+        .deadline-action label {
             color: #262626;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
+            white-space: nowrap;
         }
 
-        .extraction-filter input {
+        .deadline-action input {
             width: 100%;
             border: 1px solid #D9D9D9;
             border-radius: 6px;
-            padding: 8px 10px;
+            padding: 7px 9px;
             color: #262626;
             background: #FFFFFF;
             font: inherit;
             outline: none;
         }
 
-        .extraction-filter input:focus {
+        .deadline-action input:focus {
             border-color: #1677FF;
             box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
         }
 
-        .filter-help {
-            color: #8C8C8C;
-            font-size: 11px;
-            line-height: 1.5;
+        .deadline-submit {
+            width: auto !important;
+            min-width: 82px;
+            padding: 8px 12px !important;
+            white-space: nowrap;
         }
 
         .btn-icon {
@@ -192,9 +201,37 @@
 
         .status-area {
             display: none;
-            gap: 8px;
-            flex-wrap: wrap;
+            padding: 10px;
+            background: #FAFAFA;
+            border: 1px solid #E8E8E8;
+            border-radius: 8px;
             animation: fadeIn 0.3s ease-out;
+        }
+
+        .result-row {
+            display: grid;
+            grid-template-columns: 58px minmax(0, 1fr);
+            align-items: start;
+            gap: 8px;
+        }
+
+        .result-row + .result-row {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #EEEEEE;
+        }
+
+        .result-label {
+            color: #8C8C8C;
+            font-size: 11px;
+            line-height: 24px;
+            white-space: nowrap;
+        }
+
+        .result-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .badge {
@@ -232,71 +269,8 @@
             margin-top: 4px;
         }
 
-        .badge-small-red {
-            background: #FFF1F0;
-            color: #CF1322;
-            border: 1px solid #FFA39E;
-            font-size: 10px;
-            padding: 2px 4px;
-            border-radius: 4px;
-            margin-left: 6px;
-            vertical-align: middle;
-        }
-
-        .list-wrapper {
-            background: #FAFAFA;
-            border: 1px solid #F0F0F0;
-            border-radius: 8px;
-            padding: 4px;
-            display: none;
-        }
-
-        .task-list {
-            list-style: none;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .task-list::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .task-list::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .task-list::-webkit-scrollbar-thumb {
-            background: #D9D9D9;
-            border-radius: 4px;
-        }
-
-        .task-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-radius: 6px;
-        }
-
-        .task-item:hover {
-            background: #F0F0F0;
-        }
-
-        .task-name {
-            font-size: 13px;
-            color: #262626;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 320px;
-        }
-
-        .task-meta {
-            font-size: 12px;
-            color: #8C8C8C;
-            white-space: nowrap;
+        .result-alert {
+            margin-top: 8px;
         }
 
         .export-actions {
@@ -401,23 +375,6 @@
             background: #0098FF;
         }
 
-        body.dark-theme .list-wrapper {
-            background: #2D2D30;
-            border-color: #3E3E42;
-        }
-
-        body.dark-theme .task-item:hover {
-            background: #3E3E42;
-        }
-
-        body.dark-theme .task-name {
-            color: #E0E0E0;
-        }
-
-        body.dark-theme .task-meta {
-            color: #A0A0A0;
-        }
-
         body.dark-theme .badge-success {
             background: #1B2B1B;
             color: #73D13D;
@@ -437,12 +394,6 @@
         }
 
         body.dark-theme .badge-red {
-            background: #301114;
-            color: #FF4D4F;
-            border-color: #CF1322;
-        }
-
-        body.dark-theme .badge-small-red {
             background: #301114;
             color: #FF4D4F;
             border-color: #CF1322;
@@ -470,34 +421,36 @@
             border-color: #9254DE;
         }
 
-        body.dark-theme .extraction-filter {
+        body.dark-theme .deadline-action,
+        body.dark-theme .status-area {
             background: #1F1F1F;
             border-color: #434343;
         }
 
-        body.dark-theme .extraction-filter label,
-        body.dark-theme .extraction-filter input {
+        body.dark-theme .deadline-action label,
+        body.dark-theme .deadline-action input {
             color: #F0F0F0;
         }
 
-        body.dark-theme .extraction-filter input {
+        body.dark-theme .deadline-action input {
             background: #141414;
             border-color: #595959;
         }
 
-        body.dark-theme .filter-help {
+        body.dark-theme .result-label {
             color: #BFBFBF;
         }
 
-        body.dark-theme .task-list::-webkit-scrollbar-thumb {
-            background: #555555;
+        body.dark-theme .result-row + .result-row {
+            border-top-color: #3E3E42;
         }
+
     </style>
 </head>
 <body>
     <div class="popup-container">
         <div class="header">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="header-title">
                 <span>🚀</span><span>任务抓取工具</span>
             </div>
             <div class="header-actions">
@@ -525,17 +478,15 @@
             <button id="saveSettingsBtn" class="btn btn-secondary" style="margin-top: 8px;">保存设置</button>
         </div>
 
-        <div class="extraction-filter">
-            <label for="deadlineInput">按截止日期抓取</label>
-            <input id="deadlineInput" type="date" aria-describedby="deadlineHelp">
-            <span id="deadlineHelp" class="filter-help">填写后抓取当前列表中该截止日期的任务，不限制任务状态。</span>
+        <button id="extractUnstartedBtn" class="btn btn-primary"><span>📥</span> 抓取未开始任务</button>
+
+        <div class="deadline-action">
+            <label for="deadlineInput">截止日期</label>
+            <input id="deadlineInput" type="date">
+            <button id="extractBtn" class="btn btn-secondary deadline-submit"><span>📥</span> 抓取</button>
         </div>
 
-        <button id="extractBtn" class="btn btn-primary"><span>📥</span> 按截止日期提取任务</button>
         <div id="statusArea" class="status-area"></div>
-        <div id="listWrapper" class="list-wrapper">
-            <ul id="taskList" class="task-list"></ul>
-        </div>
         <div id="exportActions" class="export-actions">
             <button id="exportExcelBtn" class="btn btn-excel"><span>📊</span> 导出 Excel</button>
             <button id="exportJsonBtn" class="btn btn-json"><span>📋</span> 导出 JSON</button>

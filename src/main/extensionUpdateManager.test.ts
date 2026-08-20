@@ -80,7 +80,9 @@ test('desktop and Chrome complete a verified extension update handshake', async 
       desktopVersion: '2.5.3',
       action: 'reload',
       message: '桌面端已准备好新版扩展',
+      protocols: { updates: 1, diagnostics: 1, extractions: 2 },
     })
+    assert.equal((await fs.readJson(join(fixture.targetRoot, 'openflow-bridge.json'))).extractionProtocolVersion, 2)
 
     const acknowledgeStatus = await bridgeRequest(fixture.targetRoot, '/v1/status', '1.2.1')
     assert.equal((await acknowledgeStatus.json()).action, 'acknowledge')
@@ -95,6 +97,43 @@ test('desktop and Chrome complete a verified extension update handshake', async 
   } finally {
     await fixture.manager.stop()
     await fs.remove(fixture.root)
+  }
+})
+
+test('same-version content changes are installed and require a reload handshake', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'openflow-extension-manager-same-version-'))
+  const sourceRoot = join(root, 'source')
+  const targetRoot = join(root, 'installed')
+  const statePath = join(root, 'pending.json')
+  await createPackage(targetRoot, '2.5.3', 'old same-version worker')
+  await createPackage(sourceRoot, '2.5.3', 'new same-version worker')
+  const manager = new ExtensionUpdateManager({
+    sourceRoot,
+    targetRoot,
+    statePath,
+    getDesktopVersion: () => '2.5.3',
+  })
+  try {
+    await manager.start()
+    assert.equal(manager.getState().status, 'waiting-reload')
+    assert.equal(await fs.readFile(join(targetRoot, 'service-worker.js'), 'utf8'), 'new same-version worker')
+    assert.equal(await fs.readFile(join(`${targetRoot}.backup`, 'service-worker.js'), 'utf8'), 'old same-version worker')
+
+    const statusResponse = await bridgeRequest(targetRoot, '/v1/status', '2.5.3')
+    const status = await statusResponse.json() as { action: string; reloadToken?: string }
+    assert.equal(status.action, 'reload')
+    assert.match(status.reloadToken ?? '', /^[0-9a-f-]{36}$/i)
+
+    const acknowledgement = await bridgeRequest(targetRoot, '/v1/ack', '2.5.3', {
+      version: '2.5.3',
+      status: 'ready',
+    })
+    assert.deepEqual(await acknowledgement.json(), { reload: false })
+    assert.equal(manager.getState().status, 'ready')
+    assert.equal(await fs.pathExists(`${targetRoot}.backup`), false)
+  } finally {
+    await manager.stop()
+    await fs.remove(root)
   }
 })
 

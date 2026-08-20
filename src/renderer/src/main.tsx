@@ -54,7 +54,7 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="auto">
-      <Notifications position="top-right" />
+      <Notifications position="top-right" limit={1} />
       <App />
     </MantineProvider>
   </StrictMode>,

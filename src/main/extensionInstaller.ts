@@ -88,6 +88,27 @@ export async function validateExtensionPackage(root: string): Promise<ExtensionR
   return releaseManifest as ExtensionReleaseManifest
 }
 
+function releaseManifestsMatch(left: ExtensionReleaseManifest, right: ExtensionReleaseManifest): boolean {
+  if (left.extensionVersion !== right.extensionVersion || left.files.length !== right.files.length) return false
+  const normalize = (manifest: ExtensionReleaseManifest) => [...manifest.files]
+    .map((file) => ({ path: normalizeRelativePath(file.path), size: file.size, sha256: file.sha256.toLowerCase() }))
+    .sort((first, second) => first.path.localeCompare(second.path, 'en'))
+  const leftFiles = normalize(left)
+  const rightFiles = normalize(right)
+  return leftFiles.every((file, index) => {
+    const other = rightFiles[index]
+    return file.path === other.path && file.size === other.size && file.sha256 === other.sha256
+  })
+}
+
+export async function extensionPackagesMatch(leftRoot: string, rightRoot: string): Promise<boolean> {
+  const [left, right] = await Promise.all([
+    validateExtensionPackage(leftRoot),
+    validateExtensionPackage(rightRoot),
+  ])
+  return releaseManifestsMatch(left, right)
+}
+
 export interface ExtensionInstallResult {
   changed: boolean
   version: string
@@ -100,8 +121,9 @@ export async function installExtensionTransaction(sourceRoot: string, targetRoot
   let previousVersion: string | undefined
   if (await fs.pathExists(targetRoot)) {
     try {
-      previousVersion = (await validateExtensionPackage(targetRoot)).extensionVersion
-      if (previousVersion === sourceManifest.extensionVersion) {
+      const targetManifest = await validateExtensionPackage(targetRoot)
+      previousVersion = targetManifest.extensionVersion
+      if (releaseManifestsMatch(sourceManifest, targetManifest)) {
         return { changed: false, version: sourceManifest.extensionVersion, previousVersion }
       }
     } catch {

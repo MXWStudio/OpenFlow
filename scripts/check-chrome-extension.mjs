@@ -65,6 +65,48 @@ for (const scriptName of ['service-worker.js', 'popup.js', 'content.js', 'xlsx.b
 }
 
 const popupSource = readFileSync(resolve(extensionRoot, 'popup.js'), 'utf8')
+assert.doesNotMatch(popupHtml, /id=["'](?:listWrapper|taskList)["']/, 'Popup must not render the detailed extraction list')
+assert.doesNotMatch(popupSource, /className\s*=\s*["']task-item["']/, 'Popup must not rebuild the detailed extraction list')
+assert.match(popupHtml, /id=["']extractUnstartedBtn["']/, 'Popup must retain the unstarted-task extraction button')
+assert.doesNotMatch(popupSource, /unstartedCount|未开始:/, 'Popup must not show the unstarted-task count')
+assert.match(popupHtml, /class=["']deadline-action["'][\s\S]*id=["']deadlineInput["'][\s\S]*id=["']extractBtn["']/, 'Deadline input and action must share one compact row')
+assert.doesNotMatch(popupHtml, /deadlineHelp|filter-help/, 'Popup must not keep the verbose deadline help block')
+
+const renderPreviewMatch = popupSource.match(/function renderPreview\([\s\S]*?\n\}/)
+assert.ok(renderPreviewMatch, 'Popup preview renderer cannot be evaluated')
+const previewElements = {
+  statusArea: { innerHTML: '', style: {} },
+  exportActions: { style: {} },
+}
+const renderPreview = vm.runInNewContext(
+  `(() => {
+    const document = { getElementById: (id) => elements[id] };
+    const escapeHtmlText = (value) => String(value);
+    const buildExtractionWarnings = () => [];
+    const formatMetadataTime = () => '10:35';
+    const getExtractionBlockingReason = () => '';
+    const setExtractionButtonsIdle = () => {};
+    ${renderPreviewMatch[0]}
+    return renderPreview;
+  })()`,
+  { elements: previewElements },
+)
+renderPreview([
+  { status: '未开始', materialType: '平面', 下单人: '温典战' },
+  { 状态: '未开始', materialType: '视频' },
+  { status: '完成', materialType: '视频', 下单人: '维克多' },
+], { metadata: { deadline: '2026-08-19', warnings: [] } })
+assert.match(previewElements.statusArea.innerHTML, /抓取结果/, 'Popup result group is missing')
+assert.match(previewElements.statusArea.innerHTML, /共 3 个/, 'Popup total summary is incorrect')
+assert.match(previewElements.statusArea.innerHTML, /平面 1/, 'Popup graphic summary is incorrect')
+assert.match(previewElements.statusArea.innerHTML, /视频 2/, 'Popup video summary is incorrect')
+assert.match(previewElements.statusArea.innerHTML, /截止 2026-08-19/, 'Popup deadline summary is missing')
+assert.match(previewElements.statusArea.innerHTML, /当前状态[\s\S]*抓取于 10:35/, 'Popup current-state group is missing')
+assert.doesNotMatch(previewElements.statusArea.innerHTML, /未开始/, 'Popup must not show the unstarted-task count after extraction')
+assert.doesNotMatch(previewElements.statusArea.innerHTML, /特殊需求/, 'Popup must not show orderer-specific special-requirement notices')
+assert.equal(previewElements.statusArea.style.display, 'block', 'Popup summary must be visible after extraction')
+assert.equal(previewElements.exportActions.style.display, 'flex', 'Popup exports must remain available after extraction')
+
 const extractDefaultHeaders = (constantName) => {
   const match = popupSource.match(new RegExp(`const ${constantName} = "([^"]+)"`))
   assert.ok(match, `${constantName} is missing`)
@@ -85,6 +127,9 @@ assert.deepEqual(
 assert.match(popupSource, /schemaVersion:\s*['"]openflow\.requirements\.v1['"]/, 'JSON export schema is missing')
 assert.match(popupSource, /projects:\s*formattedDataList/, 'JSON export projects payload is missing')
 assert.match(popupSource, /action:\s*["']EXTRACT_BULK_DOM["'],\s*deadline/, 'Deadline filter is not sent to the page extractor')
+assert.match(popupSource, /runBulkExtraction\(\{\s*status:\s*["']未开始["']\s*\}\)/, 'Unstarted-task filter is not sent to the page extractor')
+assert.match(popupSource, /OPENFLOW_QUEUE_EXTRACTION/, 'Completed extraction is not queued for desktop delivery')
+assert.match(popupSource, /buildRequirementsPayload/, 'Automatic delivery and JSON export must share one requirements payload builder')
 assert.match(popupSource, /ensureExtractionCanExport/, 'Incomplete extraction export guard is missing')
 assert.match(popupSource, /ALLOWED_TOOL_TAGS\s*=\s*new Set\(\[["']奇觅["'],\s*["']人工["']\]\)/, 'Tool tag options must stay limited to 奇觅 and 人工')
 assert.match(popupSource, /toSpreadsheetCellValue/, 'Spreadsheet formula-injection guard is missing')
@@ -146,12 +191,19 @@ assert.equal(
 const contentSource = readFileSync(resolve(extensionRoot, 'content.js'), 'utf8')
 assert.match(contentSource, /截止日期\[：:\]/, 'Deadline card matching is missing')
 assert.match(contentSource, /matchedDescriptors/, 'Deadline-matched task traversal is missing')
+assert.match(contentSource, /descriptor\.status\s*===\s*statusFilter/, 'Unstarted-task matching is missing')
 assert.match(contentSource, /loadAllTaskCards/, 'Infinite task list loading is missing')
 assert.match(contentSource, /DUPLICATE_TASK_ID/, 'Duplicate task ID rejection is missing')
 assert.match(contentSource, /DETAIL_IDENTITY_NOT_CONFIRMED/, 'Stale detail rejection is missing')
 assert.match(contentSource, /referenceResources/, 'Reference attachment classification is missing')
 assert.match(contentSource, /OPENFLOW_EXTRACTION_STATE/, 'Extension update busy-state notification is missing')
 assert.match(contentSource, /OPENFLOW_DIAGNOSTIC_EVENT/, 'Automatic extraction diagnostics are missing')
+
+const workerSource = readFileSync(resolve(extensionRoot, 'service-worker.js'), 'utf8')
+assert.match(workerSource, /openflowExtractionOutbox/, 'Durable extraction outbox is missing')
+assert.match(workerSource, /\/v2\/extractions/, 'Extraction v2 desktop endpoint is missing')
+assert.match(workerSource, /X-OpenFlow-Protocol-Version/, 'Extraction protocol negotiation header is missing')
+assert.match(workerSource, /accepted['"],\s*['"]duplicate/, 'Extraction ACK status validation is missing')
 assert.match(contentSource, /loadedCardCount/, 'Extraction diagnostics must preserve loaded-card count closure')
 assert.match(contentSource, /taskLoadState/, 'Extraction diagnostics must preserve frozen task-list loading state')
 

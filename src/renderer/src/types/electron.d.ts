@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/renameTemplates.ts'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../../../shared/updateContract.ts'
 import type { DiagnosticEventInput } from '../../../shared/diagnosticsContract.ts'
+import type { DesktopExtractionCandidate } from '../../../shared/extractionContract.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -69,6 +70,9 @@ export interface DailyRequirementSession {
   department?: string
   email?: string
   warnings?: string[]
+  source?: 'manual' | 'extension'
+  sourceMessageId?: string
+  extractedAt?: string
 }
 
 /** 历史记录条目 */
@@ -132,6 +136,7 @@ export interface AppConfig {
   history: HistoryEntry[]
   notificationHistory: NotificationHistoryEntry[]
   dailyRequirementSession?: DailyRequirementSession
+  dismissedExtractionMessageIds?: string[]
   updateSession?: {
     activeView: import('../../../shared/updateContract.ts').RestorableAppView
     savedAt: number
@@ -240,6 +245,13 @@ export interface ElectronAPI {
   /** 自动诊断事件上报到本机持久队列 */
   diagnostics: {
     report: (event: DiagnosticEventInput) => Promise<boolean>
+  }
+
+  /** Chrome 扩展自动送达的今日抓取结果 */
+  extractions: {
+    getLatestToday: () => Promise<DesktopExtractionCandidate | null>
+    onAvailable: (listener: (candidate: DesktopExtractionCandidate) => void) => void
+    offAvailable: (listener: (candidate: DesktopExtractionCandidate) => void) => void
   }
 
   /** 窗口控制 */

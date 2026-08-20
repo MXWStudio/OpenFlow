@@ -668,6 +668,7 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
   let loadedCardCount = 0;
   const extractionStartedAt = Date.now();
   const requestedDeadline = String(options.deadline || '').trim();
+  const requestedStatus = String(options.status || '').trim();
 
   notifyOpenFlowUpdateState({ type: 'OPENFLOW_EXTRACTION_STATE', busy: true });
 
@@ -675,23 +676,29 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     const extractedDataList = [];
     const extractionWarnings = [];
 
-    const deadline = requestedDeadline;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+    const statusFilter = requestedStatus === '未开始' ? requestedStatus : '';
+    const filterMode = statusFilter ? 'status' : 'deadline';
+    const deadline = filterMode === 'deadline' ? requestedDeadline : '';
+    if (filterMode === 'deadline' && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
       reportOpenFlowDiagnostic('extension.extraction_invalid_request', 'warning', {
         deadline,
+        statusFilter,
         sourceOrigin: getDiagnosticSourceOrigin()
       });
       sendResponse({ success: false, error: '请指定有效的截止日期', sourceUrl: location.href, extractedAt: new Date().toISOString() });
       return;
     }
 
-    // 先触发无限列表加载到底，再按用户指定的截止日期匹配卡片，不限制状态。
+    // 先触发无限列表加载到底，再按入口对应的状态或截止日期匹配卡片。
     taskList = document.querySelector('.TaskListScroll');
     originalScrollTop = taskList?.scrollTop || 0;
     const taskLoadState = await loadAllTaskCards(taskList);
     const allTaskCards = taskLoadState.cards;
     loadedCardCount = allTaskCards.length;
-    const matchedDescriptors = getTaskDescriptors(allTaskCards).filter(descriptor => descriptor.deadline === deadline);
+    const matchedDescriptors = getTaskDescriptors(allTaskCards).filter(descriptor => (
+      filterMode === 'status' ? descriptor.status === statusFilter : descriptor.deadline === deadline
+    ));
+    const filterDescription = filterMode === 'status' ? `状态为“${statusFilter}”` : `截止日期为 ${deadline}`;
     const taskLoadWarning = taskLoadState.complete
       ? ''
       : taskLoadState.timedOut
@@ -699,9 +706,11 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         : '未识别到任务列表容器，本次结果可能不完整';
 
     if (matchedDescriptors.length === 0) {
-      console.log(`[SmartAd 助手] 当前已加载列表中没有截止日期为 ${deadline} 的任务`);
+      console.log(`[SmartAd 助手] 当前已加载列表中没有${filterDescription}的任务`);
       reportOpenFlowDiagnostic('extension.extraction_summary', taskLoadState.complete ? 'info' : 'warning', {
+        filterMode,
         deadline,
+        statusFilter,
         sourceOrigin: getDiagnosticSourceOrigin(),
         loadedCardCount,
         matchedCount: 0,
@@ -716,11 +725,13 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         data: [],
         warnings: [
           ...(taskLoadWarning ? [taskLoadWarning] : []),
-          `当前已加载列表中没有截止日期为 ${deadline} 的任务`
+          `当前已加载列表中没有${filterDescription}的任务`
         ],
         sourceUrl: location.href,
         extractedAt: new Date().toISOString(),
+        filterMode,
         deadline,
+        statusFilter,
         matchedCount: 0,
         complete: taskLoadState.complete,
         taskLoadState,
@@ -729,9 +740,9 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
       return;
     }
 
-    console.log(`[SmartAd 助手] 共找到 ${matchedDescriptors.length} 个截止日期为 ${deadline} 的任务，准备开始遍历...`);
+    console.log(`[SmartAd 助手] 共找到 ${matchedDescriptors.length} 个${filterDescription}的任务，准备开始遍历...`);
 
-    // 循环遍历指定截止日期的任务卡片。
+    // 循环遍历符合当前入口筛选条件的任务卡片。
     const failedTasks = [];
     const seenTaskIds = new Map();
     for (let i = 0; i < matchedDescriptors.length; i++) {
@@ -780,7 +791,7 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
             taskId,
             materialType,
             requiredSets: descriptor.requiredSets,
-            deadline,
+            deadline: descriptor.deadline,
             status: descriptor.status,
             details: detailItems,
             ...extraData
@@ -808,7 +819,9 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
       'extension.extraction_summary',
       complete && warnings.length === 0 ? 'info' : failedTasks.length > 0 ? 'error' : 'warning',
       {
+        filterMode,
         deadline,
+        statusFilter,
         sourceOrigin: getDiagnosticSourceOrigin(),
         loadedCardCount,
         matchedCount: matchedDescriptors.length,
@@ -832,7 +845,9 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
         warnings,
         sourceUrl: location.href,
         extractedAt: new Date().toISOString(),
+        filterMode,
         deadline,
+        statusFilter,
         matchedCount: matchedDescriptors.length,
         complete,
         taskLoadState,
@@ -843,6 +858,7 @@ async function extractBulkDataFromPageAsync(sendResponse, options = {}) {
     console.error('[SmartAd 助手] 抓取过程中发生异常:', error);
     reportOpenFlowDiagnostic('extension.extraction_exception', 'error', {
       deadline: requestedDeadline,
+      statusFilter: requestedStatus,
       sourceOrigin: getDiagnosticSourceOrigin(),
       loadedCardCount,
       durationMs: Date.now() - extractionStartedAt,
@@ -866,6 +882,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 新增批量抓取逻辑
     extractBulkDataFromPageAsync(sendResponse, {
       deadline: request.deadline,
+      status: request.status,
       detailTimeoutMs: request.detailTimeoutMs,
       maxAttempts: request.maxAttempts
     });

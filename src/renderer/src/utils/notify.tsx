@@ -2,8 +2,9 @@ import React from 'react';
 import { notifications } from '@mantine/notifications';
 import { Box } from '@mantine/core';
 
-export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'teal' | 'grape' | 'yellow', title: string, message?: React.ReactNode, autoClose: number | boolean = 3000) {
+export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'teal' | 'grape' | 'yellow', title: string, message?: React.ReactNode, autoClose = 1500) {
   const id = Date.now().toString() + Math.random().toString();
+  const closeAfter = Math.min(3000, Math.max(1000, autoClose));
 
   // Dispatch custom event to save notification history globally
   const messageStr = typeof message === 'string' ? message : (message ? '包含组件的内容' : undefined);
@@ -57,7 +58,7 @@ export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'te
             style={{
               height: '100%',
               background: getProgressColor(),
-              animation: `shrink ${autoClose}ms linear forwards`
+              animation: `shrink ${closeAfter}ms linear forwards`
             }}
           />
         </Box>
@@ -73,12 +74,13 @@ export function notify(color: 'green' | 'red' | 'orange' | 'gray' | 'blue' | 'te
     );
   };
 
+  notifications.clean();
   notifications.show({
     id,
     color,
     title,
     message: <Content />,
-    autoClose,
+    autoClose: closeAfter,
     styles: {
       body: {
         width: '100%'

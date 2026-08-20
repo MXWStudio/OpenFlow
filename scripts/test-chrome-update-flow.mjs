@@ -36,11 +36,15 @@ async function runWorker({
   diagnosticQueue = [],
   diagnosticEvent,
   diagnosticsAvailable = true,
+  extractionOutbox = [],
+  extractionPayload,
+  extractionsAvailable = true,
 }) {
   const events = []
   const stored = {
     openflowUpdateRuntime: clone(runtimeState),
     openflowDiagnosticQueue: clone(diagnosticQueue),
+    openflowExtractionOutbox: clone(extractionOutbox),
   }
   const listeners = {}
   const bridgeConfig = {
@@ -49,6 +53,7 @@ async function runWorker({
     host: '127.0.0.1',
     port: 43127,
     token: 'a'.repeat(64),
+    extractionProtocolVersion: 2,
   }
 
   const chrome = {
@@ -109,6 +114,17 @@ async function runWorker({
       events.push(`diagnostics:${body.events.length}`)
       return jsonResponse({ accepted: body.events.length })
     }
+    if (source === `http://127.0.0.1:${bridgeConfig.port}/v2/extractions`) {
+      if (!extractionsAvailable) throw new Error('desktop unavailable')
+      const body = JSON.parse(options.body)
+      events.push(`extraction:${body.messageId}`)
+      return jsonResponse({
+        protocolVersion: 2,
+        messageId: body.messageId,
+        status: 'accepted',
+        receivedAt: '2026-08-19T02:00:00.000Z',
+      })
+    }
     throw new Error(`Unexpected fetch: ${source}`)
   }
 
@@ -133,8 +149,14 @@ async function runWorker({
     await vm.runInContext('queueDiagnosticEvent(__diagnosticEvent)', sandbox)
     await vm.runInContext('flushDiagnostics()', sandbox)
   }
+  let extractionResult
+  if (extractionPayload) {
+    sandbox.__extractionPayload = extractionPayload
+    extractionResult = await vm.runInContext('queueExtractionPayload(__extractionPayload)', sandbox)
+    await vm.runInContext('flushExtractions()', sandbox)
+  }
   await Promise.resolve()
-  return { events, stored, listeners }
+  return { events, stored, listeners, extractionResult }
 }
 
 const now = Date.now()
@@ -163,6 +185,31 @@ assert.deepEqual(acknowledgementStep.events, [
 assert.equal(acknowledgementStep.stored.openflowUpdateRuntime.lastRefreshedVersion, targetVersion)
 assert.deepEqual(acknowledgementStep.stored.openflowUpdateRuntime.busyTabs, {})
 assert.equal(acknowledgementStep.stored.openflowUpdateRuntime.trackedTabs['202'], undefined)
+
+const sameVersionReloadToken = randomUUID()
+const sameVersionReloadStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: { trackedTabs: { 101: now }, busyTabs: {}, lastRefreshedVersion: targetVersion },
+  status: { pending: true, targetVersion, desktopVersion: '2.5.3', action: 'reload', reloadToken: sameVersionReloadToken },
+})
+assert.deepEqual(sameVersionReloadStep.events, [`status:${targetVersion}`, 'runtime.reload'])
+assert.equal(sameVersionReloadStep.stored.openflowUpdateRuntime.pendingReloadToken, sameVersionReloadToken)
+
+const sameVersionAcknowledgementStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: sameVersionReloadStep.stored.openflowUpdateRuntime,
+  status: { pending: true, targetVersion, desktopVersion: '2.5.3', action: 'reload', reloadToken: sameVersionReloadToken },
+})
+assert.deepEqual(sameVersionAcknowledgementStep.events, [
+  `status:${targetVersion}`,
+  'tab.reload:101',
+  `ack:ready:${targetVersion}`,
+])
+assert.equal(sameVersionAcknowledgementStep.stored.openflowUpdateRuntime.pendingReloadToken, undefined)
+assert.equal(
+  sameVersionAcknowledgementStep.stored.openflowUpdateRuntime.lastRefreshedVersion,
+  `${targetVersion}:${sameVersionReloadToken}`,
+)
 
 const busyStep = await runWorker({
   currentVersion: '1.2.0',
@@ -210,5 +257,40 @@ const offlineDiagnosticStep = await runWorker({
 })
 assert.equal(offlineDiagnosticStep.stored.openflowDiagnosticQueue.length, 1)
 assert.equal(offlineDiagnosticStep.stored.openflowDiagnosticQueue[0].type, 'extension.extraction_exception')
+
+const extractionPayload = {
+  schemaVersion: 'openflow.requirements.v1',
+  source: { app: 'OpenFlow', url: 'https://example.test/tasks' },
+  extractedAt: '2026-08-19T01:00:00.000Z',
+  warnings: [],
+  extraction: { deadline: '2026-08-19', matchedCount: 1, successCount: 1, failedCount: 0, complete: true },
+  projects: [{
+    taskId: 'task-1',
+    projectName: '项目甲',
+    sizes: ['1080*1920'],
+    requirements: [{ resolution: '1080*1920', requiredQuantity: 1 }],
+    internalNote: 'must not leave the extension outbox',
+  }],
+}
+const deliveredExtractionStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: { trackedTabs: {}, busyTabs: {}, lastRefreshedVersion: targetVersion },
+  status: { pending: false, targetVersion, desktopVersion: '2.5.3', action: 'none' },
+  extractionPayload,
+})
+assert.equal(deliveredExtractionStep.extractionResult.delivered, true)
+assert.deepEqual(deliveredExtractionStep.stored.openflowExtractionOutbox, [])
+assert.ok(deliveredExtractionStep.events.some((event) => event.startsWith('extraction:')))
+
+const offlineExtractionStep = await runWorker({
+  currentVersion: targetVersion,
+  runtimeState: { trackedTabs: {}, busyTabs: {}, lastRefreshedVersion: targetVersion },
+  status: { pending: false, targetVersion, desktopVersion: '2.5.3', action: 'none' },
+  extractionPayload,
+  extractionsAvailable: false,
+})
+assert.equal(offlineExtractionStep.extractionResult.delivered, false)
+assert.equal(offlineExtractionStep.stored.openflowExtractionOutbox.length, 1)
+assert.equal(offlineExtractionStep.stored.openflowExtractionOutbox[0].payload.projects[0].internalNote, undefined)
 
 console.log(`Chrome update flow checks passed for extension ${targetVersion}.`)

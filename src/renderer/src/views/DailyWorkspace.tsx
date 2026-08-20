@@ -68,6 +68,8 @@ export interface DailyRenameExample {
 
 interface DailyWorkspaceProps {
   jsonFileName: string;
+  extractionTimeLabel: string;
+  pendingExtractionCount: number;
   projectsCount: number;
   requirementSizes: string[];
   detectedFolderSizes: string[];
@@ -98,6 +100,7 @@ interface DailyWorkspaceProps {
   onRetryFailed: () => void;
   onToggleManualSize: (size: string) => void;
   onChangeJson: () => void;
+  onShowPendingExtraction: () => void;
   onInitFolders: () => void;
   onAddFolder: () => void;
   onClearFolders: () => void;
@@ -232,6 +235,8 @@ function extractDroppedPaths(event: React.DragEvent) {
 
 export function DailyWorkspace({
   jsonFileName,
+  extractionTimeLabel,
+  pendingExtractionCount,
   projectsCount,
   requirementSizes,
   detectedFolderSizes,
@@ -262,6 +267,7 @@ export function DailyWorkspace({
   onRetryFailed,
   onToggleManualSize,
   onChangeJson,
+  onShowPendingExtraction,
   onInitFolders,
   onAddFolder,
   onClearFolders,
@@ -544,6 +550,21 @@ export function DailyWorkspace({
                       },
                     }}
                   />
+                  {extractionTimeLabel && (
+                    <Text size="xs" c="dimmed" mt={-8}>
+                      {extractionTimeLabel}
+                    </Text>
+                  )}
+                  {pendingExtractionCount > 0 && (
+                    <Button
+                      radius={8}
+                      size="sm"
+                      variant="light"
+                      onClick={onShowPendingExtraction}
+                    >
+                      载入新抓取（{pendingExtractionCount}）
+                    </Button>
+                  )}
                   <Button
                     radius={8}
                     size="md"

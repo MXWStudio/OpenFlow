@@ -6,6 +6,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { RenameRequest } from '../shared/renameTemplates'
 import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
+import type { DesktopExtractionCandidate } from '../shared/extractionContract'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 
 const updateStateListeners = new WeakMap<
@@ -19,6 +20,10 @@ const navigationListeners = new WeakMap<
 const prepareRestartListeners = new WeakMap<
   () => void,
   (_event: Electron.IpcRendererEvent) => void
+>()
+const extractionListeners = new WeakMap<
+  (candidate: DesktopExtractionCandidate) => void,
+  (_event: Electron.IpcRendererEvent, candidate: DesktopExtractionCandidate) => void
 >()
 
 // 将所有安全 API 暴露到 window.electronAPI
@@ -117,6 +122,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   diagnostics: {
     report: (event: DiagnosticEventInput) => ipcRenderer.invoke('diagnostics:report', event),
+  },
+
+  extractions: {
+    getLatestToday: () => ipcRenderer.invoke('extractions:get-latest-today'),
+    onAvailable: (listener: (candidate: DesktopExtractionCandidate) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, candidate: DesktopExtractionCandidate) => listener(candidate)
+      extractionListeners.set(listener, wrapped)
+      ipcRenderer.on('extractions:available', wrapped)
+    },
+    offAvailable: (listener: (candidate: DesktopExtractionCandidate) => void) => {
+      const wrapped = extractionListeners.get(listener)
+      if (wrapped) ipcRenderer.removeListener('extractions:available', wrapped)
+      extractionListeners.delete(listener)
+    },
   },
 
   // ────────────────────────────────────────────────

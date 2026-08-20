@@ -24,8 +24,10 @@ import { DesktopUpdateManager } from './desktopUpdateManager'
 import { DiagnosticsManager } from './diagnosticsManager'
 import { initializeOpenFlowSentry } from './sentryRuntime'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
+import { ExtractionInbox } from './extractionInbox.ts'
 import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
 import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
+import type { DesktopExtractionCandidate } from '../shared/extractionContract.ts'
 import type { RestorableAppView, RestorableSettingsTab, UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
 import {
   getWindowBackgroundColor,
@@ -47,6 +49,7 @@ let tray: Tray | null = null
 let trayStatusIcons: { normal: NativeImage, red: NativeImage, orange: NativeImage } | null = null
 let latestUpdateState: UpdateViewState | null = null
 let diagnosticsManager: DiagnosticsManager | null = null
+let extractionInbox: ExtractionInbox | null = null
 
 const initialUpdateActivity: UpdateActivitySnapshot = {
   activeView: 'daily',
@@ -196,6 +199,18 @@ async function storeSetValue(key: string, value: unknown): Promise<void> {
 
 async function storeDeleteKey(key: string): Promise<void> {
   return getConfigStore().delete(key)
+}
+
+async function getLatestExtractionCandidate(): Promise<DesktopExtractionCandidate | null> {
+  const stored = await extractionInbox?.getLatestForToday()
+  if (!stored) return null
+  return {
+    messageId: stored.envelope.messageId,
+    extractedAt: stored.envelope.payload.extractedAt,
+    receivedAt: stored.receivedAt,
+    extensionVersion: stored.extensionVersion,
+    payload: stored.envelope.payload,
+  }
 }
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -682,6 +697,9 @@ app.whenReady().then(async () => {
     onStateChange: () => desktopUpdateManager?.notifyDiagnosticsStateChanged(),
   })
   await diagnosticsManager.start()
+  extractionInbox = new ExtractionInbox({
+    rootPath: join(app.getPath('userData'), 'extension-extractions'),
+  })
 
   let lastExtensionDiagnostic = ''
   extensionUpdateManager = new ExtensionUpdateManager({
@@ -692,6 +710,26 @@ app.whenReady().then(async () => {
     captureDiagnostics: async (events, extensionVersion) => ({
       accepted: await diagnosticsManager!.recordBatch('extension', events, extensionVersion),
     }),
+    receiveExtraction: async (envelope, extensionVersion) => {
+      const acknowledgement = await extractionInbox!.accept(envelope, extensionVersion)
+      if (acknowledgement.status === 'accepted') {
+        const candidate = await getLatestExtractionCandidate()
+        if (candidate && mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+          mainWindow.webContents.send('extractions:available', candidate)
+        }
+        captureDesktopDiagnostic({
+          type: 'extension.extraction_received',
+          severity: 'info',
+          payload: {
+            messageId: acknowledgement.messageId,
+            projectCount: envelope.payload.projects.length,
+            extractedAt: envelope.payload.extractedAt,
+            extensionVersion,
+          },
+        })
+      }
+      return acknowledgement
+    },
     onStateChange: (state) => {
       desktopUpdateManager?.notifyExtensionStateChanged()
       if ((state.status === 'error' || state.status === 'rolled-back') && state.message) {
@@ -1649,6 +1687,10 @@ ipcMain.handle('store:getAll', async () => {
 
 ipcMain.handle('store:delete', async (_, key: string) => {
   await storeDeleteKey(key)
+})
+
+ipcMain.handle('extractions:get-latest-today', async () => {
+  return getLatestExtractionCandidate()
 })
 
 ipcMain.handle('diagnostics:report', async (_, value: unknown) => {

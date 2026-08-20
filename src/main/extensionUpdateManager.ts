@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
+import { open, rename, rm, type FileHandle } from 'node:fs/promises'
 import fs from 'fs-extra'
 import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
+import type { ExtractionAcknowledgement, ExtractionEnvelope } from '../shared/extractionContract.ts'
 import type { ExtensionUpdateViewState } from '../shared/updateContract'
 import {
   finalizeExtensionInstall,
+  extensionPackagesMatch,
   installExtensionTransaction,
   rollbackExtensionInstall,
   validateExtensionPackage,
@@ -24,6 +28,8 @@ interface PendingExtensionUpdate {
   backupRoot?: string
   installedAt: string
   acknowledgementDeadline?: string
+  requiresReloadHandshake?: boolean
+  reloadToken?: string
 }
 
 export interface ExtensionUpdateManagerOptions {
@@ -34,6 +40,7 @@ export interface ExtensionUpdateManagerOptions {
   acknowledgementTimeoutMs?: number
   onStateChange?: (state: ExtensionUpdateViewState) => void
   captureDiagnostics?: (events: DiagnosticEventInput[], extensionVersion: string) => Promise<{ accepted: number }>
+  receiveExtraction?: (envelope: ExtractionEnvelope, extensionVersion: string) => Promise<ExtractionAcknowledgement>
 }
 
 function errorMessage(error: unknown): string {
@@ -79,12 +86,15 @@ export class ExtensionUpdateManager {
             const installed = await validateExtensionPackage(this.options.targetRoot)
             const previous = await validateExtensionPackage(orphanedBackup)
             if (installed.extensionVersion === sourceManifest.extensionVersion) {
+              const requiresReloadHandshake = previous.extensionVersion === installed.extensionVersion
               this.pending = {
                 schemaVersion: 1,
                 targetVersion: installed.extensionVersion,
                 previousVersion: previous.extensionVersion,
                 backupRoot: orphanedBackup,
                 installedAt: new Date().toISOString(),
+                requiresReloadHandshake,
+                reloadToken: requiresReloadHandshake ? randomUUID() : undefined,
               }
               await this.savePendingState()
             } else {
@@ -101,7 +111,8 @@ export class ExtensionUpdateManager {
         try {
           const installed = await validateExtensionPackage(this.options.targetRoot)
           pendingTargetValid = installed.extensionVersion === this.pending.targetVersion &&
-            installed.extensionVersion === sourceManifest.extensionVersion
+            installed.extensionVersion === sourceManifest.extensionVersion &&
+            await extensionPackagesMatch(this.options.sourceRoot, this.options.targetRoot)
         } catch {
           pendingTargetValid = false
         }
@@ -111,12 +122,15 @@ export class ExtensionUpdateManager {
       if (!this.pending) {
         const result = await installExtensionTransaction(this.options.sourceRoot, this.options.targetRoot)
         if (result.changed) {
+          const requiresReloadHandshake = result.previousVersion === result.version
           this.pending = {
             schemaVersion: 1,
             targetVersion: result.version,
             previousVersion: result.previousVersion,
             backupRoot: result.backupRoot,
             installedAt: new Date().toISOString(),
+            requiresReloadHandshake,
+            reloadToken: requiresReloadHandshake ? randomUUID() : undefined,
           }
           await this.savePendingState()
         }
@@ -148,6 +162,7 @@ export class ExtensionUpdateManager {
       getStatus: (currentVersion) => this.getBridgeStatus(currentVersion),
       acknowledge: (acknowledgement) => this.acknowledge(acknowledgement),
       captureDiagnostics: this.options.captureDiagnostics,
+      receiveExtraction: this.options.receiveExtraction,
     })
     this.bridgeConfig = await this.bridge.start()
     await this.writeBridgeConfig()
@@ -155,14 +170,30 @@ export class ExtensionUpdateManager {
 
   private async writeBridgeConfig(): Promise<void> {
     if (!this.bridgeConfig || !await fs.pathExists(this.options.targetRoot)) return
-    await fs.writeJson(resolve(this.options.targetRoot, 'openflow-bridge.json'), {
+    const configPath = resolve(this.options.targetRoot, 'openflow-bridge.json')
+    const temporaryPath = `${configPath}.${process.pid}.tmp`
+    const config = {
       schemaVersion: 1,
       extensionId: EXTENSION_ID,
       host: '127.0.0.1',
       port: this.bridgeConfig.port,
       token: this.bridgeConfig.token,
+      extractionProtocolVersion: 2,
       generatedAt: new Date().toISOString(),
-    }, { spaces: 2 })
+    }
+    let handle: FileHandle | undefined
+    try {
+      handle = await open(temporaryPath, 'w', 0o600)
+      await handle.writeFile(`${JSON.stringify(config, null, 2)}\n`, 'utf8')
+      await handle.sync()
+      await handle.close()
+      handle = undefined
+      await rename(temporaryPath, configPath)
+    } catch (error) {
+      await handle?.close().catch(() => undefined)
+      await rm(temporaryPath, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   private async getBridgeStatus(currentVersion: string): Promise<ExtensionBridgeStatus> {
@@ -184,8 +215,11 @@ export class ExtensionUpdateManager {
       pending: true,
       targetVersion: this.pending.targetVersion,
       desktopVersion: this.options.getDesktopVersion(),
-      action: currentVersion === this.pending.targetVersion ? 'acknowledge' : 'reload',
+      action: this.pending.requiresReloadHandshake
+        ? 'reload'
+        : currentVersion === this.pending.targetVersion ? 'acknowledge' : 'reload',
       message: '桌面端已准备好新版扩展',
+      reloadToken: this.pending.requiresReloadHandshake ? this.pending.reloadToken : undefined,
     }
   }
 

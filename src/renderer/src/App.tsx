@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Avatar,
@@ -10,6 +10,7 @@ import {
   Flex,
   Group,
   Indicator,
+  Modal,
   Stack,
   Text,
   Title,
@@ -56,8 +57,12 @@ import { SettingsWorkspace } from './views/SettingsWorkspace';
 import { isDarkColorScheme } from './theme';
 import {
   buildDailyRequirementSession,
+  buildDailyRequirementSessionFromExtraction,
+  decideExtractionCandidate,
+  formatExtractionTimeLabel,
   isFreshDailyRequirementSession,
 } from './dailyRequirementSession';
+import type { DesktopExtractionCandidate } from '../../shared/extractionContract.ts';
 import {
   formatRenameProducer,
   getRenamePreset,
@@ -113,7 +118,10 @@ export default function App() {
   const [organizerBusy, setOrganizerBusy] = useState(false);
   const [formatBusy, setFormatBusy] = useState(false);
   const [requestedSettingsTab, setRequestedSettingsTab] = useState<RestorableSettingsTab>('system');
+  const [pendingExtractionCandidate, setPendingExtractionCandidate] = useState<DesktopExtractionCandidate | null>(null);
+  const [isExtractionPromptOpen, setIsExtractionPromptOpen] = useState(false);
   const lastUserActivityAtRef = useRef(Date.now());
+  const workflowContentRef = useRef({ hasContent: false, sourceMessageId: '' });
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
   const validationPresentation = useMemo(
@@ -138,6 +146,10 @@ export default function App() {
     || folderPaths.length > 0
     || validationResults.length > 0;
   const hasUnsavedChanges = workflowSaveState === 'saving' || workflowSaveState === 'error';
+  workflowContentRef.current = {
+    hasContent: projectsList.length > 0 || folderPaths.length > 0 || validationResults.length > 0 || hasActiveWork,
+    sourceMessageId: dailyRequirementSession?.sourceMessageId || '',
+  };
   const regularRenamePreset = workflowSettings.renameSettings.presets.find((preset) => preset.kind === 'regular');
   const canFallbackToRegular = Boolean(regularRenamePreset && validateRenamePreset(regularRenamePreset).length === 0);
   const selectedRenamePreset = useMemo(() => {
@@ -280,6 +292,64 @@ export default function App() {
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
     }).finally(() => setIsAppReady(true));
   }, []);
+
+  const applyDailyRequirementSession = useCallback((session: DailyRequirementSession, notificationTitle: string) => {
+    setDailyRequirementSession(session);
+    setProjectsList(session.projects);
+    setJsonFileName(session.fileName ? session.fileName.replace(/\.json$/i, '') : '');
+    resetValidationState();
+    if (window.electronAPI?.store) {
+      void window.electronAPI.store.set('dailyRequirementSession', session);
+    }
+    if (session.producerName || session.department || session.email) {
+      setUserInfo((prev) => {
+        const next = {
+          ...prev,
+          ...(session.producerName ? { name: session.producerName } : {}),
+          ...(session.department ? { department: session.department } : {}),
+          ...(session.email ? { email: session.email } : {}),
+        };
+        if (window.electronAPI?.store) void window.electronAPI.store.set('userInfo', next);
+        return next;
+      });
+    }
+    notify('green', notificationTitle, `${session.projects.length} 个项目 · ${session.fileName}`);
+    if (session.warnings && session.warnings.length > 0) {
+      notify('orange', '需求表有提示', session.warnings.slice(0, 2).join('；'));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAppReady || !window.electronAPI?.extractions) return;
+    let disposed = false;
+    const handleCandidate = (candidate: DesktopExtractionCandidate) => {
+      if (disposed || !candidate?.messageId) return;
+      const decision = decideExtractionCandidate(
+        candidate.messageId,
+        workflowContentRef.current.sourceMessageId,
+        workflowContentRef.current.hasContent,
+      );
+      if (decision === 'ignore') return;
+
+      if (decision === 'auto-load') {
+        const session = buildDailyRequirementSessionFromExtraction(candidate);
+        applyDailyRequirementSession(session, '已自动载入今日最新抓取');
+        setActiveView('daily');
+        return;
+      }
+      setPendingExtractionCandidate(candidate);
+      setIsExtractionPromptOpen(true);
+    };
+
+    window.electronAPI.extractions.onAvailable(handleCandidate);
+    void window.electronAPI.extractions.getLatestToday().then(handleCandidate).catch((error) => {
+      console.error('Failed to read latest desktop extraction', error);
+    });
+    return () => {
+      disposed = true;
+      window.electronAPI.extractions.offAvailable(handleCandidate);
+    };
+  }, [isAppReady, applyDailyRequirementSession]);
 
   useEffect(() => {
     if (!window.electronAPI?.updates) return;
@@ -462,32 +532,7 @@ export default function App() {
       const result = await window.electronAPI.dialog.openJson();
       if (!result) return;
       const session = buildDailyRequirementSession(result);
-      const projects = session.projects;
-      setDailyRequirementSession(session);
-      setProjectsList(projects);
-      setJsonFileName(session.fileName ? session.fileName.replace(/\.json$/i, '') : '');
-      resetValidationState();
-      if (window.electronAPI?.store) {
-        window.electronAPI.store.set('dailyRequirementSession', session);
-      }
-      if (session.producerName || session.department || session.email) {
-        setUserInfo((prev) => {
-          const newUserInfo = {
-            ...prev,
-            ...(session.producerName ? { name: session.producerName } : {}),
-            ...(session.department ? { department: session.department } : {}),
-            ...(session.email ? { email: session.email } : {}),
-          };
-          if (window.electronAPI && window.electronAPI.store) {
-            window.electronAPI.store.set('userInfo', newUserInfo);
-          }
-          return newUserInfo;
-        });
-      }
-      notify('green', '需求表已更新', session.fileName || undefined);
-      if (session.warnings && session.warnings.length > 0) {
-        notify('orange', '需求表有提示', session.warnings.slice(0, 2).join('；'));
-      }
+      applyDailyRequirementSession(session, '需求表已更新');
     } catch {
       notify('red', '读取失败', '请检查 JSON 文件格式后重试。');
     } finally {
@@ -799,6 +844,10 @@ export default function App() {
         {activeView === 'daily' ? (
           <DailyWorkspace
             jsonFileName={jsonFileName}
+            extractionTimeLabel={dailyRequirementSession?.source === 'extension'
+              ? formatExtractionTimeLabel(dailyRequirementSession.extractedAt)
+              : ''}
+            pendingExtractionCount={pendingExtractionCandidate?.payload.projects.length || 0}
             projectsCount={projectsList.length}
             requirementSizes={requirementSizes}
             detectedFolderSizes={detectedFolderSizes}
@@ -835,6 +884,7 @@ export default function App() {
             onToggleTable={() => setIsTableExpanded((prev) => !prev)}
             onToggleManualSize={(size) => setManualTargetSizes((prev) => prev.includes(size) ? prev.filter((item) => item !== size) : [...prev, size])}
             onChangeJson={() => void handleChangeJson()}
+            onShowPendingExtraction={() => setIsExtractionPromptOpen(true)}
             onInitFolders={() => void handleInitFolders()}
             onAddFolder={() => void handleAddFolder()}
             onClearFolders={() => { setFolderPaths([]); setLastRenamedPaths([]); setDetectedFolderSizes([]); setManualTargetSizes([]); resetValidationState(); }}
@@ -891,7 +941,37 @@ export default function App() {
         )}
       </Box>
 
-            <Drawer opened={isNotificationCenterOpened} onClose={() => setIsNotificationCenterOpened(false)} position="left" size={420} title="消息中心">
+      <Modal
+        opened={Boolean(pendingExtractionCandidate) && isExtractionPromptOpen}
+        onClose={() => setIsExtractionPromptOpen(false)}
+        centered
+        title="发现新抓取"
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {pendingExtractionCandidate?.payload.projects.length || 0} 个项目，载入后替换当前需求。
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => {
+              setIsExtractionPromptOpen(false);
+            }}>
+              稍后载入
+            </Button>
+            <Button onClick={() => {
+              if (!pendingExtractionCandidate) return;
+              const session = buildDailyRequirementSessionFromExtraction(pendingExtractionCandidate);
+              applyDailyRequirementSession(session, '已载入扩展最新抓取');
+              setPendingExtractionCandidate(null);
+              setIsExtractionPromptOpen(false);
+              setActiveView('daily');
+            }}>
+              立即载入
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Drawer opened={isNotificationCenterOpened} onClose={() => setIsNotificationCenterOpened(false)} position="left" size={420} title="消息中心">
         <Stack gap="sm">
           <Group justify="space-between">
             <Text size="sm" c="dimmed">保留最近 100 条通知</Text>

@@ -2,15 +2,21 @@ const UPDATE_ALARM = 'openflow-update-check';
 const UPDATE_ALARM_MINUTES = 5;
 const RUNTIME_STATE_KEY = 'openflowUpdateRuntime';
 const DIAGNOSTIC_QUEUE_KEY = 'openflowDiagnosticQueue';
+const EXTRACTION_OUTBOX_KEY = 'openflowExtractionOutbox';
 const MAX_DIAGNOSTIC_QUEUE = 100;
 const MAX_DIAGNOSTIC_BATCH = 20;
 const MAX_DIAGNOSTIC_EVENT_BYTES = 16 * 1024;
+const MAX_EXTRACTION_OUTBOX = 20;
+const MAX_EXTRACTION_BYTES = 512 * 1024;
+const EXTRACTION_PROTOCOL_VERSION = 2;
 const TRACKED_TAB_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const BUSY_TAB_MAX_AGE_MS = 60 * 60 * 1000;
 
 let activeCheck = null;
 let activeDiagnosticFlush = null;
+let activeExtractionFlush = null;
 let diagnosticQueueMutation = Promise.resolve();
+let extractionQueueMutation = Promise.resolve();
 
 function storageGet(key) {
   return new Promise((resolve, reject) => {
@@ -80,6 +86,143 @@ async function queueDiagnosticEvent(value) {
   await mutateDiagnosticQueue((queue) => [...queue, normalizeDiagnosticEvent(value)].slice(-MAX_DIAGNOSTIC_QUEUE));
   void flushDiagnostics();
   return { queued: true };
+}
+
+async function getExtractionOutbox() {
+  const value = await storageGet(EXTRACTION_OUTBOX_KEY);
+  return Array.isArray(value) ? value : [];
+}
+
+function mutateExtractionOutbox(mutator) {
+  const operation = extractionQueueMutation.then(async () => {
+    const queue = await getExtractionOutbox();
+    const nextQueue = await mutator(queue);
+    await storageSet(EXTRACTION_OUTBOX_KEY, nextQueue);
+    return nextQueue;
+  });
+  extractionQueueMutation = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+function normalizeExtractionText(value, maximum, allowEmpty = false) {
+  if (typeof value !== 'string' || value.length > maximum || (!allowEmpty && !value.trim())) return null;
+  return value.trim();
+}
+
+function normalizeExtractionPayload(payload) {
+  if (
+    !payload ||
+    payload.schemaVersion !== 'openflow.requirements.v1' ||
+    payload.extraction?.complete !== true ||
+    payload.extraction?.failedCount !== 0 ||
+    !Array.isArray(payload.projects) ||
+    payload.projects.length === 0 ||
+    payload.projects.length > 200 ||
+    !Array.isArray(payload.warnings) ||
+    payload.warnings.length > 100 ||
+    !payload.warnings.every((warning) => normalizeExtractionText(warning, 1000, true) !== null) ||
+    payload.source?.app !== 'OpenFlow' ||
+    normalizeExtractionText(payload.source?.url, 2048, true) === null ||
+    typeof payload.extractedAt !== 'string' ||
+    !Number.isFinite(Date.parse(payload.extractedAt))
+  ) {
+    throw new Error('只允许完整抓取结果进入桌面接收队列');
+  }
+
+  const deadline = normalizeExtractionText(payload.extraction.deadline, 10, true);
+  if (deadline === null || (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline))) throw new Error('抓取截止日期无效');
+  if (!['deadline', 'status', undefined].includes(payload.extraction.filterMode)) throw new Error('抓取筛选模式无效');
+  if (payload.extraction.statusFilter !== undefined && normalizeExtractionText(payload.extraction.statusFilter, 40, true) === null) {
+    throw new Error('抓取状态筛选无效');
+  }
+
+  const taskIds = new Set();
+  const projects = payload.projects.map((project) => {
+    const taskId = normalizeExtractionText(project?.taskId, 128);
+    const projectName = normalizeExtractionText(project?.projectName, 300);
+    if (!taskId || !projectName || taskIds.has(taskId) || !Array.isArray(project.requirements) || project.requirements.length === 0 || project.requirements.length > 200) {
+      throw new Error('抓取项目结构无效或任务 ID 重复');
+    }
+    taskIds.add(taskId);
+    const requirements = project.requirements.map((requirement) => {
+      const resolution = typeof requirement?.resolution === 'string'
+        ? requirement.resolution.trim().replace(/[xX×-]/, '*')
+        : '';
+      const requiredQuantity = Number(requirement?.requiredQuantity);
+      if (!/^\d{2,5}\*\d{2,5}$/.test(resolution) || !Number.isSafeInteger(requiredQuantity) || requiredQuantity < 1 || requiredQuantity > 10000) {
+        throw new Error(`${projectName} 的尺寸或所需数量无效`);
+      }
+      const positionType = normalizeExtractionText(requirement.positionType, 100);
+      const sizeLimit = normalizeExtractionText(requirement.sizeLimit, 100);
+      return {
+        resolution,
+        requiredQuantity,
+        ...(positionType ? { positionType } : {}),
+        ...(sizeLimit ? { sizeLimit } : {})
+      };
+    });
+    const fullName = normalizeExtractionText(project.fullName, 500);
+    const producerName = normalizeExtractionText(project.producerName, 100);
+    const materialType = normalizeExtractionText(project.materialType, 100);
+    return {
+      taskId,
+      projectName,
+      sizes: [...new Set(requirements.map((requirement) => requirement.resolution))],
+      requirements,
+      ...(fullName ? { fullName } : {}),
+      ...(producerName ? { producerName } : {}),
+      ...(materialType ? { materialType } : {})
+    };
+  });
+
+  const matchedCount = Number(payload.extraction.matchedCount);
+  const successCount = Number(payload.extraction.successCount);
+  if (!Number.isSafeInteger(matchedCount) || !Number.isSafeInteger(successCount) || matchedCount !== projects.length || successCount !== projects.length) {
+    throw new Error('抓取数量与项目列表不一致');
+  }
+
+  const normalized = {
+    schemaVersion: 'openflow.requirements.v1',
+    source: { app: 'OpenFlow', url: payload.source.url },
+    extractedAt: new Date(payload.extractedAt).toISOString(),
+    warnings: payload.warnings.map((warning) => warning.trim()),
+    extraction: {
+      deadline,
+      ...(payload.extraction.filterMode ? { filterMode: payload.extraction.filterMode } : {}),
+      ...(typeof payload.extraction.statusFilter === 'string' ? { statusFilter: payload.extraction.statusFilter.trim() } : {}),
+      matchedCount,
+      successCount,
+      failedCount: 0,
+      complete: true
+    },
+    projects
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(normalized)).byteLength;
+  if (bytes > MAX_EXTRACTION_BYTES) throw new Error('抓取结果超过桌面自动接收上限，请使用 JSON 手工导入');
+  return normalized;
+}
+
+async function queueExtractionPayload(payload) {
+  const normalizedPayload = normalizeExtractionPayload(payload);
+  const envelope = {
+    protocolVersion: EXTRACTION_PROTOCOL_VERSION,
+    messageId: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    payload: normalizedPayload
+  };
+  await mutateExtractionOutbox((queue) => {
+    if (queue.length >= MAX_EXTRACTION_OUTBOX) {
+      throw new Error('桌面自动接收队列已满，请先启动桌面端或使用 JSON 手工导入');
+    }
+    return [...queue, envelope];
+  });
+  await flushExtractions();
+  const remaining = await getExtractionOutbox();
+  return {
+    queued: true,
+    delivered: !remaining.some((item) => item?.messageId === envelope.messageId),
+    messageId: envelope.messageId
+  };
 }
 
 async function getRuntimeState() {
@@ -167,11 +310,49 @@ async function readBridgeConfig() {
     !Number.isInteger(config.port) ||
     config.port < 1 ||
     config.port > 65535 ||
-    !/^[a-f0-9]{64}$/.test(config.token || '')
+    !/^[a-f0-9]{64}$/.test(config.token || '') ||
+    (config.extractionProtocolVersion !== undefined && config.extractionProtocolVersion !== EXTRACTION_PROTOCOL_VERSION)
   ) {
     throw new Error('桌面端连接信息无效');
   }
   return config;
+}
+
+async function runExtractionFlush() {
+  const config = await readBridgeConfig();
+  if (!config || config.extractionProtocolVersion !== EXTRACTION_PROTOCOL_VERSION) return;
+
+  while (true) {
+    const queue = await getExtractionOutbox();
+    const envelope = queue[0];
+    if (!envelope) return;
+    const normalizedEnvelope = {
+      ...envelope,
+      payload: normalizeExtractionPayload(envelope.payload)
+    };
+    const result = await bridgeFetch(config, '/v2/extractions', {
+      method: 'POST',
+      headers: { 'X-OpenFlow-Protocol-Version': String(EXTRACTION_PROTOCOL_VERSION) },
+      body: JSON.stringify(normalizedEnvelope)
+    });
+    if (
+      result?.protocolVersion !== EXTRACTION_PROTOCOL_VERSION ||
+      result?.messageId !== envelope.messageId ||
+      !['accepted', 'duplicate'].includes(result?.status)
+    ) {
+      throw new Error('桌面端未正确确认抓取结果');
+    }
+    await mutateExtractionOutbox((latestQueue) => latestQueue.filter((item) => item?.messageId !== envelope.messageId));
+  }
+}
+
+function flushExtractions() {
+  if (!activeExtractionFlush) {
+    activeExtractionFlush = runExtractionFlush()
+      .catch((error) => console.debug('[OpenFlow] 抓取结果已留在本机扩展队列：', error))
+      .finally(() => { activeExtractionFlush = null; });
+  }
+  return activeExtractionFlush;
 }
 
 async function bridgeFetch(config, path, options = {}) {
@@ -241,6 +422,25 @@ async function refreshTrackedTabs(version) {
   await storageSet(RUNTIME_STATE_KEY, state);
 }
 
+async function handleReloadHandshake(config, status) {
+  if (!status.reloadToken) return false;
+  const state = await getRuntimeState();
+  if (state.pendingReloadToken !== status.reloadToken) {
+    state.pendingReloadToken = status.reloadToken;
+    await storageSet(RUNTIME_STATE_KEY, state);
+    setTimeout(() => chrome.runtime.reload(), 100);
+    return true;
+  }
+
+  await verifyInstalledPackage(status.targetVersion);
+  await refreshTrackedTabs(`${status.targetVersion}:${status.reloadToken}`);
+  await acknowledge(config, 'ready', undefined, status.targetVersion);
+  const latestState = await getRuntimeState();
+  delete latestState.pendingReloadToken;
+  await storageSet(RUNTIME_STATE_KEY, latestState);
+  return true;
+}
+
 async function runUpdateCheck() {
   const config = await readBridgeConfig();
   if (!config) return;
@@ -251,6 +451,7 @@ async function runUpdateCheck() {
   if (status.action === 'reload') {
     try {
       await verifyInstalledPackage(status.targetVersion);
+      if (await handleReloadHandshake(config, status)) return;
     } catch (error) {
       const result = await acknowledge(config, 'failed', error instanceof Error ? error.message : error, status.targetVersion);
       if (result?.reload) setTimeout(() => chrome.runtime.reload(), 100);
@@ -286,18 +487,21 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: UPDATE_ALARM_MINUTES });
   void checkForUpdates();
   void flushDiagnostics();
+  void flushExtractions();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: UPDATE_ALARM_MINUTES });
   void checkForUpdates();
   void flushDiagnostics();
+  void flushExtractions();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UPDATE_ALARM) {
     void checkForUpdates();
     void flushDiagnostics();
+    void flushExtractions();
   }
 });
 
@@ -316,7 +520,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'OPENFLOW_EXTRACTION_STATE') {
     void updateTrackedTab(sender.tab?.id, message.busy === true).then(() => {
-      if (message.busy !== true) return Promise.all([checkForUpdates(), flushDiagnostics()]);
+      if (message.busy !== true) return Promise.all([checkForUpdates(), flushDiagnostics(), flushExtractions()]);
     });
     return;
   }
@@ -324,6 +528,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void queueDiagnosticEvent(message.event)
       .then((result) => sendResponse(result))
       .catch((error) => sendResponse({ queued: false, error: error instanceof Error ? error.message : String(error) }));
+    return true;
+  }
+  if (message?.type === 'OPENFLOW_QUEUE_EXTRACTION') {
+    void queueExtractionPayload(message.payload)
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({ queued: false, delivered: false, error: error instanceof Error ? error.message : String(error) }));
     return true;
   }
   if (message?.type === 'OPENFLOW_CHECK_FOR_UPDATES') {
@@ -335,3 +545,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: UPDATE_ALARM_MINUTES });
 void checkForUpdates();
 void flushDiagnostics();
+void flushExtractions();

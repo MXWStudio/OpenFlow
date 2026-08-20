@@ -96,6 +96,9 @@ export interface DailyRequirementSession {
   department?: string;
   email?: string;
   warnings?: string[];
+  source?: 'manual' | 'extension';
+  sourceMessageId?: string;
+  extractedAt?: string;
 }
 
 export interface ValidationResult {

@@ -284,7 +284,12 @@ function formatMetadataTime(value) {
     if (!value) return '';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString('zh-CN', { hour12: false });
+    const now = new Date();
+    const sameDay = date.getFullYear() === now.getFullYear()
+        && date.getMonth() === now.getMonth()
+        && date.getDate() === now.getDate();
+    const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return sameDay ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`;
 }
 
 async function ensureContentScriptInjected(tabId) {
@@ -307,27 +312,67 @@ async function ensureContentScriptInjected(tabId) {
 function setExtractButtonPrimaryState() {
     const btn = document.getElementById('extractBtn');
     btn.disabled = false;
-    btn.className = 'btn btn-primary';
-    btn.innerHTML = '<span>📥</span> 按截止日期提取任务';
+    btn.className = 'btn btn-secondary deadline-submit';
+    btn.innerHTML = '<span>📥</span> 抓取';
 }
 
 function setExtractButtonSecondaryState() {
     const btn = document.getElementById('extractBtn');
     btn.disabled = false;
-    btn.className = 'btn btn-secondary';
-    btn.innerHTML = '<span>🔄</span> 按截止日期重新提取';
+    btn.className = 'btn btn-secondary deadline-submit';
+    btn.innerHTML = '<span>🔄</span> 重新抓取';
 }
 
 function setExtractButtonLoadingState() {
     const btn = document.getElementById('extractBtn');
     btn.disabled = true;
+    btn.className = 'btn btn-secondary deadline-submit';
+    btn.innerHTML = '<span>⏳</span> 抓取中';
+}
+
+function setUnstartedButtonPrimaryState() {
+    const btn = document.getElementById('extractUnstartedBtn');
+    btn.disabled = false;
     btn.className = 'btn btn-primary';
-    btn.innerHTML = '<span>⏳</span> 提取中...';
+    btn.innerHTML = '<span>📥</span> 抓取未开始任务';
+}
+
+function setUnstartedButtonSecondaryState() {
+    const btn = document.getElementById('extractUnstartedBtn');
+    btn.disabled = false;
+    btn.className = 'btn btn-secondary';
+    btn.innerHTML = '<span>🔄</span> 重新抓取未开始任务';
+}
+
+function setUnstartedButtonLoadingState() {
+    const btn = document.getElementById('extractUnstartedBtn');
+    btn.disabled = true;
+    btn.className = 'btn btn-primary';
+    btn.innerHTML = '<span>⏳</span> 抓取中...';
+}
+
+function setExtractionButtonsIdle(metadata = {}) {
+    setExtractButtonPrimaryState();
+    setUnstartedButtonPrimaryState();
+    if (metadata.filterMode === 'status') {
+        setUnstartedButtonSecondaryState();
+    } else if (metadata.filterMode === 'deadline' || metadata.deadline) {
+        setExtractButtonSecondaryState();
+    }
+}
+
+function setExtractionButtonsLoading(filterMode) {
+    if (filterMode === 'status') {
+        setUnstartedButtonLoadingState();
+        document.getElementById('extractBtn').disabled = true;
+    } else {
+        setExtractButtonLoadingState();
+        document.getElementById('extractUnstartedBtn').disabled = true;
+    }
 }
 
 function hidePreviewSections() {
     document.getElementById('statusArea').style.display = 'none';
-    document.getElementById('listWrapper').style.display = 'none';
     document.getElementById('exportActions').style.display = 'none';
 }
 
@@ -413,25 +458,25 @@ function loadTheme() {
     });
 }
 
-setExtractButtonPrimaryState();
+setExtractionButtonsIdle();
 hidePreviewSections();
 void restoreExtractedBulkData();
 void restoreDeadlineFilter();
 void loadSettings();
 void loadTheme();
 
-document.getElementById('extractBtn').addEventListener('click', async () => {
-    const deadline = document.getElementById('deadlineInput').value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+async function runBulkExtraction({ deadline = '', status = '' } = {}) {
+    const filterMode = status === '未开始' ? 'status' : 'deadline';
+    if (filterMode === 'deadline' && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
         alert("请先指定要抓取的截止日期。");
         return;
     }
 
     // 1. 按钮防抖与提示交互
-    setExtractButtonLoadingState();
+    setExtractionButtonsLoading(filterMode);
 
     try {
-        await saveDeadlineFilter(deadline);
+        if (filterMode === 'deadline') await saveDeadlineFilter(deadline);
 
         // 获取当前活动标签页
         let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -442,13 +487,15 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
         // 2. 发送批量抓取指令
         // 给一点点延迟确保 content.js 加载完毕
         setTimeout(() => {
-            chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_BULK_DOM", deadline }, async (response) => {
+            chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_BULK_DOM", deadline, status }, async (response) => {
                 // 恢复按钮状态
-                setExtractButtonPrimaryState();
+                setExtractionButtonsIdle();
 
                 if (chrome.runtime.lastError) {
                     reportPopupDiagnostic('extension.popup_connection_error', 'error', {
+                        filterMode,
                         deadline,
+                        status,
                         message: chrome.runtime.lastError.message,
                         pageOrigin: (() => {
                             try { return new URL(tab.url || '').origin; } catch { return ''; }
@@ -464,11 +511,28 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
                         sourceUrl: response.sourceUrl || tab.url || '',
                         extractedAt: response.extractedAt || new Date().toISOString(),
                         warnings: response.warnings || buildExtractionWarnings(extractedBulkData),
-                        deadline: response.deadline || deadline,
+                        filterMode: response.filterMode || filterMode,
+                        deadline: response.deadline || (filterMode === 'deadline' ? deadline : ''),
+                        statusFilter: response.statusFilter || (filterMode === 'status' ? status : ''),
                         matchedCount: response.matchedCount ?? extractedBulkData.length,
                         complete: response.complete === true,
                         failedTasks: Array.isArray(response.failedTasks) ? response.failedTasks : []
                     };
+
+                    if (extractedBulkData.length > 0 && extractionMetadata.complete === true) {
+                        try {
+                            const delivery = await queueExtractionForDesktop(extractedBulkData, extractionMetadata);
+                            extractionMetadata.desktopDelivery = delivery?.delivered ? 'delivered' : 'queued';
+                            extractionMetadata.desktopMessageId = delivery?.messageId || '';
+                        } catch (err) {
+                            extractionMetadata.desktopDelivery = 'failed';
+                            extractionMetadata.desktopDeliveryError = err instanceof Error ? err.message : String(err);
+                            reportPopupDiagnostic('extension.popup_desktop_delivery_error', 'warning', {
+                                message: extractionMetadata.desktopDeliveryError,
+                                matchedCount: extractionMetadata.matchedCount
+                            });
+                        }
+                    }
 
                     try {
                         await saveExtractedBulkData(extractedBulkData, extractionMetadata);
@@ -478,13 +542,17 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
                     }
                     if (extractedBulkData.length === 0) {
                         hidePreviewSections();
-                        alert(`当前已加载的任务中没有截止日期为 ${deadline} 的项目。`);
+                        alert(filterMode === 'status'
+                            ? '当前已加载的任务中没有“未开始”任务。'
+                            : `当前已加载的任务中没有截止日期为 ${deadline} 的项目。`);
                     } else {
                         renderPreview(extractedBulkData, { metadata: extractionMetadata });
                     }
                 } else {
                     reportPopupDiagnostic('extension.popup_extraction_error', 'error', {
+                        filterMode,
                         deadline,
+                        status,
                         message: response?.error || '未知错误'
                     });
                     alert("提取失败！\n" + (response?.error || '未知错误'));
@@ -493,14 +561,24 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
         }, 150);
 
     } catch (err) {
-        setExtractButtonPrimaryState();
+        setExtractionButtonsIdle();
         reportPopupDiagnostic('extension.popup_execution_error', 'error', {
+            filterMode,
             deadline,
+            status,
             message: err instanceof Error ? err.message : String(err),
             stack: err instanceof Error ? err.stack : undefined
         });
         alert("执行脚本发生错误：" + err.message);
     }
+}
+
+document.getElementById('extractUnstartedBtn').addEventListener('click', () => {
+    void runBulkExtraction({ status: '未开始' });
+});
+
+document.getElementById('extractBtn').addEventListener('click', () => {
+    void runBulkExtraction({ deadline: document.getElementById('deadlineInput').value });
 });
 
 /**
@@ -509,8 +587,6 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 function renderPreview(dataList, options = {}) {
     let graphicCount = 0;
     let videoCount = 0;
-    let wdzCount = 0; // 温典战数量统计
-    let victorCount = 0; // 维克多数量统计
 
     dataList.forEach(task => {
         const materialType = task.materialType || task["素材类型"] || "";
@@ -520,88 +596,50 @@ function renderPreview(dataList, options = {}) {
         if (materialType.includes("视频")) {
             videoCount += 1;
         }
-
-        const orderer = task["下单人"] || "";
-        if (orderer.includes("温典战")) {
-            wdzCount += 1;
-        }
-        if (orderer.includes("维克多")) {
-            victorCount += 1;
-        }
     });
 
-    let statusHtml =
-        '<span class="badge badge-success">✅ 共 ' + dataList.length + ' 个</span>' +
-        '<span class="badge badge-blue">平面: ' + graphicCount + '</span>' +
-        '<span class="badge badge-purple">视频: ' + videoCount + '</span>';
+    let resultTags =
+        '<span class="badge badge-success">共 ' + dataList.length + ' 个</span>' +
+        '<span class="badge badge-blue">平面 ' + graphicCount + '</span>' +
+        '<span class="badge badge-purple">视频 ' + videoCount + '</span>';
 
     if (options.metadata?.deadline) {
-        statusHtml += '<span class="badge badge-blue">截止日期: ' + escapeHtmlText(options.metadata.deadline) + '</span>';
+        resultTags += '<span class="badge badge-blue">截止 ' + escapeHtmlText(options.metadata.deadline) + '</span>';
     }
 
-    if (wdzCount > 0) {
-        statusHtml += '<div class="badge badge-red">特殊需求-AI批量制作-温典战 (' + wdzCount + '个)</div>';
-    }
-    if (victorCount > 0) {
-        statusHtml += '<div class="badge badge-red">特殊需求-AI批量制作-维克多（ 整图直接用AI生成，注意！生成注意标题的美观、突出主体、色彩饱和度 ） (' + victorCount + '个)</div>';
+    const stateTags = [];
+    if (options.metadata?.desktopDelivery === 'delivered') {
+        stateTags.push('<span class="badge badge-success">桌面已接收</span>');
+    } else if (options.metadata?.desktopDelivery === 'queued') {
+        stateTags.push('<span class="badge badge-blue">等待桌面接收</span>');
     }
 
     const warnings = options.metadata?.warnings || buildExtractionWarnings(dataList);
     const extractedAtText = formatMetadataTime(options.metadata?.extractedAt);
-    if (options.isCached) {
-        statusHtml += '<span class="badge badge-blue">上次提取' + (extractedAtText ? ': ' + escapeHtmlText(extractedAtText) : '') + '</span>';
+    if (extractedAtText) stateTags.push('<span class="badge badge-blue">抓取于 ' + escapeHtmlText(extractedAtText) + '</span>');
+
+    let statusHtml =
+        '<div class="result-row"><span class="result-label">抓取结果</span><div class="result-tags">' + resultTags + '</div></div>' +
+        (stateTags.length > 0
+            ? '<div class="result-row"><span class="result-label">当前状态</span><div class="result-tags">' + stateTags.join('') + '</div></div>'
+            : '');
+
+    if (options.metadata?.desktopDelivery === 'failed') {
+        statusHtml += '<div class="badge badge-red result-alert">自动送达失败，可使用 JSON 导入：' + escapeHtmlText(options.metadata.desktopDeliveryError || '未知原因') + '</div>';
     }
     if (warnings.length > 0) {
-        statusHtml += '<div class="badge badge-red">' + escapeHtmlText(warnings.slice(0, 3).join('；')) + '</div>';
+        statusHtml += '<div class="badge badge-red result-alert">' + escapeHtmlText(warnings.slice(0, 3).join('；')) + '</div>';
     }
 
     const blockingReason = getExtractionBlockingReason();
     if (blockingReason) {
-        statusHtml += '<div class="badge badge-red">⛔ ' + escapeHtmlText(blockingReason) + '</div>';
+        statusHtml += '<div class="badge badge-red result-alert">⛔ ' + escapeHtmlText(blockingReason) + '</div>';
     }
 
     document.getElementById('statusArea').innerHTML = statusHtml;
-    document.getElementById('statusArea').style.display = 'flex';
-    document.getElementById('listWrapper').style.display = 'block';
+    document.getElementById('statusArea').style.display = 'block';
     document.getElementById('exportActions').style.display = blockingReason ? 'none' : 'flex';
-    setExtractButtonSecondaryState();
-
-    const ul = document.getElementById('taskList');
-    ul.innerHTML = '';
-
-    dataList.forEach(task => {
-        const projectName = task.projectName || task["项目名称"] || '未知项目';
-        const detailsCount = task.details ? task.details.length : 0;
-        const requiredSets = task.requiredSets || task["所需套数"] || task["素材数"] || '';
-        const metaParts = [`${detailsCount} 个尺寸`];
-        const safeProjectName = escapeHtmlText(projectName);
-        const orderer = task["下单人"] || "";
-
-        if (requiredSets) {
-            metaParts.push(`数量 ${requiredSets}`);
-        }
-        if (task.deadline || task['截止日期']) {
-            metaParts.push(`截止 ${task.deadline || task['截止日期']}`);
-        }
-        if (task.status) {
-            metaParts.push(task.status);
-        }
-
-        let taskNameHtml = safeProjectName;
-        if (orderer.includes("温典战")) {
-            taskNameHtml += '<span class="badge-small-red">温典战</span>';
-        }
-        if (orderer.includes("维克多")) {
-            taskNameHtml += '<span class="badge-small-red">维克多</span>';
-        }
-
-        let li = document.createElement('li');
-        li.className = 'task-item';
-        li.innerHTML =
-            '<span class="task-name" title="' + safeProjectName + '">' + taskNameHtml + '</span>' +
-            '<span class="task-meta">' + escapeHtmlText(metaParts.join(' · ')) + '</span>';
-        ul.appendChild(li);
-    });
+    setExtractionButtonsIdle(options.metadata);
 }
 
 /**
@@ -646,18 +684,12 @@ function flattenDataForExport(dataList) {
     return flatArray;
 }
 
-// 3. 导出 JSON 功能
-document.getElementById('exportJsonBtn').addEventListener('click', async () => {
-    if (!extractedBulkData || extractedBulkData.length === 0) {
-        alert("没有可导出的数据！");
-        return;
-    }
-    if (!ensureExtractionCanExport()) return;
+async function buildRequirementsPayload(dataList, metadata = extractionMetadata) {
     const settings = await loadSettings();
     const toolTag = normalizeToolTag(settings.toolTag);
 
     // 按目标结构重建 JSON 列表
-    const formattedDataList = extractedBulkData.map(task => {
+    const formattedDataList = dataList.map(task => {
         const orderedData = {};
 
         // 公司名称和集团需要提前获取用于项目名清洗
@@ -774,24 +806,54 @@ document.getElementById('exportJsonBtn').addEventListener('click', async () => {
     });
 
     // 导出文件
-    const metadataWarnings = buildExtractionWarnings(extractedBulkData);
+    const metadataWarnings = buildExtractionWarnings(dataList);
     const exportPayload = {
         schemaVersion: 'openflow.requirements.v1',
         source: {
             app: 'OpenFlow',
-            url: extractionMetadata.sourceUrl || '',
+            url: metadata.sourceUrl || '',
         },
-        extractedAt: extractionMetadata.extractedAt || new Date().toISOString(),
+        extractedAt: metadata.extractedAt || new Date().toISOString(),
         warnings: metadataWarnings,
         extraction: {
-            deadline: extractionMetadata.deadline || '',
-            matchedCount: extractionMetadata.matchedCount ?? formattedDataList.length,
+            deadline: metadata.deadline || '',
+            filterMode: metadata.filterMode || (metadata.deadline ? 'deadline' : 'status'),
+            statusFilter: metadata.statusFilter || '',
+            matchedCount: metadata.matchedCount ?? formattedDataList.length,
             successCount: formattedDataList.length,
-            failedCount: Array.isArray(extractionMetadata.failedTasks) ? extractionMetadata.failedTasks.length : 0,
-            complete: extractionMetadata.complete === true
+            failedCount: Array.isArray(metadata.failedTasks) ? metadata.failedTasks.length : 0,
+            complete: metadata.complete === true
         },
         projects: formattedDataList
     };
+    return { exportPayload, formattedDataList };
+}
+
+function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response) => {
+            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+            else resolve(response);
+        });
+    });
+}
+
+async function queueExtractionForDesktop(dataList, metadata) {
+    if (!metadata?.complete || !Array.isArray(dataList) || dataList.length === 0) return null;
+    const { exportPayload } = await buildRequirementsPayload(dataList, metadata);
+    const result = await sendRuntimeMessage({ type: 'OPENFLOW_QUEUE_EXTRACTION', payload: exportPayload });
+    if (!result?.queued) throw new Error(result?.error || '无法加入桌面自动接收队列');
+    return result;
+}
+
+// 3. 导出 JSON 功能
+document.getElementById('exportJsonBtn').addEventListener('click', async () => {
+    if (!extractedBulkData || extractedBulkData.length === 0) {
+        alert("没有可导出的数据！");
+        return;
+    }
+    if (!ensureExtractionCanExport()) return;
+    const { exportPayload, formattedDataList } = await buildRequirementsPayload(extractedBulkData, extractionMetadata);
     const jsonStr = JSON.stringify(exportPayload, null, 2);
     const blob = new Blob([jsonStr], {type: "application/json;charset=utf-8"});
     const url = URL.createObjectURL(blob);
