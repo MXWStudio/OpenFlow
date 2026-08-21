@@ -1,1262 +1,213 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-  Accordion,
-  ActionIcon,
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Collapse,
-  Flex,
-  Group,
-  Paper,
-  ScrollArea,
-  SegmentedControl,
-  Select,
-  SimpleGrid,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  ThemeIcon,
-  Title,
-  Tooltip,
-} from '@mantine/core';
-import { Dropzone } from '@mantine/dropzone';
+  ActionIcon, Alert, Badge, Box, Button, Card, Checkbox, Flex, Group, Modal,
+  Paper, Progress, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack,
+  Table, Tabs, Text, ThemeIcon, Title, Tooltip,
+} from '@mantine/core'
+import { Dropzone } from '@mantine/dropzone'
 import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  FileJson,
-  FileText,
-  FolderOpen,
-  FolderPlus,
-  History,
-  Play,
-  Settings,
-  Sparkles,
-  Trash2,
-  UploadCloud,
-  X,
-} from 'lucide-react';
-import { formatBytes, type ValidationResult } from '../appState';
-import { StatusBadge } from '../StatusBadge';
+  CheckCircle2, FileJson, FileText, FolderOpen, FolderPlus, History, Play,
+  SlidersHorizontal, Sparkles, UploadCloud, X,
+} from 'lucide-react'
+import { formatBytes, type ValidationResult } from '../appState'
+import { StatusBadge } from '../StatusBadge'
+import { buildValidationPresentation, canTrashValidationRow, getValidationRowKind, getValidationRowReason } from '../validationPresentation'
 import {
-  buildValidationPresentation,
-  canTrashValidationRow,
-  getValidationRowKind,
-  getValidationRowReason,
-  type ValidationPresentationGroup,
-} from '../validationPresentation';
-import type {
-  RenameBatchResult,
-  RenameMode,
-  RenamePreset,
-  RenamePreview,
-  RenameSelection,
-} from '../../../shared/renameTemplates.ts';
+  RENAME_TOKEN_LABELS,
+  type RenameBatchResult,
+  type RenameMode,
+  type RenamePreset,
+  type RenamePreview,
+  type RenameSelection,
+} from '../../../shared/renameTemplates.ts'
+import { OpenFlowWaterSloth } from '../components/OpenFlowWaterSloth'
+import type { WaterSlothMotion } from '../waterSlothMotion.ts'
 
 export interface DailyRenameExample {
-  presetName: string;
-  items: Array<{
-    label: string;
-    value: string;
-    valid: boolean;
-  }>;
+  presetName: string
+  items: Array<{ label: string; value: string; valid: boolean }>
 }
 
 interface DailyWorkspaceProps {
-  jsonFileName: string;
-  extractionTimeLabel: string;
-  pendingExtractionCount: number;
-  projectsCount: number;
-  requirementSizes: string[];
-  detectedFolderSizes: string[];
-  manualTargetSizes: string[];
-  horizontalManualSizes: string[];
-  verticalManualSizes: string[];
-  folderPaths: string[];
-  validationResults: ValidationResult[];
-  isChangingJson: boolean;
-  isValidating: boolean;
-  isRenaming: boolean;
-  hasValidated: boolean;
-  hasIssues: boolean;
-  canRename: boolean;
-  isTableExpanded: boolean;
-  renameSelection: RenameSelection;
-  customRenamePresets: RenamePreset[];
-  renameExample: DailyRenameExample | null;
-  renamePreview: RenamePreview | null;
-  renameBatchResult: RenameBatchResult | null;
-  workflowSaveState: 'idle' | 'saving' | 'saved' | 'error';
-  canFallbackToRegular: boolean;
-  lastRenamedPaths: string[];
-  onToggleTable: () => void;
-  onChangeRenameMode: (mode: RenameMode) => void;
-  onChangeCustomPreset: (presetId: string) => void;
-  onFallbackToRegular: () => void;
-  onRetryFailed: () => void;
-  onToggleManualSize: (size: string) => void;
-  onChangeJson: () => void;
-  onShowPendingExtraction: () => void;
-  onInitFolders: () => void;
-  onAddFolder: () => void;
-  onClearFolders: () => void;
-  onRemoveFolder: (path: string) => void;
-  onValidate: () => void;
-  onRename: () => void;
-  onTrashValidationFile: (row: ValidationResult) => void;
-  onOpenSettings: () => void;
-  onOpenHistory: () => void;
-  onDropPaths: (paths: string[]) => void;
-  onOpenFolder: (path: string) => void;
-}
-
-const cardStyle = {
-  borderColor: 'var(--mantine-color-default-border)',
-  background: 'var(--mantine-color-default)',
-  boxShadow: 'var(--openflow-shadow-card)',
-} as const;
-
-const compactCardStyle = {
-  ...cardStyle,
-  boxShadow: 'var(--openflow-shadow-card-compact)',
-} as const;
-
-function SectionTitle({
-  icon,
-  title,
-  aside,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  aside?: React.ReactNode;
-}) {
-  return (
-    <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-      <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
-        <ThemeIcon size={30} radius={8} variant="light" color="blue">
-          {icon}
-        </ThemeIcon>
-        <Text fw={900} size="lg" c="var(--mantine-color-text)" truncate>
-          {title}
-        </Text>
-      </Group>
-      {aside}
-    </Group>
-  );
-}
-
-function StepMarker({ value, active }: { value: number; active: boolean }) {
-  return (
-    <Box
-      w={26}
-      h={26}
-      style={{
-        borderRadius: 8,
-        display: 'grid',
-        placeItems: 'center',
-        fontSize: 13,
-        fontWeight: 900,
-        color: active ? 'var(--mantine-color-white)' : 'var(--mantine-color-dimmed)',
-        background: active ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default)',
-        border: active ? '1px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)',
-      }}
-    >
-      {value}
-    </Box>
-  );
-}
-
-function SizePill({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      radius={8}
-      variant={active ? 'filled' : 'default'}
-      onClick={onClick}
-      styles={{
-        root: {
-          height: 38,
-          paddingInline: 10,
-          background: active ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default)',
-          color: active ? 'var(--mantine-color-white)' : 'var(--mantine-color-text)',
-          border: active ? '1px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)',
-          fontSize: 13,
-          fontWeight: 850,
-        },
-        label: {
-          overflow: 'hidden',
-          textAlign: 'center',
-        },
-      }}
-    >
-      {label}
-    </Button>
-  );
+  jsonFileName: string; extractionTimeLabel: string; pendingExtractionCount: number; projectsCount: number
+  requirementSizes: string[]; detectedFolderSizes: string[]; manualTargetSizes: string[]
+  horizontalManualSizes: string[]; verticalManualSizes: string[]; folderPaths: string[]
+  validationResults: ValidationResult[]; isChangingJson: boolean; isValidating: boolean; isRenaming: boolean
+  hasValidated: boolean; hasIssues: boolean; canRename: boolean; isTableExpanded: boolean
+  renameSelection: RenameSelection; activeRenamePreset?: RenamePreset; customRenamePresets: RenamePreset[]; renameExample: DailyRenameExample | null
+  renamePreview: RenamePreview | null; renameBatchResult: RenameBatchResult | null
+  workflowSaveState: 'idle' | 'saving' | 'saved' | 'error'; canFallbackToRegular: boolean
+  lastRenamedPaths: string[]; completedAt: number | null; completedVisibilityMs: number
+  waterSlothMotion: WaterSlothMotion
+  onToggleTable: () => void; onChangeRenameMode: (mode: RenameMode) => void
+  onChangeCustomPreset: (presetId: string) => void; onFallbackToRegular: () => void; onRetryFailed: () => void
+  onToggleManualSize: (size: string) => void; onSelectRequirementSizes: () => void
+  onRestoreDefaultSizes: () => void; onClearManualSizes: () => void
+  onChangeJson: () => void; onShowPendingExtraction: () => void
+  onInitFolders: () => void; onAddFolder: () => void; onClearFolders: () => void; onRemoveFolder: (path: string) => void
+  failedValidationFolderCount: number; onValidate: () => void; onRevalidateFailed: () => void
+  onRename: () => void; onTrashValidationFile: (row: ValidationResult) => void
+  onOpenSettings: () => void; onOpenHistory: () => void; onDropPaths: (paths: string[]) => void; onOpenFolder: (path: string) => void
 }
 
 function getFolderName(path: string) {
-  const sep = path.includes('\\') ? '\\' : '/';
-  return path.substring(path.lastIndexOf(sep) + 1);
+  return path.split(/[\\/]/).filter(Boolean).at(-1) || path
 }
 
 function extractDroppedPaths(event: React.DragEvent) {
-  const paths: string[] = [];
-  const items = event.dataTransfer.items;
-  if (!items) return paths;
-
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (item.kind !== 'file') continue;
-
-    const entry = item.webkitGetAsEntry();
-    const file = item.getAsFile() as File & { path?: string };
-    if (entry?.isDirectory && file?.path) {
-      paths.push(file.path);
-    } else if (file?.path) {
-      const sep = file.path.includes('\\') ? '\\' : '/';
-      const lastIndex = file.path.lastIndexOf(sep);
-      paths.push(lastIndex > 0 ? file.path.slice(0, lastIndex) : file.path);
-    }
+  const paths: string[] = []
+  for (const item of Array.from(event.dataTransfer.items || [])) {
+    if (item.kind !== 'file') continue
+    const entry = item.webkitGetAsEntry()
+    const file = item.getAsFile() as (File & { path?: string }) | null
+    if (!file?.path) continue
+    paths.push(entry?.isDirectory ? file.path : file.path.replace(/[\\/][^\\/]+$/, ''))
   }
-
-  return paths;
+  return paths
 }
 
-export function DailyWorkspace({
-  jsonFileName,
-  extractionTimeLabel,
-  pendingExtractionCount,
-  projectsCount,
-  requirementSizes,
-  detectedFolderSizes,
-  manualTargetSizes,
-  horizontalManualSizes,
-  verticalManualSizes,
-  folderPaths,
-  validationResults,
-  isChangingJson,
-  isValidating,
-  isRenaming,
-  hasValidated,
-  hasIssues,
-  canRename,
-  isTableExpanded,
-  renameSelection,
-  customRenamePresets,
-  renameExample,
-  renamePreview,
-  renameBatchResult,
-  workflowSaveState,
-  canFallbackToRegular,
-  lastRenamedPaths,
-  onToggleTable,
-  onChangeRenameMode,
-  onChangeCustomPreset,
-  onFallbackToRegular,
-  onRetryFailed,
-  onToggleManualSize,
-  onChangeJson,
-  onShowPendingExtraction,
-  onInitFolders,
-  onAddFolder,
-  onClearFolders,
-  onRemoveFolder,
-  onValidate,
-  onRename,
-  onTrashValidationFile,
-  onOpenSettings,
-  onOpenHistory,
-  onDropPaths,
-  onOpenFolder,
-}: DailyWorkspaceProps) {
-  const validationPresentation = useMemo(
-    () => buildValidationPresentation(validationResults),
-    [validationResults],
-  );
-  const groupedPreviewRows = validationPresentation.groups;
-  const validationSummary = validationPresentation.summary;
-  const missingTotal = validationSummary.missingTotal;
-  const emptyFolderCount = validationSummary.emptyFolderCount;
-  const blockingIssueCount = validationSummary.blockingCount;
-  const previewPresetName = renamePreview?.items.find((item) => item.presetName)?.presetName;
-  const previewErrors = renamePreview?.items.filter((item) => item.status === 'blocked') || [];
-  const previewRows = renamePreview?.items.filter((item) => item.status !== 'blocked').slice(0, 3) || [];
-  const hasFailedRenameItems = Boolean(renameBatchResult?.results.some((item) => !item.success));
+function classifySizes(sizes: string[]) {
+  const result = { landscape: [] as string[], portrait: [] as string[], square: [] as string[], other: [] as string[] }
+  sizes.forEach((size) => {
+    const [width, height] = size.split('*').map(Number)
+    if (!width || !height) result.other.push(size)
+    else if (width === height) result.square.push(size)
+    else if (width > height) result.landscape.push(size)
+    else result.portrait.push(size)
+  })
+  return result
+}
 
-  const [accordionValue, setAccordionValue] = useState<string[]>([]);
-  const [expandedPassedGroups, setExpandedPassedGroups] = useState<string[]>([]);
+export function DailyWorkspace(props: DailyWorkspaceProps) {
+  const [detail, setDetail] = useState<'naming' | 'sizes' | 'validation' | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const validation = useMemo(() => buildValidationPresentation(props.validationResults), [props.validationResults])
+  const activeSizes = useMemo(() => [...new Set([...props.requirementSizes, ...props.detectedFolderSizes, ...props.manualTargetSizes])], [props.requirementSizes, props.detectedFolderSizes, props.manualTargetSizes])
+  const availableSizes = useMemo(() => [...new Set([...props.requirementSizes, ...props.detectedFolderSizes, ...props.horizontalManualSizes, ...props.verticalManualSizes])], [props.requirementSizes, props.detectedFolderSizes, props.horizontalManualSizes, props.verticalManualSizes])
+  const groupedSizes = useMemo(() => classifySizes(availableSizes), [availableSizes])
+  const validCount = props.validationResults.filter((item) => item.status === 'valid').length
+  const failedRenameCount = props.renameBatchResult?.results.filter((item) => !item.success).length || 0
+  const completedProgress = props.completedAt ? Math.max(0, 100 - ((now - props.completedAt) / props.completedVisibilityMs) * 100) : 0
+
+  const describeRenameRule = (mediaType: 'image' | 'video') => {
+    const rule = props.activeRenamePreset?.rules[mediaType]
+    if (!rule) return null
+    return {
+      tokens: rule.tokens.map((token) => token.type === 'CustomText' && token.value
+        ? `固定文字“${token.value}”`
+        : RENAME_TOKEN_LABELS[token.type]),
+      separator: rule.separator || '无分隔符',
+      dateFormat: rule.dateFormat,
+      sequence: `${rule.sequence.prefix || ''}${String(rule.sequence.start).padStart(rule.sequence.padding, '0')}${rule.sequence.suffix || ''} 起`,
+    }
+  }
 
   useEffect(() => {
-    const actionFolders = groupedPreviewRows
-      .filter((group) => group.actionRows.length > 0)
-      .map((group) => group.folderName);
-    setAccordionValue(actionFolders);
-  }, [groupedPreviewRows]);
+    if (!props.completedAt) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [props.completedAt])
 
-  const hasFinishedRenaming = lastRenamedPaths.length > 0 && folderPaths.length === 0 && !isValidating && !hasValidated;
-
-  const statusState = (() => {
-    if (isValidating) {
-      return {
-        label: '校验进行中',
-        title: '正在校验。',
-        description: '正在读取素材尺寸和文件状态。',
-        color: 'blue',
-        icon: <FileText size={26} />,
-      };
-    }
-    if (hasIssues && blockingIssueCount > 0) {
-      return {
-        label: '校验异常',
-        title: '存在异常。',
-        description: '请先处理尺寸错误或读取失败的素材。',
-        color: 'red',
-        icon: <FileText size={26} />,
-      };
-    }
-    if (hasIssues && emptyFolderCount > 0) {
-      return {
-        label: '缺失文件',
-        title: '素材目录为空。',
-        description: `${emptyFolderCount} 个目录内没有可校验文件，请添加素材后重验。`,
-        color: 'orange',
-        icon: <FolderOpen size={26} />,
-      };
-    }
-    if (hasIssues && missingTotal > 0) {
-      return {
-        label: '数量不足',
-        title: '数量不足。',
-        description: `共缺 ${missingTotal} 张。可补齐后重验，也可先重命名已有素材。`,
-        color: 'orange',
-        icon: <FileText size={26} />,
-      };
-    }
-    if (hasIssues && validationSummary.extraCount > 0) {
-      return {
-        label: '有额外素材',
-        title: '发现额外素材。',
-        description: `${validationSummary.extraCount} 项素材不在需求表中，不会参与重命名。`,
-        color: 'blue',
-        icon: <FileText size={26} />,
-      };
-    }
-    if (hasValidated) {
-      return {
-        label: '校验通过',
-        title: '校验完成。',
-        description: '全部素材符合当前目标。',
-        color: 'teal',
-        icon: <CheckCircle2 size={26} />,
-      };
-    }
-    if (hasFinishedRenaming) {
-      return {
-        label: '处理完成',
-        title: '重命名完成。',
-        description: '所有通过校验的素材已完成命名。',
-        color: 'teal',
-        icon: <CheckCircle2 size={26} />,
-      };
-    }
-    return {
-      label: '系统就绪',
-      title: '准备就绪。',
-      description: '按今日流程处理素材。',
-      color: 'gray',
-      icon: <FileText size={26} />,
-    };
-  })();
-
-  const flowSteps = [
-    { label: '今日需求', active: projectsCount > 0 },
-    { label: '项目目录', active: projectsCount > 0 },
-    { label: '上传素材', active: folderPaths.length > 0 },
-    { label: '校验处理', active: hasValidated || canRename },
-  ];
-
-  function getRowTitle(row: ValidationResult) {
-    if (row.status !== 'missing') return `${row.fileName}${row.ext}`;
-    if (row.missingKind === 'empty_folder') return '缺失文件';
-    const targetSize = row.targetSize || row.fileName.replace(/^\[缺失]\s*/, '');
-    const missingCount = row.missingCount || 1;
-    return `${targetSize} 缺 ${missingCount} 张`;
-  }
-
-  function getRowMeta(row: ValidationResult) {
-    return getValidationRowReason(row);
-  }
-
-  function getGroupIconColor(group: ValidationPresentationGroup) {
-    if (group.hasBlockingIssues) return 'var(--mantine-color-red-filled)';
-    if (group.emptyFolderCount > 0) return 'var(--mantine-color-orange-filled)';
-    if (group.hasMissingIssues) return 'var(--mantine-color-orange-filled)';
-    if (group.hasExtraIssues) return 'var(--mantine-color-blue-filled)';
-    return 'var(--mantine-color-teal-filled)';
-  }
-
-  function isPassedGroupExpanded(folderName: string) {
-    return expandedPassedGroups.includes(folderName);
-  }
-
-  function togglePassedGroup(folderName: string) {
-    setExpandedPassedGroups((current) =>
-      current.includes(folderName)
-        ? current.filter((name) => name !== folderName)
-        : [...current, folderName],
-    );
-  }
-
-  function renderValidationRows(rows: ValidationResult[], options: { mutedPassed?: boolean; showActions?: boolean } = {}) {
-    return rows.map((row, index) => (
-      <Table.Tr key={`${row.fileName}-${row.targetSize || ''}-${index}`}>
-        <Table.Td style={{ minWidth: 180 }}>
-          <Text fw={row.status === 'valid' && options.mutedPassed ? 650 : 850} c="var(--mantine-color-text)">
-            {getRowTitle(row)}
-          </Text>
-        </Table.Td>
-        <Table.Td style={{ minWidth: 220 }}>
-          <Text c="var(--mantine-color-dimmed)">{getRowMeta(row)}</Text>
-        </Table.Td>
-        <Table.Td style={{ minWidth: 120 }}>
-          <Text c="var(--mantine-color-dimmed)">
-            {row.actualWidth && row.actualHeight
-              ? `${row.actualWidth}×${row.actualHeight}`
-              : formatBytes(row.fileSize)}
-          </Text>
-        </Table.Td>
-        <Table.Td style={{ textAlign: 'right', minWidth: 112 }}>
-          <StatusBadge
-            result={row}
-            kind={getValidationRowKind(row)}
-            muted={options.mutedPassed && row.status === 'valid'}
-          />
-        </Table.Td>
-        {options.showActions && (
-          <Table.Td style={{ textAlign: 'right', minWidth: 126 }}>
-            {canTrashValidationRow(row) && (
-              <Button
-                variant="subtle"
-                color="red"
-                size="xs"
-                leftSection={<Trash2 size={14} />}
-                onClick={() => onTrashValidationFile(row)}
-                styles={{ root: { fontWeight: 850 } }}
-              >
-                移到废纸篓
-              </Button>
-            )}
-          </Table.Td>
-        )}
-      </Table.Tr>
-    ));
-  }
-
-  function renderSizeButtons(title: string, sizes: string[]) {
-    if (!sizes.length) return null;
-    return (
-      <Box>
-        <Text size="sm" fw={850} c="var(--mantine-color-dimmed)" mb={10}>
-          {title}
-        </Text>
-        <SimpleGrid cols={2} spacing={8}>
-          {sizes.map((size) => (
-            <SizePill
-              key={size}
-              active={manualTargetSizes.includes(size)}
-              label={size}
-              onClick={() => onToggleManualSize(size)}
-            />
-          ))}
-        </SimpleGrid>
-      </Box>
-    );
-  }
+  const renderSizeGroup = (title: string, sizes: string[]) => sizes.length ? (
+    <Box>
+      <Text size="xs" fw={800} c="dimmed" mb={6}>{title}</Text>
+      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing={6}>
+        {sizes.map((size) => <Checkbox.Card key={size} checked={props.manualTargetSizes.includes(size)} onClick={() => props.onToggleManualSize(size)} p="xs" radius="sm"><Text size="sm" fw={750} ta="center">{size}</Text></Checkbox.Card>)}
+      </SimpleGrid>
+    </Box>
+  ) : null
 
   return (
-    <Flex className="daily-workspace" h="100%" direction="column" style={{ background: 'var(--mantine-color-body)', position: 'relative', minHeight: 0 }}>
-      <Group
-        className="daily-header"
-        h={86}
-        px={30}
-        gap="md"
-        wrap="nowrap"
-        style={{
-          borderBottom: '1px solid var(--mantine-color-default-border)',
-          background: 'var(--mantine-color-default)',
-        }}
-      >
-        <Title order={2} size="h3" c="var(--mantine-color-text)" style={{ whiteSpace: 'nowrap' }}>
-          日常处理
-        </Title>
-        <Badge color={statusState.color} variant="light" radius="sm" styles={{ root: { fontWeight: 850 } }}>
-          {statusState.label}
-        </Badge>
-        <Tooltip label="历史记录">
-          <ActionIcon variant="subtle" color="gray" radius={8} aria-label="历史记录" onClick={onOpenHistory}>
-            <History size={18} />
-          </ActionIcon>
-        </Tooltip>
-        <Tooltip label="设置">
-          <ActionIcon variant="subtle" color="gray" radius={8} aria-label="设置" onClick={onOpenSettings}>
-            <Settings size={18} />
-          </ActionIcon>
-        </Tooltip>
+    <Flex className="daily-workspace daily-workspace-v2" h="100%" direction="column" style={{ minHeight: 0, overflow: 'hidden' }}>
+      <Group className="compact-page-header" h={52} px="md" wrap="nowrap">
+        <OpenFlowWaterSloth motion={props.waterSlothMotion} size={36} />
+        <Title order={2} size="h4">日常处理</Title>
       </Group>
 
-      <ScrollArea className="app-scroll" style={{ flex: 1 }}>
-        <Box className="daily-content" px={30} py={22} pb={118}>
-          <Flex className="daily-layout" gap={22} align="flex-start">
-            <Stack className="daily-sidebar" gap={18} w={342} style={{ flexShrink: 0 }}>
-              <Card className="daily-flow-card" withBorder radius={8} p={20} style={cardStyle}>
-                <Stack gap={14}>
-                  {flowSteps.map((step, index) => (
-                    <Group key={step.label} gap={12} wrap="nowrap">
-                      <StepMarker value={index + 1} active={step.active} />
-                      <Text fw={850} c={step.active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)'}>
-                        {step.label}
-                      </Text>
-                    </Group>
-                  ))}
-                </Stack>
-              </Card>
+      <Box className="daily-v2-body" p="sm" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <Card className="daily-demand-bar" withBorder p="xs" radius="md">
+          <Group gap="sm" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+              <ThemeIcon size={30} variant="light"><FileJson size={16} /></ThemeIcon>
+              <Box style={{ minWidth: 0 }}><Text size="xs" c="dimmed">今日需求 · {props.projectsCount} 个项目{props.extractionTimeLabel ? ` · ${props.extractionTimeLabel}` : ''}</Text><Text size="sm" fw={800} truncate>{props.projectsCount ? props.jsonFileName : '尚未导入需求表'}</Text></Box>
+            </Group>
+            <Group className="daily-demand-actions" gap={6} wrap="nowrap">
+              {props.pendingExtractionCount > 0 && <Button size="xs" variant="light" onClick={props.onShowPendingExtraction}>新抓取 {props.pendingExtractionCount}</Button>}
+              <Button size="xs" variant="default" loading={props.isChangingJson} onClick={props.onChangeJson}>导入</Button>
+              <Button size="xs" leftSection={<FolderPlus size={14} />} onClick={props.onInitFolders}>手动建目录</Button>
+            </Group>
+          </Group>
+        </Card>
 
-              <Card className="daily-requirement-card" withBorder radius={8} p={20} style={cardStyle}>
-                <SectionTitle icon={<FileJson size={16} />} title="今日需求" />
-                <Stack className="daily-requirement-actions" gap="md">
-                  <TextInput
-                    value={projectsCount > 0 ? jsonFileName : '暂未导入需求表'}
-                    readOnly
-                    radius={8}
-                    size="md"
-                    styles={{
-                      input: {
-                        height: 44,
-                        background: 'var(--mantine-color-default)',
-                        border: '1px solid var(--mantine-color-default-border)',
-                        color: projectsCount > 0 ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
-                        fontWeight: 750,
-                      },
-                    }}
-                  />
-                  {extractionTimeLabel && (
-                    <Text size="xs" c="dimmed" mt={-8}>
-                      {extractionTimeLabel}
-                    </Text>
-                  )}
-                  {pendingExtractionCount > 0 && (
-                    <Button
-                      radius={8}
-                      size="sm"
-                      variant="light"
-                      onClick={onShowPendingExtraction}
-                    >
-                      载入新抓取（{pendingExtractionCount}）
-                    </Button>
-                  )}
-                  <Button
-                    radius={8}
-                    size="md"
-                    variant="default"
-                    leftSection={<FileJson size={16} />}
-                    onClick={onChangeJson}
-                    loading={isChangingJson}
-                    styles={{
-                      root: {
-                        height: 44,
-                        fontWeight: 900,
-                      },
-                    }}
-                  >
-                    导入需求表
-                  </Button>
-                  <Button
-                    radius={8}
-                    size="md"
-                    leftSection={<FolderPlus size={16} />}
-                    onClick={onInitFolders}
-                    styles={{
-                      root: {
-                        height: 46,
-                        fontWeight: 900,
-                      },
-                    }}
-                  >
-                    创建今日目录
-                  </Button>
-                </Stack>
-              </Card>
+        {props.completedAt && props.lastRenamedPaths.length > 0 && <Paper className="daily-completed-strip" withBorder p={6} radius="sm"><Group justify="space-between" wrap="nowrap"><Group gap={6}><CheckCircle2 size={15} color="var(--mantine-color-teal-filled)" /><Text size="xs" fw={750}>上一项目已完成，不影响新任务</Text></Group><Button size="compact-xs" variant="subtle" onClick={() => props.onOpenFolder(props.lastRenamedPaths[0])}>打开目录</Button></Group><Progress value={completedProgress} color="teal" size={2} mt={4} /></Paper>}
 
-              <Card className="daily-naming-card" withBorder radius={8} p={20} style={cardStyle}>
-                <SectionTitle icon={<Sparkles size={16} />} title="命名方式" />
-                <Stack gap="md">
-                  <SegmentedControl
-                    fullWidth
-                    value={renameSelection.mode}
-                    onChange={(value) => onChangeRenameMode(value as RenameMode)}
-                    data={[
-                      { label: '常规', value: 'regular' },
-                      { label: '特殊', value: 'special' },
-                      { label: '自定义', value: 'custom', disabled: customRenamePresets.length === 0 },
-                    ]}
-                    styles={{ label: { fontWeight: 850 } }}
-                  />
+        <Box className="daily-v2-grid">
+          <Card className="daily-v2-upload" withBorder p="sm" radius="md">
+            <Group justify="space-between" mb={6} wrap="nowrap"><Group gap={7}><UploadCloud size={17} /><Text fw={850}>素材目录</Text><Badge variant="light">{props.folderPaths.length}</Badge></Group><Group gap={4}><Button size="compact-xs" variant="light" onClick={props.onAddFolder}>添加</Button>{props.folderPaths.length > 0 && <Button size="compact-xs" variant="subtle" color="red" onClick={props.onClearFolders}>清空</Button>}</Group></Group>
+            <Dropzone className="daily-v2-dropzone" onDrop={() => {}} onDropCapture={(event: React.DragEvent) => { event.preventDefault(); event.stopPropagation(); const paths = extractDroppedPaths(event); if (paths.length) props.onDropPaths(paths) }} activateOnClick={false} onClick={!props.folderPaths.length ? props.onAddFolder : undefined} styles={{ root: { height: '100%', minHeight: 0, padding: 7, cursor: props.folderPaths.length ? 'default' : 'pointer' }, inner: { height: '100%', pointerEvents: props.folderPaths.length ? 'auto' : 'none' } }}>
+              {props.folderPaths.length ? <ScrollArea h="100%" type="auto" offsetScrollbars><Stack gap={5}>{props.folderPaths.map((path) => <Paper key={path} withBorder px="xs" py={5} radius="sm"><Group justify="space-between" wrap="nowrap"><Group gap={7} wrap="nowrap" style={{ minWidth: 0 }}><FolderOpen size={16} color="var(--mantine-color-blue-filled)" /><Box style={{ minWidth: 0 }}><Text size="xs" fw={800} truncate>{getFolderName(path)}</Text><Text size="10px" c="dimmed" truncate>{path}</Text></Box></Group><Group gap={1} wrap="nowrap"><ActionIcon size="sm" variant="subtle" onClick={() => props.onOpenFolder(path)}><FolderOpen size={14} /></ActionIcon><ActionIcon size="sm" variant="subtle" color="red" onClick={() => props.onRemoveFolder(path)}><X size={14} /></ActionIcon></Group></Group></Paper>)}</Stack></ScrollArea> : <Flex h="100%" direction="column" justify="center" align="center" gap={5}><UploadCloud size={28} color="var(--mantine-color-blue-filled)" /><Text size="xs" fw={750}>拖入多个目录或点击选择</Text><Text size="10px" c="dimmed">自动去重并识别尺寸</Text></Flex>}
+            </Dropzone>
+          </Card>
 
-                  {renameSelection.mode === 'custom' && (
-                    <Select
-                      label="本次使用的自定义模板"
-                      description="模板名称来自设置 > 命名模板"
-                      value={renameSelection.customPresetId || null}
-                      data={customRenamePresets.map((preset) => ({ label: preset.name, value: preset.id }))}
-                      onChange={(value) => value && onChangeCustomPreset(value)}
-                      placeholder="选择一个具名模板"
-                      searchable
-                    />
-                  )}
-
-                  <Paper withBorder radius={8} p="sm" style={{ ...compactCardStyle, borderLeft: '4px solid var(--mantine-color-violet-filled)' }}>
-                    <Group justify="space-between" align="flex-start" wrap="nowrap">
-                      <Box style={{ minWidth: 0 }}>
-                        <Text size="xs" c="dimmed" fw={850}>当前模板</Text>
-                        <Text fw={900} truncate>{previewPresetName || renameExample?.presetName || '模板不可用'}</Text>
-                      </Box>
-                      <Badge color={renamePreview?.canExecute ? 'teal' : renamePreview ? 'red' : 'gray'} variant="light">
-                        {renamePreview?.canExecute ? '预检通过' : renamePreview ? '预检阻断' : '未预检'}
-                      </Badge>
-                    </Group>
-                  </Paper>
-
-                  {renameExample && (
-                    <Box>
-                      <Text size="xs" c="dimmed" fw={850} mb={5}>命名示例</Text>
-                      <Stack gap={5}>
-                        {renameExample.items.map((item) => (
-                          <Paper key={item.label} withBorder radius={6} px="sm" py={7}>
-                            <Text size="xs" c="dimmed">{item.label}</Text>
-                            <Text size="sm" fw={850} c={item.valid ? 'teal' : 'red'} style={{ overflowWrap: 'anywhere' }}>
-                              {item.value}
-                            </Text>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Box>
-                  )}
-
-                  {previewRows.length > 0 && (
-                    <Box>
-                      <Text size="xs" c="dimmed" fw={850} mb={5}>真实文件名预览</Text>
-                      <Stack gap={5}>
-                        {previewRows.map((item) => (
-                          <Paper key={item.oldPath} withBorder radius={6} px="sm" py={7}>
-                            <Text size="xs" c="dimmed" truncate>{item.oldFileName}</Text>
-                            <Text size="sm" fw={850} c="teal" truncate>→ {item.newFileName}</Text>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Box>
-                  )}
-
-                  {renameSelection.mode === 'custom' && previewErrors.length > 0 && (
-                    <Alert color="red" title="自定义模板暂时不能执行">
-                      <Stack gap="xs">
-                        <Text size="sm">{previewErrors[0]?.error || '请检查当前模板字段。'}</Text>
-                        {canFallbackToRegular ? (
-                          <Button variant="light" color="blue" size="xs" onClick={onFallbackToRegular} style={{ alignSelf: 'flex-start' }}>
-                            明确改用常规模板
-                          </Button>
-                        ) : (
-                          <Text size="xs">常规模板也需要修正，请到设置中恢复系统默认。</Text>
-                        )}
-                      </Stack>
-                    </Alert>
-                  )}
-
-                  {workflowSaveState === 'error' && (
-                    <Alert color="red" title="模板未能保存到本机">
-                      当前内存中的模板仍可用于本次预检，但团队下次启动前请先到设置页确认保存状态。
-                    </Alert>
-                  )}
-
-                  {hasFailedRenameItems && (
-                    <Alert color="orange" title={`${renameBatchResult?.failedCount || 0} 个文件仍待处理`}>
-                      <Stack gap="xs">
-                        <Text size="sm">成功项已保留，当前列表只留下失败文件，可直接重试。</Text>
-                        <Button variant="light" color="orange" size="xs" loading={isRenaming} onClick={onRetryFailed} style={{ alignSelf: 'flex-start' }}>
-                          仅重试失败项
-                        </Button>
-                      </Stack>
-                    </Alert>
-                  )}
-                </Stack>
-              </Card>
-            </Stack>
-
-            <Stack className="daily-main" gap={18} style={{ flex: 1, minWidth: 0 }}>
-              <Card className="daily-status-card" withBorder radius={8} p={22} style={cardStyle}>
-                <Group justify="space-between" wrap="nowrap" align="center">
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Group gap={10} mb={8}>
-                      <Box
-                        w={8}
-                        h={8}
-                        style={{
-                          borderRadius: 999,
-                          background: `var(--mantine-color-${statusState.color}-filled)`,
-                        }}
-                      />
-                      <Badge color={statusState.color} variant="light" radius="sm" styles={{ root: { fontWeight: 850 } }}>
-                        {statusState.label}
-                      </Badge>
-                    </Group>
-                    <Title order={2} c="var(--mantine-color-text)" mb={8} style={{ fontSize: 30, lineHeight: 1.1 }}>
-                      {statusState.title}
-                    </Title>
-                    <Text c="var(--mantine-color-dimmed)" size="md" fw={550}>
-                      {statusState.description}
-                    </Text>
-                  </Box>
-                  <ThemeIcon size={70} radius={8} variant="light" color={statusState.color}>
-                    {statusState.icon}
-                  </ThemeIcon>
-                </Group>
-              </Card>
-
-              <Flex className="daily-upload-grid" gap={18} align="stretch">
-                <Card className="daily-upload-card" withBorder radius={8} p={22} style={{ ...cardStyle, flex: 1.15, minWidth: 0 }}>
-                  <SectionTitle
-                    icon={<UploadCloud size={16} />}
-                    title="上传素材"
-                    aside={folderPaths.length > 0 && (
-                      <Group gap={8}>
-                        <Button
-                          variant="light"
-                          color="blue"
-                          size="xs"
-                          radius={8}
-                          leftSection={<FolderPlus size={14} />}
-                          onClick={onAddFolder}
-                          styles={{ root: { fontWeight: 850 } }}
-                        >
-                          添加
-                        </Button>
-                        <Button
-                          variant="light"
-                          color="red"
-                          size="xs"
-                          radius={8}
-                          leftSection={<Trash2 size={14} />}
-                          onClick={onClearFolders}
-                          styles={{ root: { fontWeight: 850 } }}
-                        >
-                          清空
-                        </Button>
-                      </Group>
-                    )}
-                  />
-                  <Dropzone
-                    className="daily-dropzone"
-                    onDrop={() => {}}
-                    onDropCapture={(event: React.DragEvent) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      const paths = extractDroppedPaths(event);
-                      if (paths.length > 0) onDropPaths(paths);
-                    }}
-                    activateOnClick={false}
-                    onClick={folderPaths.length === 0 ? onAddFolder : undefined}
-                    radius={8}
-                    styles={{
-                      root: {
-                        minHeight: 228,
-                        border: folderPaths.length > 0 ? '1px solid var(--mantine-color-default-border)' : '2px dashed var(--mantine-color-default-border)',
-                        background: 'var(--mantine-color-default)',
-                        display: 'flex',
-                        alignItems: folderPaths.length > 0 ? 'stretch' : 'center',
-                        justifyContent: folderPaths.length > 0 ? 'flex-start' : 'center',
-                        cursor: folderPaths.length > 0 ? 'default' : 'pointer',
-                        padding: folderPaths.length > 0 ? 12 : 18,
-                      },
-                      inner: {
-                        pointerEvents: folderPaths.length > 0 ? 'auto' : 'none',
-                        width: '100%',
-                      },
-                    }}
-                  >
-                    {folderPaths.length > 0 ? (
-                      <ScrollArea style={{ height: 206, width: '100%' }} offsetScrollbars>
-                        <Stack gap="sm">
-                          {folderPaths.map((path) => (
-                            <Paper
-                              key={path}
-                              withBorder
-                              radius={8}
-                              p="sm"
-                              style={{
-                                borderColor: 'var(--mantine-color-default-border)',
-                                background: 'var(--mantine-color-body)',
-                              }}
-                            >
-                              <Group justify="space-between" wrap="nowrap">
-                                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                                  <ThemeIcon size={34} radius={8} variant="light" color="blue">
-                                    <FolderOpen size={16} />
-                                  </ThemeIcon>
-                                  <Stack gap={2} style={{ minWidth: 0, overflow: 'hidden' }}>
-                                    <Text truncate c="var(--mantine-color-text)" fw={850} size="sm">
-                                      {getFolderName(path)}
-                                    </Text>
-                                    <Text truncate c="dimmed" size="xs">
-                                      {path}
-                                    </Text>
-                                  </Stack>
-                                </Group>
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="red"
-                                  radius={8}
-                                  aria-label="删除目录"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onRemoveFolder(path);
-                                  }}
-                                >
-                                  <X size={17} />
-                                </ActionIcon>
-                              </Group>
-                            </Paper>
-                          ))}
-                        </Stack>
-                      </ScrollArea>
-                    ) : (
-                      <Flex direction="column" align="center" justify="center" gap="sm">
-                        <ThemeIcon variant="light" color="blue" size={44} radius={8}>
-                          <UploadCloud size={25} />
-                        </ThemeIcon>
-                        <Text size="sm" c="var(--mantine-color-dimmed)" ta="center" fw={750}>
-                          拖入素材目录或点击选择
-                        </Text>
-                      </Flex>
-                    )}
-                  </Dropzone>
-                  {hasFinishedRenaming && (
-                    <Button
-                      mt="md"
-                      variant="light"
-                      color="teal"
-                      radius={8}
-                      leftSection={<FolderOpen size={16} />}
-                      onClick={() => {
-                        if (lastRenamedPaths.length > 0) onOpenFolder(lastRenamedPaths[0]);
-                      }}
-                      styles={{ root: { fontWeight: 850 } }}
-                    >
-                      打开对应文件夹
-                    </Button>
-                  )}
-                </Card>
-
-                <Card className="daily-sizes-card" withBorder radius={8} p={22} style={{ ...cardStyle, flex: 0.85, minWidth: 280 }}>
-                  <SectionTitle icon={<FileText size={16} />} title="尺寸目标" />
-                  <Stack gap="lg">
-                    <Box>
-                      <Text size="sm" fw={850} c="var(--mantine-color-dimmed)" mb={10}>
-                        需求表尺寸
-                      </Text>
-                      {requirementSizes.length > 0 ? (
-                        <Group gap={8}>
-                          {requirementSizes.map((size) => (
-                            <Badge key={size} color="blue" variant="light" radius="sm" styles={{ root: { fontWeight: 850 } }}>
-                              {size}
-                            </Badge>
-                          ))}
-                        </Group>
-                      ) : (
-                        <Text size="sm" c="var(--mantine-color-dimmed)">
-                          未导入需求表
-                        </Text>
-                      )}
-                    </Box>
-
-                    {detectedFolderSizes.length > 0 && (
-                      <Box>
-                        <Text size="sm" fw={850} c="var(--mantine-color-dimmed)" mb={10}>
-                          素材内识别
-                        </Text>
-                        <Group gap={8}>
-                          {detectedFolderSizes.map((size) => (
-                            <Badge key={size} color="gray" variant="outline" radius="sm" styles={{ root: { fontWeight: 800 } }}>
-                              {size}
-                            </Badge>
-                          ))}
-                        </Group>
-                      </Box>
-                    )}
-
-                    <Box>
-                      <Text size="sm" fw={850} c="var(--mantine-color-dimmed)" mb={10}>
-                        手动校验尺寸
-                      </Text>
-                      <Stack gap="md">
-                        {renderSizeButtons('横版与方形', horizontalManualSizes)}
-                        {renderSizeButtons('竖版', verticalManualSizes)}
-                      </Stack>
-                    </Box>
-                  </Stack>
-                </Card>
-              </Flex>
-
-              <Card
-                className="daily-validation-card"
-                radius={8}
-                p={0}
-                withBorder
-                style={{
-                  ...cardStyle,
-                  overflow: 'hidden',
-                }}
-              >
-                <Box p={22} pb={12}>
-                  <SectionTitle icon={<FileText size={16} />} title="校验反馈" />
-                  {validationSummary.totalCount > 0 && (
-                    <Group gap="xs" mt={-4} mb="xs" wrap="wrap">
-                      {blockingIssueCount > 0 && (
-                        <Badge color="red" variant="light" radius="sm">
-                          需处理 {blockingIssueCount} 项
-                        </Badge>
-                      )}
-                      {emptyFolderCount > 0 && (
-                        <Badge color="orange" variant="light" radius="sm">
-                          缺失文件 {emptyFolderCount} 个目录
-                        </Badge>
-                      )}
-                      {missingTotal > 0 && emptyFolderCount === 0 && (
-                        <Badge color="orange" variant="light" radius="sm">
-                          缺 {missingTotal} 张
-                        </Badge>
-                      )}
-                      {validationSummary.extraCount > 0 && (
-                        <Badge color="blue" variant="light" radius="sm">
-                          非需求 {validationSummary.extraCount} 项
-                        </Badge>
-                      )}
-                      {validationSummary.passedCount > 0 && (
-                        <Badge color="teal" variant="light" radius="sm">
-                          已通过 {validationSummary.passedCount} 项
-                        </Badge>
-                      )}
-                      {validationSummary.hasMissingOnlyIssues && validationSummary.canRenamePassedFiles && (
-                        <Badge color="blue" variant="light" radius="sm">
-                          可先重命名已有素材
-                        </Badge>
-                      )}
-                    </Group>
-                  )}
-                </Box>
-
-                <Box
-                  px={22}
-                  py={10}
-                  style={{
-                    borderTop: '1px solid var(--mantine-color-default-border)',
-                    borderBottom: '1px solid var(--mantine-color-default-border)',
-                    background: 'var(--mantine-color-default)',
-                  }}
-                >
-                  <Button
-                    variant="subtle"
-                    color="gray"
-                    leftSection={isTableExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    onClick={onToggleTable}
-                    styles={{
-                      root: {
-                        paddingInline: 0,
-                        color: 'var(--mantine-color-text)',
-                        fontWeight: 850,
-                      },
-                    }}
-                  >
-                    {isTableExpanded ? '收起详情' : '查看详情'}
-                  </Button>
-                </Box>
-
-                <Collapse in={isTableExpanded}>
-                  <Box p={22}>
-                    {groupedPreviewRows.length > 0 ? (
-                      <Accordion
-                        multiple
-                        value={accordionValue}
-                        onChange={setAccordionValue}
-                        variant="separated"
-                        styles={{
-                          item: {
-                            backgroundColor: 'var(--mantine-color-default)',
-                            border: '1px solid var(--mantine-color-default-border)',
-                            borderRadius: 8,
-                            marginBottom: 8,
-                          },
-                          control: {
-                            padding: '12px 16px',
-                          },
-                          panel: {
-                            padding: '0 16px 14px 16px',
-                          },
-                          content: {
-                            padding: 0,
-                          },
-                        }}
-                      >
-                        {groupedPreviewRows.map((group) => (
-                          <Accordion.Item key={group.folderName} value={group.folderName}>
-                            <Accordion.Control>
-                              <Group justify="space-between">
-                                <Group gap="sm">
-                                  <FolderOpen size={18} color={getGroupIconColor(group)} />
-                                  <Text
-                                    fw={850}
-                                    c={group.hasBlockingIssues ? 'var(--mantine-color-red-filled)' : 'var(--mantine-color-text)'}
-                                  >
-                                    {group.folderName}
-                                  </Text>
-                                  {group.blockingCount > 0 && (
-                                    <Badge color="red" variant="light" size="sm">
-                                      需处理 {group.blockingCount}
-                                    </Badge>
-                                  )}
-                                  {group.emptyFolderCount > 0 && (
-                                    <Badge color="orange" variant="light" size="sm">
-                                      缺失文件
-                                    </Badge>
-                                  )}
-                                  {group.missingTotal > 0 && group.emptyFolderCount === 0 && (
-                                    <Badge color="orange" variant="light" size="sm">
-                                      缺 {group.missingTotal} 张
-                                    </Badge>
-                                  )}
-                                  {group.extraCount > 0 && (
-                                    <Badge color="blue" variant="light" size="sm">
-                                      非需求 {group.extraCount}
-                                    </Badge>
-                                  )}
-                                  {group.passedCount > 0 && (
-                                    <Badge color="teal" variant="light" size="sm">
-                                      已通过 {group.passedCount}
-                                    </Badge>
-                                  )}
-                                </Group>
-                              </Group>
-                            </Accordion.Control>
-                            <Accordion.Panel>
-                              {group.actionRows.length > 0 ? (
-                                <ScrollArea type="auto" offsetScrollbars>
-                                  <Table
-                                    highlightOnHover
-                                    horizontalSpacing="lg"
-                                    verticalSpacing="sm"
-                                    styles={{
-                                      thead: {
-                                        background: 'var(--mantine-color-default)',
-                                      },
-                                      th: {
-                                        color: 'var(--mantine-color-dimmed)',
-                                        fontSize: 13,
-                                        fontWeight: 850,
-                                        borderBottom: '1px solid var(--mantine-color-default-border)',
-                                      },
-                                      td: {
-                                        borderTop: '1px solid var(--mantine-color-default-border)',
-                                        color: 'var(--mantine-color-text)',
-                                        fontSize: 14,
-                                      },
-                                    }}
-                                  >
-                                    <Table.Thead>
-                                      <Table.Tr>
-                                        <Table.Th>需要处理</Table.Th>
-                                        <Table.Th>原因 / 建议</Table.Th>
-                                        <Table.Th>大小</Table.Th>
-                                        <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
-                                        <Table.Th style={{ textAlign: 'right' }}>操作</Table.Th>
-                                      </Table.Tr>
-                                    </Table.Thead>
-                                    <Table.Tbody>
-                                      {renderValidationRows(group.actionRows, { showActions: true })}
-                                    </Table.Tbody>
-                                  </Table>
-                                </ScrollArea>
-                              ) : (
-                                <Paper
-                                  withBorder
-                                  radius={8}
-                                  p="md"
-                                  style={{
-                                    borderColor: 'var(--mantine-color-default-border)',
-                                    background: 'var(--mantine-color-body)',
-                                  }}
-                                >
-                                  <Group gap="sm">
-                                    <CheckCircle2 size={18} color="var(--mantine-color-teal-filled)" />
-                                    <Text fw={850} c="var(--mantine-color-text)">
-                                      没有需要处理的问题
-                                    </Text>
-                                    <Text c="var(--mantine-color-dimmed)">
-                                      已通过 {group.passedCount} 项素材。
-                                    </Text>
-                                  </Group>
-                                </Paper>
-                              )}
-
-                              {group.passedRows.length > 0 && (
-                                <Box mt="sm">
-                                  <Button
-                                    variant="subtle"
-                                    color="gray"
-                                    size="xs"
-                                    leftSection={isPassedGroupExpanded(group.folderName) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                    onClick={() => togglePassedGroup(group.folderName)}
-                                    styles={{
-                                      root: {
-                                        paddingInline: 0,
-                                        color: 'var(--mantine-color-dimmed)',
-                                        fontWeight: 850,
-                                      },
-                                    }}
-                                  >
-                                    {isPassedGroupExpanded(group.folderName)
-                                      ? '收起已通过素材'
-                                      : `查看已通过 ${group.passedCount} 项`}
-                                  </Button>
-                                  <Collapse in={isPassedGroupExpanded(group.folderName)}>
-                                    <ScrollArea type="auto" offsetScrollbars>
-                                      <Table
-                                        highlightOnHover
-                                        horizontalSpacing="lg"
-                                        verticalSpacing="sm"
-                                        mt="xs"
-                                        styles={{
-                                          thead: {
-                                            background: 'var(--mantine-color-default)',
-                                          },
-                                          th: {
-                                            color: 'var(--mantine-color-dimmed)',
-                                            fontSize: 13,
-                                            fontWeight: 850,
-                                            borderBottom: '1px solid var(--mantine-color-default-border)',
-                                          },
-                                          td: {
-                                            borderTop: '1px solid var(--mantine-color-default-border)',
-                                            color: 'var(--mantine-color-text)',
-                                            fontSize: 14,
-                                          },
-                                        }}
-                                      >
-                                        <Table.Thead>
-                                          <Table.Tr>
-                                            <Table.Th>已通过素材</Table.Th>
-                                            <Table.Th>原因 / 建议</Table.Th>
-                                            <Table.Th>大小</Table.Th>
-                                            <Table.Th style={{ textAlign: 'right' }}>状态</Table.Th>
-                                          </Table.Tr>
-                                        </Table.Thead>
-                                        <Table.Tbody>
-                                          {renderValidationRows(group.passedRows, { mutedPassed: true })}
-                                        </Table.Tbody>
-                                      </Table>
-                                    </ScrollArea>
-                                  </Collapse>
-                                </Box>
-                              )}
-                            </Accordion.Panel>
-                          </Accordion.Item>
-                        ))}
-                      </Accordion>
-                    ) : (
-                      <Paper
-                        withBorder
-                        radius={8}
-                        p="md"
-                        style={{
-                          borderColor: 'var(--mantine-color-default-border)',
-                          background: 'var(--mantine-color-body)',
-                        }}
-                      >
-                        <Text c="var(--mantine-color-dimmed)" fw={750}>
-                          暂无校验结果
-                        </Text>
-                      </Paper>
-                    )}
-                  </Box>
-                </Collapse>
-              </Card>
-            </Stack>
-          </Flex>
+          <Stack className="daily-v2-controls" gap={7}>
+            <Card withBorder p="xs" radius="md" className="daily-parameter-card"><Group justify="space-between" wrap="nowrap"><Group gap={7} wrap="nowrap"><Sparkles size={16} /><Box><Text size="xs" c="dimmed">命名方式</Text><Text size="sm" fw={850}>{props.renamePreview?.items.find((item) => item.presetName)?.presetName || props.renameExample?.presetName || '常规命名'}</Text></Box></Group><Button size="compact-xs" variant="light" onClick={() => setDetail('naming')}>设置</Button></Group><Text size="10px" c={props.renamePreview?.canExecute ? 'teal' : 'dimmed'} mt={4} truncate>{props.renamePreview?.canExecute ? '预检通过' : '导入目录后自动预检'}{failedRenameCount ? ` · ${failedRenameCount} 个待重试` : ''}</Text></Card>
+            <Card withBorder p="xs" radius="md" className="daily-parameter-card"><Group justify="space-between" wrap="nowrap"><Group gap={7} wrap="nowrap"><SlidersHorizontal size={16} /><Box><Text size="xs" c="dimmed">尺寸目标</Text><Text size="sm" fw={850}>{activeSizes.length} 项</Text></Box></Group><Button size="compact-xs" variant="light" onClick={() => setDetail('sizes')}>选择</Button></Group><Text size="10px" c="dimmed" mt={4} lineClamp={2}>{activeSizes.length ? `需求 ${props.requirementSizes.length} · 目录 ${props.detectedFolderSizes.length} · 手动 ${props.manualTargetSizes.length}` : '尚未识别尺寸'}</Text></Card>
+            <Card withBorder p="xs" radius="md" className="daily-validation-summary"><Group justify="space-between" wrap="nowrap"><Group gap={7}><FileText size={16} /><Box><Text size="xs" c="dimmed">校验结果</Text><Text size="sm" fw={850}>{props.hasValidated ? `${validCount} 通过 · ${validation.summary.blockingCount + validation.summary.missingRowsCount} 待处理` : '等待校验'}</Text></Box></Group><Button size="compact-xs" variant="light" disabled={!props.hasValidated} onClick={() => setDetail('validation')}>详情</Button></Group></Card>
+          </Stack>
         </Box>
-      </ScrollArea>
 
-      <Paper
-        className="daily-actions"
-        radius={8}
-        p={10}
-        shadow="md"
-        style={{
-          position: 'absolute',
-          right: 28,
-          bottom: 24,
-          background: 'var(--mantine-color-default)',
-          border: '1px solid var(--mantine-color-default-border)',
-          boxShadow: 'var(--openflow-shadow-floating)',
-        }}
-      >
-        <Group gap={12}>
-          <Button
-            radius={8}
-            color="blue"
-            size="lg"
-            leftSection={<Play size={18} fill="currentColor" />}
-            onClick={onValidate}
-            loading={isValidating}
-            styles={{
-              root: {
-                height: 54,
-                paddingInline: 30,
-                fontSize: 17,
-                fontWeight: 900,
-              },
-            }}
-          >
-            开始校验
-          </Button>
-          <Button
-            radius={8}
-            color="teal"
-            size="lg"
-            leftSection={<CheckCircle2 size={20} />}
-            onClick={onRename}
-            loading={isRenaming}
-            disabled={!canRename}
-            styles={{
-              root: {
-                height: 54,
-                paddingInline: 30,
-                fontSize: 17,
-                fontWeight: 900,
-              },
-            }}
-          >
-            执行重命名
-          </Button>
-        </Group>
-      </Paper>
+        <Group className="daily-v2-actions" justify="space-between" wrap="nowrap"><Group gap={5} wrap="nowrap" style={{ minWidth: 0 }}><Tooltip label="历史记录"><ActionIcon aria-label="历史记录" size="sm" variant="subtle" color="gray" onClick={props.onOpenHistory}><History size={15} /></ActionIcon></Tooltip><Text size="xs" c="dimmed" truncate>{props.folderPaths.length ? `${props.folderPaths.length} 个目录已加入` : '添加素材目录后开始校验'}</Text></Group><Group gap={6} wrap="nowrap">{failedRenameCount > 0 && <Button size="sm" variant="light" color="orange" loading={props.isRenaming} onClick={props.onRetryFailed}>仅重试失败项</Button>}<Button size="sm" variant="default" leftSection={<Play size={15} />} loading={props.isValidating} disabled={!props.folderPaths.length} onClick={props.onValidate}>{props.hasValidated ? '重新校验' : '开始校验'}</Button><Button size="sm" leftSection={<CheckCircle2 size={15} />} loading={props.isRenaming} disabled={!props.canRename} onClick={props.onRename}>重命名通过项</Button></Group></Group>
+      </Box>
+
+      <Modal opened={detail === 'naming'} onClose={() => setDetail(null)} centered size="calc(100vw - 32px)" title="命名详情" className="focus-modal">
+        <Tabs defaultValue="template" keepMounted={false}>
+          <Tabs.List grow mb="sm">
+            <Tabs.Tab value="template">模板</Tabs.Tab>
+            <Tabs.Tab value="rules">规则</Tabs.Tab>
+            <Tabs.Tab value="preview">预览</Tabs.Tab>
+          </Tabs.List>
+          <ScrollArea h="min(55vh, 420px)" type="auto" offsetScrollbars>
+            <Tabs.Panel value="template" pr={6}>
+              <Stack gap="md">
+                <Box>
+                  <Text size="sm" fw={800} mb={6}>本次使用的命名方式</Text>
+                  <SegmentedControl fullWidth value={props.renameSelection.mode} onChange={(mode) => props.onChangeRenameMode(mode as RenameMode)} data={[{ label: '常规', value: 'regular' }, { label: '特殊', value: 'special' }, { label: '自定义', value: 'custom', disabled: !props.customRenamePresets.length }]} />
+                </Box>
+                {props.renameSelection.mode === 'custom' && <Select label="自定义模板" value={props.renameSelection.customPresetId || null} data={props.customRenamePresets.map((preset) => ({ label: preset.name, value: preset.id }))} onChange={(value) => value && props.onChangeCustomPreset(value)} />}
+                <Alert color="blue" title={props.activeRenamePreset?.name || props.renameExample?.presetName || '当前模板'}>
+                  这里仅选择本次任务使用的模板。字段顺序、分隔符和序号规则在“规则”中查看，需要编辑时进入命名模板设置。
+                </Alert>
+                <Button variant="default" onClick={() => { setDetail(null); props.onOpenSettings() }}>编辑完整命名模板</Button>
+              </Stack>
+            </Tabs.Panel>
+            <Tabs.Panel value="rules" pr={6}>
+              <Stack gap="sm">
+                {(['image', 'video'] as const).map((mediaType) => {
+                  const rule = describeRenameRule(mediaType)
+                  return <Card key={mediaType} withBorder p="sm"><Group justify="space-between" mb={6}><Text size="sm" fw={850}>{mediaType === 'image' ? '图片规则' : '视频规则'}</Text><Badge variant="light">{props.activeRenamePreset?.name || '当前模板'}</Badge></Group>{rule ? <Stack gap={5}><Text size="xs"><Text span c="dimmed">字段顺序：</Text>{rule.tokens.join(' → ')}</Text><Text size="xs"><Text span c="dimmed">分隔符：</Text>{rule.separator}</Text><Text size="xs"><Text span c="dimmed">日期格式：</Text>{rule.dateFormat}</Text><Text size="xs"><Text span c="dimmed">序号：</Text>{rule.sequence}</Text></Stack> : <Text size="xs" c="dimmed">当前模板规则不可用，请重新选择模板。</Text>}</Card>
+                })}
+                <Text size="xs" c="dimmed">规则只决定文件名，不移动素材；正式重命名前仍会先生成预览并阻止重名或无效名称。</Text>
+              </Stack>
+            </Tabs.Panel>
+            <Tabs.Panel value="preview" pr={6}>
+              <Stack gap="xs">
+                {(props.renamePreview?.items || []).slice(0, 30).map((item) => <Paper key={item.oldPath} withBorder p="xs"><Text size="xs" c="dimmed" truncate>{item.oldFileName}</Text><Text size="sm" fw={750} c={item.status === 'blocked' ? 'red' : 'teal'}>{item.status === 'blocked' ? item.error : `→ ${item.newFileName}`}</Text></Paper>)}
+                {!props.renamePreview?.items.length && props.renameExample?.items.map((item) => <Paper key={item.label} withBorder p="xs"><Text size="xs" c="dimmed">{item.label}示例</Text><Text size="sm" fw={750} c={item.valid ? undefined : 'red'}>{item.value}</Text></Paper>)}
+                {!props.renamePreview?.items.length && !props.renameExample?.items.length && <Text ta="center" c="dimmed" py="xl">选择有效模板后显示命名示例；添加素材目录后显示逐文件预览。</Text>}
+              </Stack>
+            </Tabs.Panel>
+          </ScrollArea>
+          <Stack gap="xs" mt="sm">
+            {props.renameSelection.mode === 'custom' && props.renamePreview && !props.renamePreview.canExecute && <Alert color="red" title="模板不能应用">请修正模板字段后再执行。{props.canFallbackToRegular && <Button ml="sm" size="compact-xs" variant="light" onClick={props.onFallbackToRegular}>改用常规模板</Button>}</Alert>}
+            {props.workflowSaveState === 'error' && <Alert color="red">模板尚未保存到本机，请到设置页确认。</Alert>}
+            <Group justify="space-between"><Text size="xs" c="dimmed">关闭后自动保留当前选择。</Text><Button onClick={() => setDetail(null)} disabled={Boolean(props.renamePreview && !props.renamePreview.canExecute)}>应用并返回</Button></Group>
+          </Stack>
+        </Tabs>
+      </Modal>
+
+      <Modal opened={detail === 'sizes'} onClose={() => setDetail(null)} centered size="calc(100vw - 32px)" title="尺寸选择" className="focus-modal"><Stack gap="md"><Group justify="space-between" align="flex-start"><Group gap={6}><Badge color="blue">需求 {props.requirementSizes.length}</Badge><Badge color="teal">目录识别 {props.detectedFolderSizes.length}</Badge><Badge color="gray">手动 {props.manualTargetSizes.length}</Badge></Group><Group gap={6}><Button size="compact-xs" variant="light" disabled={!props.requirementSizes.length} onClick={props.onSelectRequirementSizes}>全选需求尺寸</Button><Button size="compact-xs" variant="default" onClick={props.onRestoreDefaultSizes}>恢复默认</Button><Button size="compact-xs" variant="subtle" color="red" disabled={!props.manualTargetSizes.length} onClick={props.onClearManualSizes}>清除手动尺寸</Button></Group></Group><ScrollArea h="min(55vh, 430px)" type="auto"><Stack gap="md">{renderSizeGroup('横版', groupedSizes.landscape)}{renderSizeGroup('竖版', groupedSizes.portrait)}{renderSizeGroup('方形', groupedSizes.square)}{renderSizeGroup('其他', groupedSizes.other)}</Stack></ScrollArea><Text size="xs" c="dimmed">需求和目录识别尺寸会自动参与校验；勾选项用于临时补充。清空全部素材目录会清除临时选择。</Text><Group justify="flex-end"><Button onClick={() => setDetail(null)}>完成</Button></Group></Stack></Modal>
+
+      <Modal opened={detail === 'validation'} onClose={() => setDetail(null)} centered size="calc(100vw - 24px)" title="校验详情" className="focus-modal"><Stack gap="sm"><Group gap={6}><Badge color="teal">通过 {validCount}</Badge><Badge color="orange">缺失 {validation.summary.missingRowsCount}</Badge><Badge color="red">异常 {validation.summary.blockingCount}</Badge><Badge color="blue">额外 {validation.summary.extraCount}</Badge></Group><ScrollArea h="min(62vh, 500px)" type="auto"><Table striped highlightOnHover withTableBorder><Table.Thead><Table.Tr><Table.Th>目录 / 文件</Table.Th><Table.Th>说明</Table.Th><Table.Th>状态</Table.Th><Table.Th>操作</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{props.validationResults.map((row, index) => <Table.Tr key={`${row.filePath}-${row.targetSize}-${index}`}><Table.Td><Text size="sm" fw={750}>{row.workspaceProjectName || row.folderName}</Text><Text size="xs" c="dimmed">{row.status === 'missing' ? row.targetSize : `${row.fileName}${row.ext}`}</Text></Table.Td><Table.Td><Text size="xs">{getValidationRowReason(row)}</Text>{row.fileSize > 0 && <Text size="10px" c="dimmed">{formatBytes(row.fileSize)}</Text>}</Table.Td><Table.Td><StatusBadge result={row} kind={getValidationRowKind(row)} muted={row.status === 'valid'} /></Table.Td><Table.Td>{canTrashValidationRow(row) && <Button size="compact-xs" variant="subtle" color="red" onClick={() => props.onTrashValidationFile(row)}>移到回收站</Button>}</Table.Td></Table.Tr>)}</Table.Tbody></Table></ScrollArea><Group justify="space-between"><Text size="xs" c="dimmed">异常目录不会阻塞其他已通过目录。</Text><Group>{props.failedValidationFolderCount > 0 && <Button variant="light" color="orange" loading={props.isValidating} onClick={props.onRevalidateFailed}>只重验失败目录（{props.failedValidationFolderCount}）</Button>}<Button variant="default" loading={props.isValidating} onClick={props.onValidate}>重新校验全部</Button><Button disabled={!props.canRename} loading={props.isRenaming} onClick={props.onRename}>重命名通过项</Button></Group></Group></Stack></Modal>
     </Flex>
-  );
+  )
 }

@@ -35,6 +35,9 @@ import {
   toNativeThemeSource,
   type ColorSchemePreference,
 } from '../shared/theme.ts'
+import type { WorkspaceCleanupDiscoveryRequest, WorkspaceCleanupScanRequest, WorkspaceCleanupTreeRequest, WorkspaceInitRequest } from '../shared/workspaceContract.ts'
+import { createWorkspaceFolders } from './workspaceFolders.ts'
+import { discoverWorkspaceCleanupTargets, listWorkspaceCleanupChildren, pruneEmptyWorkspaceParents, scanWorkspaceCleanup, validateWorkspaceCleanupTargets } from './workspaceCleanup.ts'
 
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
@@ -392,14 +395,14 @@ async function showRendererLoadFailure(window: BrowserWindow): Promise<void> {
 
 function createWindow(): void {
   const { width: workWidth, height: workHeight } = screen.getPrimaryDisplay().workAreaSize
-  const windowWidth = Math.min(1440, Math.max(1080, Math.floor(workWidth * 0.92)))
-  const windowHeight = Math.min(900, Math.max(640, Math.floor(workHeight * 0.92)))
+  const windowWidth = Math.min(960, Math.max(820, Math.floor(workWidth * 0.58)))
+  const windowHeight = Math.min(680, Math.max(560, Math.floor(workHeight * 0.72)))
 
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
-    minWidth: 1080,
-    minHeight: 640,
+    minWidth: 760,
+    minHeight: 520,
     show: false, // 先隐藏，等 ready-to-show 再显示，避免白屏
     autoHideMenuBar: true,
     backgroundColor: getWindowBackgroundColor(getResolvedNativeColorScheme()),
@@ -1056,53 +1059,74 @@ ipcMain.handle('fs:processFormat', async (_, { files, config }) => {
 // 记录最近一次整理操作的文件移动路径 (新路径 -> 旧路径)
 let lastOrganizedFiles: Record<string, string> = {}
 
-/**
- * fs:initFolders
- * 批量生成项目文件夹结构。接收 projectsData: Array<{ projectName, sizes }>，
- * 弹窗选择目标总目录后，为每个项目创建主文件夹，内部按尺寸建子文件夹（纯数字如 1080x1920）及 _Assets。
- */
-ipcMain.handle('fs:initFolders', async (_, projectsData: ProjectItem[]) => {
-  const list = Array.isArray(projectsData) ? projectsData : []
-  if (list.length === 0) {
-    return { success: false, destPath: '', error: '项目列表为空' }
-  }
+/** 按工作区规则自动生成 年/月/日/图片或视频/游戏/素材目录。 */
+ipcMain.handle('fs:initFolders', async (_, request: WorkspaceInitRequest) => createWorkspaceFolders(request))
 
-  const result = await dialog.showOpenDialog({
-    title: '选择目标总目录',
-    properties: ['openDirectory'],
-  })
-  if (result.canceled || !result.filePaths[0]) {
-    return { success: false, destPath: '', error: '用户取消选择' }
-  }
-  const rootPath = result.filePaths[0]
+const cancelledWorkspaceCleanupScans = new Set<string>()
 
-  // 每个项目下除尺寸文件夹外，固定创建的 4 个素材分类文件夹（与尺寸文件夹同级）
+/** 懒加载工作区清理目录树的一层子目录，不递归扫描。 */
+ipcMain.handle('fs:listWorkspaceCleanupChildren', async (_, request: WorkspaceCleanupTreeRequest) => (
+  listWorkspaceCleanupChildren(request)
+))
+
+/** 在月份、日期或游戏范围内查找指定的固定生成目录，不修改文件。 */
+ipcMain.handle('fs:discoverWorkspaceCleanupTargets', async (_, request: WorkspaceCleanupDiscoveryRequest) => (
+  discoverWorkspaceCleanupTargets(request)
+))
+
+/** 只读清理预检；扫描时不跟随符号链接或目录联接。 */
+ipcMain.handle('fs:scanWorkspaceCleanup', async (_, request: WorkspaceCleanupScanRequest) => {
+  const scanId = request.scanId || ''
+  if (scanId) cancelledWorkspaceCleanupScans.delete(scanId)
   try {
-    const createdPaths = await Promise.all(
-      list.map(async (project) => {
-        const projectRoot = join(rootPath, sanitizePathSegment(project.projectName))
-        await fs.ensureDir(projectRoot)
+    return await scanWorkspaceCleanup(request, () => Boolean(scanId && cancelledWorkspaceCleanupScans.has(scanId)))
+  } finally {
+    if (scanId) cancelledWorkspaceCleanupScans.delete(scanId)
+  }
+})
 
-        const dirPromises: Promise<void>[] = []
-        const sizes = project.sizes || []
+ipcMain.handle('fs:cancelWorkspaceCleanupScan', async (_, scanId: string) => {
+  if (scanId) cancelledWorkspaceCleanupScans.add(scanId)
+  return { success: Boolean(scanId) }
+})
 
-        for (const size of sizes) {
-          const folderName = size.replace(/\*/g, 'x')
-          const sizeDir = join(projectRoot, folderName)
-          dirPromises.push(fs.ensureDir(join(sizeDir, '_Assets')))
-        }
-
-        for (const name of FIXED_FOLDERS) {
-          dirPromises.push(fs.ensureDir(join(projectRoot, `${project.projectName}-${name}`)))
-        }
-
-        await Promise.all(dirPromises)
-        return projectRoot
-      })
-    )
-    return { success: true, destPath: rootPath, createdPaths }
+ipcMain.handle('fs:trashWorkspacePaths', async (_, request: WorkspaceCleanupScanRequest) => {
+  const scan = await scanWorkspaceCleanup(request)
+  if (!scan.success) return { success: false, removedPaths: [], error: scan.error }
+  const safeTargets = validateWorkspaceCleanupTargets(request.rootDir, scan.entries.map((entry) => entry.path), request.activePaths)
+  if (safeTargets.length !== scan.entries.length) {
+    return { success: false, removedPaths: [], error: '清理目标已变化或包含受保护目录，请重新扫描。' }
+  }
+  const removedPaths: string[] = []
+  try {
+    for (const targetPath of safeTargets) {
+      await shell.trashItem(targetPath)
+      removedPaths.push(targetPath)
+    }
+    if (request.removeEmptyParents) await pruneEmptyWorkspaceParents(request.rootDir, removedPaths)
+    return { success: true, removedPaths }
   } catch (error) {
-    return { success: false, destPath: '', error: String(error) }
+    return { success: false, removedPaths, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+ipcMain.handle('fs:deleteWorkspacePaths', async (_, request: WorkspaceCleanupScanRequest) => {
+  const scan = await scanWorkspaceCleanup(request)
+  if (!scan.success) return { success: false, removedPaths: [], error: scan.error }
+  const safeTargets = validateWorkspaceCleanupTargets(request.rootDir, scan.entries.map((entry) => entry.path), request.activePaths)
+  if (safeTargets.length !== scan.entries.length) {
+    return { success: false, removedPaths: [], error: '清理目标已变化或包含受保护目录，请重新扫描。' }
+  }
+  const removedPaths: string[] = []
+  try {
+    for (const targetPath of safeTargets) {
+      await fs.remove(targetPath)
+      removedPaths.push(targetPath)
+    }
+    if (request.removeEmptyParents) await pruneEmptyWorkspaceParents(request.rootDir, removedPaths)
+    return { success: true, removedPaths }
+  } catch (error) {
+    return { success: false, removedPaths, error: error instanceof Error ? error.message : String(error) }
   }
 })
 

@@ -298,7 +298,7 @@ export function OrganizerWorkspace({
                   >
                     <Group justify="space-between" wrap="nowrap" align="center" h="100%">
                       <Box style={{ flex: 1, minWidth: 0 }}>
-                        <Group gap={10} mb="md">
+                        <Group gap={10} mb={2}>
                           <Box
                             w={8}
                             h={8}
@@ -317,7 +317,7 @@ export function OrganizerWorkspace({
                           </Badge>
                         </Group>
 
-                        <Title order={1} c="var(--mantine-color-text)" mb={12} style={{ fontSize: 32, lineHeight: 1.02 }}>
+                        <Title order={1} c="var(--mantine-color-text)" mb={2} style={{ fontSize: 32, lineHeight: 1.02 }}>
                           {statusTitle}
                         </Title>
 
@@ -325,7 +325,7 @@ export function OrganizerWorkspace({
                           {statusDescription}
                         </Text>
 
-                        <Group mt="xl">
+                        <Group mt={4}>
                           <Button
                             size="md"
                             radius="xl"

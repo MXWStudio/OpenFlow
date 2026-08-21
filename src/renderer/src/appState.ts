@@ -6,6 +6,11 @@ import {
   type LegacyRenameTemplates,
   type RenameSettingsV2,
 } from '../../shared/renameTemplates.ts';
+import {
+  DEFAULT_WORKSPACE_AUTOMATION,
+  normalizeWorkspaceAutomationSettings,
+  type WorkspaceAutomationSettings,
+} from '../../shared/workspaceContract.ts';
 
 export { formatBytes, getDirFromFilePath, dedupeStrings, formatHistoryTime };
 
@@ -52,7 +57,7 @@ export interface SystemSettings {
   closeToTray: boolean;
 }
 
-export interface WorkspaceSettings {
+export interface WorkspaceSettings extends WorkspaceAutomationSettings {
   sourceDir: string;
   destDir: string;
 }
@@ -67,6 +72,8 @@ export interface HistoryEntry {
   count: number;
   status: 'success' | 'warning' | 'error';
   timestamp: number;
+  paths?: string[];
+  cleanedAt?: number;
 }
 
 export interface RequirementDetail {
@@ -118,6 +125,7 @@ export interface ValidationResult {
   missingKind?: 'empty_folder';
   error?: string;
   workspaceProjectName?: string;
+  workspaceRootPath?: string;
 }
 
 export const PRESET_SIZES = [
@@ -168,7 +176,16 @@ export const DEFAULT_SYSTEM: SystemSettings = {
 export const DEFAULT_WORKSPACE: WorkspaceSettings = {
   sourceDir: '',
   destDir: '',
+  ...DEFAULT_WORKSPACE_AUTOMATION,
 };
+
+export function normalizeWorkspaceSettings(value?: Partial<WorkspaceSettings> | null): WorkspaceSettings {
+  return {
+    sourceDir: typeof value?.sourceDir === 'string' ? value.sourceDir : '',
+    destDir: typeof value?.destDir === 'string' ? value.destDir : '',
+    ...normalizeWorkspaceAutomationSettings(value),
+  };
+}
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   togglePanel: 'CommandOrControl+Shift+Space',
 };

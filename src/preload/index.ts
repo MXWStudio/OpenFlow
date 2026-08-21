@@ -8,6 +8,7 @@ import type { RenameRequest } from '../shared/renameTemplates'
 import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 import type { DesktopExtractionCandidate } from '../shared/extractionContract'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
+import type { WorkspaceCleanupDiscoveryRequest, WorkspaceCleanupScanRequest, WorkspaceCleanupTreeRequest, WorkspaceInitRequest } from '../shared/workspaceContract'
 
 const updateStateListeners = new WeakMap<
   (state: UpdateViewState) => void,
@@ -62,9 +63,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件系统 API
   // ────────────────────────────────────────────────
   fs: {
-    /** 批量初始化项目目录结构（主进程内弹窗选择目标总目录） */
-    initFolders: (projectsData: Array<{ projectName: string; sizes: string[]; requirements?: unknown[] }>) =>
-      ipcRenderer.invoke('fs:initFolders', projectsData),
+    /** 按持久化工作区规则批量初始化项目目录结构 */
+    initFolders: (request: WorkspaceInitRequest) =>
+      ipcRenderer.invoke('fs:initFolders', request),
+
+    listWorkspaceCleanupChildren: (request: WorkspaceCleanupTreeRequest) =>
+      ipcRenderer.invoke('fs:listWorkspaceCleanupChildren', request),
+
+    discoverWorkspaceCleanupTargets: (request: WorkspaceCleanupDiscoveryRequest) =>
+      ipcRenderer.invoke('fs:discoverWorkspaceCleanupTargets', request),
+
+    scanWorkspaceCleanup: (request: WorkspaceCleanupScanRequest) =>
+      ipcRenderer.invoke('fs:scanWorkspaceCleanup', request),
+
+    cancelWorkspaceCleanupScan: (scanId: string) =>
+      ipcRenderer.invoke('fs:cancelWorkspaceCleanupScan', scanId),
+
+    trashWorkspacePaths: (request: WorkspaceCleanupScanRequest) =>
+      ipcRenderer.invoke('fs:trashWorkspacePaths', request),
+
+    deleteWorkspacePaths: (request: WorkspaceCleanupScanRequest) =>
+      ipcRenderer.invoke('fs:deleteWorkspacePaths', request),
 
     /** 读取若干文件夹下的一级子目录名，识别尺寸格式（如 720x1280）并返回规范化尺寸数组 */
     readProjectSizes: (folderPaths: string[]) =>

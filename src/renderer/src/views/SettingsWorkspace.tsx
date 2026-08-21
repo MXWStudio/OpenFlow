@@ -32,7 +32,6 @@ import {
   Settings,
   User,
   Workflow,
-  Wrench,
 } from 'lucide-react';
 import {
   type ShortcutSettings,
@@ -42,8 +41,10 @@ import {
   type WorkspaceSettings,
 } from '../appState';
 import { RenameTemplateSettings } from './RenameTemplateSettings';
+import { WorkspaceAutomationPanel } from './WorkspaceAutomationPanel';
 import type { UpdateViewState } from '../../../shared/updateContract';
 import type { RestorableSettingsTab } from '../../../shared/updateContract';
+import { OpenFlowWaterSloth } from '../components/OpenFlowWaterSloth';
 
 interface SettingsWorkspaceProps {
   userInfo: UserInfo;
@@ -60,6 +61,7 @@ interface SettingsWorkspaceProps {
   workflowSaveState: 'idle' | 'saving' | 'saved' | 'error';
   requestedTab?: RestorableSettingsTab;
   onActiveTabChange?: (tab: RestorableSettingsTab) => void;
+  activeWorkspacePaths: string[];
 }
 
 const organizerFormatOptions = [
@@ -112,6 +114,7 @@ export function SettingsWorkspace({
   workflowSaveState,
   requestedTab,
   onActiveTabChange,
+  activeWorkspacePaths,
 }: SettingsWorkspaceProps) {
   const { setColorScheme } = useMantineColorScheme();
   const [activeTab, setActiveTab] = useState<RestorableSettingsTab>('system');
@@ -357,13 +360,14 @@ export function SettingsWorkspace({
           </Tabs.Panel>
 
           <Tabs.Panel value="workspace" pt="md">
-            <Stack gap="xl" maw={700}>
+            <Stack gap="xl" maw={920}>
+              <WorkspaceAutomationPanel value={workspaceSettings} onChange={setWorkspaceSettings} activePaths={activeWorkspacePaths} />
               <Box>
-                <Title order={4} mb="lg">核心路径配置</Title>
+                <Title order={4} mb="lg">素材整理路径</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="md">
                     <TextInput
-                      label="默认的素材源文件夹路径"
+                      label="默认素材来源"
                       value={workspaceSettings.sourceDir}
                       onChange={(event) => setWorkspaceSettings((prev) => ({ ...prev, sourceDir: event.currentTarget.value }))}
                       rightSection={
@@ -373,7 +377,7 @@ export function SettingsWorkspace({
                       }
                     />
                     <TextInput
-                      label="目标主文件夹路径"
+                      label="整理目标位置"
                       description="重命名后文件/目录转移的根路径"
                       value={workspaceSettings.destDir}
                       onChange={(event) => setWorkspaceSettings((prev) => ({ ...prev, destDir: event.currentTarget.value }))}
@@ -440,7 +444,7 @@ export function SettingsWorkspace({
                   <Stack align="center" gap="md" mb="xl">
                     <Box w={80} h={80} style={{ borderRadius: 20, backgroundColor: 'var(--mantine-color-blue-light)' }}>
                       <Flex h="100%" align="center" justify="center">
-                        <Wrench size={40} color="var(--mantine-color-blue-6)" />
+                        <OpenFlowWaterSloth motion="idle" size={72} label="OpenFlow 小水懒" />
                       </Flex>
                     </Box>
                     <Title order={3}>OpenFlow Studio</Title>

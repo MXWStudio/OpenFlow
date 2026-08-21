@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
-  Avatar,
   Badge,
   Box,
   Button,
@@ -11,6 +10,7 @@ import {
   Group,
   Indicator,
   Modal,
+  ScrollArea,
   Stack,
   Text,
   Title,
@@ -18,8 +18,6 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { notify } from './utils/notify';
-import { createAvatar } from '@dicebear/core';
-import * as dylan from '@dicebear/dylan';
 import {
   Bell,
   CalendarDays,
@@ -37,6 +35,7 @@ import {
   DEFAULT_WORKSPACE,
   DEFAULT_SHORTCUTS,
   hydrateWorkflowSettings,
+  normalizeWorkspaceSettings,
   type HistoryEntry,
   type DailyRequirementSession,
   type NotificationHistoryEntry,
@@ -74,9 +73,24 @@ import {
   type RenameSelection,
 } from '../../shared/renameTemplates.ts';
 import type { RestorableAppView, RestorableSettingsTab, UpdateViewState } from '../../shared/updateContract.ts';
+import type {
+  WorkspaceInitConflict,
+  WorkspaceInitOverrides,
+  WorkspaceInitResult,
+  WorkspaceMediaKind,
+} from '../../shared/workspaceContract.ts';
 import { normalizeRestorableSettingsTab, normalizeRestorableView } from './updateSession';
+import { OpenFlowWaterSloth } from './components/OpenFlowWaterSloth';
+import { getDailyWaterSlothMotion } from './waterSlothMotion.ts';
 
 type ViewKey = RestorableAppView;
+const DEFAULT_MANUAL_TARGET_SIZES = ['1920*1080', '1080*1920'];
+interface FolderCreationPrompt {
+  projects: RequirementProject[];
+  automatic: boolean;
+  overrides: WorkspaceInitOverrides;
+  conflict: WorkspaceInitConflict;
+}
 
 export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
@@ -99,7 +113,8 @@ export default function App() {
   const [isChangingJson, setIsChangingJson] = useState(false);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [lastRenamedPaths, setLastRenamedPaths] = useState<string[]>([]);
-  const [manualTargetSizes, setManualTargetSizes] = useState<string[]>(['1920*1080', '1080*1920']);
+  const [completedAt, setCompletedAt] = useState<number | null>(null);
+  const [manualTargetSizes, setManualTargetSizes] = useState<string[]>(DEFAULT_MANUAL_TARGET_SIZES);
   const [detectedFolderSizes, setDetectedFolderSizes] = useState<string[]>([]);
   const [projectsList, setProjectsList] = useState<RequirementProject[]>([]);
   const [jsonFileName, setJsonFileName] = useState('');
@@ -120,8 +135,11 @@ export default function App() {
   const [requestedSettingsTab, setRequestedSettingsTab] = useState<RestorableSettingsTab>('system');
   const [pendingExtractionCandidate, setPendingExtractionCandidate] = useState<DesktopExtractionCandidate | null>(null);
   const [isExtractionPromptOpen, setIsExtractionPromptOpen] = useState(false);
+  const [folderCreationPrompt, setFolderCreationPrompt] = useState<FolderCreationPrompt | null>(null);
+  const [folderCreationReport, setFolderCreationReport] = useState<WorkspaceInitResult | null>(null);
   const lastUserActivityAtRef = useRef(Date.now());
   const workflowContentRef = useRef({ hasContent: false, sourceMessageId: '' });
+  const autoCreatedSessionRef = useRef('');
 
   const primaryProjectName = projectsList[0]?.projectName ?? '';
   const validationPresentation = useMemo(
@@ -136,8 +154,12 @@ export default function App() {
   const hasBlockingIssues = hasValidated && validationPresentation.summary.hasBlockingIssues;
   const hasMissingIssues = hasValidated && validationPresentation.summary.hasMissingIssues;
   const hasExtraIssues = hasValidated && validationPresentation.summary.hasExtraIssues;
-  const validationCanRename = hasValidated && validationPresentation.summary.canRenamePassedFiles;
+  const validationCanRename = hasValidated && validationResults.some((item) => item.status === 'valid');
   const canRename = validationCanRename && renamePreview?.canExecute === true;
+  const failedValidationFolderPaths = useMemo(
+    () => dedupeStrings(validationResults.filter((item) => item.status !== 'valid').map((item) => item.workspaceRootPath || '')),
+    [validationResults],
+  );
   const hasActiveWork = isChangingJson
     || isValidating
     || isRenaming
@@ -212,14 +234,16 @@ export default function App() {
     () => manualDisplaySizes.filter((size) => Number(size.split('*')[0]) < Number(size.split('*')[1])),
     [manualDisplaySizes],
   );
-  const avatarSrc = useMemo(
-    () =>
-      createAvatar(dylan, {
-        seed: userInfo.name || '',
-        backgroundColor: ['b6e3f4', 'c0aede', 'd1d4f9', 'ffdfbf'],
-      }).toDataUri(),
-    [userInfo.name],
-  );
+  const dailyWaterSlothMotion = getDailyWaterSlothMotion({
+    isChangingRequirement: isChangingJson,
+    isValidating,
+    isRenaming,
+    hasValidated,
+    needsAttention: hasIssues,
+    hasRenameFailure: Boolean(renameBatchResult?.results.some((item) => !item.success)),
+    hasRecentRenameSuccess: completedAt !== null && lastRenamedPaths.length > 0,
+    hasFolders: folderPaths.length > 0,
+  });
 
   useEffect(() => {
     const handleNotification = async (e: Event) => {
@@ -261,7 +285,8 @@ export default function App() {
           setColorScheme(sys.theme);
         }
       }
-      if (config.workspaceSettings) setWorkspaceSettings(config.workspaceSettings as WorkspaceSettings);
+      const normalizedWorkspace = normalizeWorkspaceSettings(config.workspaceSettings as Partial<WorkspaceSettings> | undefined);
+      setWorkspaceSettings(normalizedWorkspace);
       if (config.shortcutSettings) setShortcutSettings(config.shortcutSettings as ShortcutSettings);
       if (config.updateSession && typeof config.updateSession === 'object') {
         const session = config.updateSession as { activeView?: unknown; settingsTab?: unknown };
@@ -288,10 +313,33 @@ export default function App() {
         }
       }
 
-      if (Array.isArray(config.history)) setHistoryData(config.history as HistoryEntry[]);
+      if (Array.isArray(config.history)) {
+        const cutoff = Date.now() - normalizedWorkspace.historyRetentionDays * 24 * 60 * 60 * 1000;
+        const retained = (config.history as HistoryEntry[]).filter((entry) => entry.timestamp >= cutoff);
+        setHistoryData(retained);
+        if (retained.length !== config.history.length) void window.electronAPI.store.set('history', retained);
+      }
       if (Array.isArray(config.notificationHistory)) setNotificationHistory(config.notificationHistory as NotificationHistoryEntry[]);
     }).finally(() => setIsAppReady(true));
   }, []);
+
+  useEffect(() => {
+    if (!completedAt) return;
+    const remaining = Math.max(0, workspaceSettings.completedVisibilityMs - (Date.now() - completedAt));
+    const timer = window.setTimeout(() => {
+      setCompletedAt(null);
+      setLastRenamedPaths([]);
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [completedAt, workspaceSettings.completedVisibilityMs]);
+
+  useEffect(() => {
+    if (!isAppReady || !dailyRequirementSession || !projectsList.length || !workspaceSettings.rootDir) return;
+    const key = `${workspaceSettings.rootDir}|${dailyRequirementSession.importedAt}`;
+    if (autoCreatedSessionRef.current === key) return;
+    autoCreatedSessionRef.current = key;
+    void createFoldersForProjects(projectsList, true);
+  }, [isAppReady, dailyRequirementSession?.importedAt, projectsList, workspaceSettings.rootDir]);
 
   const applyDailyRequirementSession = useCallback((session: DailyRequirementSession, notificationTitle: string) => {
     setDailyRequirementSession(session);
@@ -317,6 +365,27 @@ export default function App() {
     if (session.warnings && session.warnings.length > 0) {
       notify('orange', '需求表有提示', session.warnings.slice(0, 2).join('；'));
     }
+  }, []);
+
+  useEffect(() => {
+    const handleWorkspaceCleaned = (event: Event) => {
+      const detail = (event as CustomEvent<{ paths?: string[]; timestamp?: number }>).detail;
+      const removed = (detail?.paths || []).map((path) => path.replace(/[\\/]+$/, '').toLocaleLowerCase());
+      if (!removed.length) return;
+      setHistoryData((current) => {
+        const next = current.map((entry) => {
+          const affected = entry.paths?.some((path) => {
+            const normalized = path.replace(/[\\/]+$/, '').toLocaleLowerCase();
+            return removed.some((root) => normalized === root || normalized.startsWith(`${root}\\`) || normalized.startsWith(`${root}/`));
+          });
+          return affected ? { ...entry, cleanedAt: detail.timestamp || Date.now() } : entry;
+        });
+        void window.electronAPI?.store.set('history', next);
+        return next;
+      });
+    };
+    window.addEventListener('workspace-cleaned', handleWorkspaceCleaned);
+    return () => window.removeEventListener('workspace-cleaned', handleWorkspaceCleaned);
   }, []);
 
   useEffect(() => {
@@ -541,16 +610,51 @@ export default function App() {
   }
 
   async function addFolders(paths: string[]) {
-    const uniquePaths = dedupeStrings(paths);
+    const seen = new Set<string>();
+    const uniquePaths = paths
+      .map((path) => path.trim().replace(/[\\/]+$/, ''))
+      .filter((path) => {
+        const key = path.toLocaleLowerCase();
+        if (!path || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     if (!uniquePaths.length) return;
-    setFolderPaths((prev) => dedupeStrings([...prev, ...uniquePaths]));
+    const nextPaths = [...folderPaths];
+    const existingKeys = new Set(nextPaths.map((path) => path.toLocaleLowerCase()));
+    uniquePaths.forEach((path) => {
+      const key = path.toLocaleLowerCase();
+      if (!existingKeys.has(key)) {
+        existingKeys.add(key);
+        nextPaths.push(path);
+      }
+    });
+    setFolderPaths(nextPaths);
     setLastRenamedPaths([]);
     resetValidationState();
     try {
-      const detectedSizes = await window.electronAPI.fs.readProjectSizes(uniquePaths);
-      if (detectedSizes.length) setDetectedFolderSizes(detectedSizes);
+      const detectedSizes = await window.electronAPI.fs.readProjectSizes(nextPaths);
+      setDetectedFolderSizes(detectedSizes);
     } catch {}
     notify('green', '目录已加入工作区', `${uniquePaths.length} 个目录`);
+  }
+
+  async function removeFolder(path: string) {
+    const key = path.toLocaleLowerCase();
+    const remainingPaths = folderPaths.filter((item) => item.toLocaleLowerCase() !== key);
+    setFolderPaths(remainingPaths);
+    resetValidationState();
+    if (!remainingPaths.length) {
+      setDetectedFolderSizes([]);
+      setManualTargetSizes([]);
+      return;
+    }
+    try {
+      setDetectedFolderSizes(await window.electronAPI.fs.readProjectSizes(remainingPaths));
+    } catch {
+      setDetectedFolderSizes([]);
+      notify('orange', '尺寸识别未更新', '剩余目录暂时无法读取，请重新添加目录或稍后重试。');
+    }
   }
 
   async function handleAddFolder() {
@@ -559,36 +663,97 @@ export default function App() {
     await addFolders([folderPath]);
   }
 
-  async function handleInitFolders() {
-    if (!projectsList.length) {
+  async function createFoldersForProjects(
+    projects: RequirementProject[],
+    automatic = false,
+    overrides: WorkspaceInitOverrides = {},
+  ) {
+    if (!projects.length) {
       notify('orange', '缺少需求数据', '请先导入需求表，再创建目录。');
       return;
     }
+    if (!workspaceSettings.rootDir) {
+      if (!automatic) {
+        notify('orange', '尚未设置工作区', '请先在设置 > 工作区中选择工作区。');
+        setRequestedSettingsTab('workspace');
+        setActiveView('settings');
+      }
+      return;
+    }
     try {
-      const result = await window.electronAPI.fs.initFolders(projectsList);
+      const result = await window.electronAPI.fs.initFolders({
+        projects,
+        settings: workspaceSettings,
+        overrides,
+      });
+      if (result.conflict) {
+        setFolderCreationPrompt({ projects, automatic, overrides, conflict: result.conflict });
+        return;
+      }
       if (result.success) {
-        notify('green', '目录创建完成', result.destPath);
+        if (result.projectPaths?.length) await addFolders(result.projectPaths);
+        const createdCount = result.createdPaths?.length || 0;
+        const reusedCount = result.reusedPaths?.length || 0;
+        notify('green', automatic ? '今日目录已自动准备' : '目录创建完成', `新建 ${createdCount} 个，复用 ${reusedCount} 个 · ${result.destPath}`);
+        if (result.warnings?.length) notify('orange', '目录创建提示', result.warnings.join('；'));
+        setFolderCreationReport(result);
       } else notify('red', '目录创建失败', result.error);
     } catch {
       notify('red', '目录创建失败');
     }
   }
 
-  async function handleValidate() {
-    if (!folderPaths.length) return notify('orange', '工作区为空', '请先添加素材目录。');
-    if (!folderPaths.some((folderPath) => getValidationTargetsForFolder(folderPath).length > 0)) {
+  async function handleInitFolders() {
+    await createFoldersForProjects(projectsList, false);
+  }
+
+  function resolveFolderCreationConflict(value: string) {
+    if (!folderCreationPrompt) return;
+    const { projects, automatic, conflict } = folderCreationPrompt;
+    const overrides = { ...folderCreationPrompt.overrides };
+    if (conflict.kind === 'month-style') overrides.monthStyle = value as WorkspaceInitOverrides['monthStyle'];
+    else if (conflict.kind === 'date-style') overrides.dateStyle = value as WorkspaceInitOverrides['dateStyle'];
+    else overrides.fallbackMediaKinds = value.split(',').filter(Boolean) as WorkspaceMediaKind[];
+    setFolderCreationPrompt(null);
+    void createFoldersForProjects(projects, automatic, overrides);
+  }
+
+  async function handleValidate(targetFolderPaths = folderPaths, retainOtherResults = false) {
+    if (!targetFolderPaths.length) return notify('orange', '没有需要校验的目录', '请先添加素材目录。');
+    if (!targetFolderPaths.some((folderPath) => getValidationTargetsForFolder(folderPath).length > 0)) {
       return notify('orange', '缺少校验目标', '请先导入需求表，或添加可识别尺寸的素材目录。');
     }
 
     setIsValidating(true);
-    setValidationResults([]);
-    setHasValidated(false);
+    if (!retainOtherResults) {
+      setValidationResults([]);
+      setHasValidated(false);
+    }
     try {
-      const allResults: ValidationResult[] = [];
-      for (const folderPath of folderPaths) {
-        const results = await window.electronAPI.fs.startValidation(folderPath, getValidationTargetsForFolder(folderPath));
+      const targetKeys = new Set(targetFolderPaths.map((path) => path.toLocaleLowerCase()));
+      const allResults: ValidationResult[] = retainOtherResults
+        ? validationResults.filter((item) => !item.workspaceRootPath || !targetKeys.has(item.workspaceRootPath.toLocaleLowerCase()))
+        : [];
+      for (const folderPath of targetFolderPaths) {
         const projectName = getPathBaseName(folderPath);
-        allResults.push(...results.map((item) => ({ ...item, workspaceProjectName: projectName })));
+        try {
+          const results = await window.electronAPI.fs.startValidation(folderPath, getValidationTargetsForFolder(folderPath));
+          allResults.push(...results.map((item) => ({ ...item, workspaceProjectName: projectName, workspaceRootPath: folderPath })));
+        } catch (error) {
+          allResults.push({
+            fileName: projectName,
+            filePath: folderPath,
+            folderName: projectName,
+            ext: '',
+            fileSize: 0,
+            actualWidth: 0,
+            actualHeight: 0,
+            status: 'error',
+            error: error instanceof Error ? error.message : '目录读取失败',
+            workspaceProjectName: projectName,
+            workspaceRootPath: folderPath,
+          });
+        }
       }
       setValidationResults(allResults);
       setHasValidated(true);
@@ -619,7 +784,7 @@ export default function App() {
   }
 
   async function handleRename() {
-    if (!validationCanRename) return notify('red', '无法执行重命名', '请先处理尺寸错误或读取失败的素材。');
+    if (!validationCanRename) return notify('red', '没有可重命名素材', '请先完成校验，并确认至少一个目录通过。');
     if (!renamePreview?.canExecute) {
       const error = renamePreview?.items.find((item) => item.error)?.error;
       return notify('red', '命名预检未通过', error || '请检查当前命名模板。');
@@ -651,10 +816,11 @@ export default function App() {
           return p.substring(p.lastIndexOf(sep) + 1);
         }).join(', ');
         const historyStatus: HistoryEntry['status'] = failed.length === 0 ? 'success' : 'warning';
-        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || 'Untitled Folder', count: successCount, status: historyStatus, timestamp: Date.now() }, ...historyData].slice(0, 20);
+        const nextHistory: HistoryEntry[] = [{ id: Date.now(), project: folderNames || '未命名目录', count: successCount, status: historyStatus, timestamp: Date.now(), paths: [...folderPaths] }, ...historyData].slice(0, 20);
         setHistoryData(nextHistory);
         await window.electronAPI.store.set('history', nextHistory);
         setLastRenamedPaths([...folderPaths]);
+        setCompletedAt(Date.now());
       }
       if (failed.length === 0) {
         setFolderPaths([]);
@@ -720,7 +886,7 @@ export default function App() {
       >
         <Flex className="app-sidebar-inner" direction="column" h="100%" align="center" py={18}>
           <Box className="app-avatar" mb={30} mt={2} style={{ position: 'relative' }}>
-            <Avatar src={avatarSrc} size={50} radius="xl" />
+            <OpenFlowWaterSloth motion="idle" size={50} label="OpenFlow 小水懒品牌形象" />
             <Box
               style={{
                 position: 'absolute',
@@ -860,6 +1026,7 @@ export default function App() {
             isValidating={isValidating}
             isRenaming={isRenaming}
             renameSelection={renameSelection}
+            activeRenamePreset={selectedRenamePreset}
             customRenamePresets={workflowSettings.renameSettings.presets.filter((preset) => preset.kind === 'custom')}
             renameExample={renameExample}
             renamePreview={renamePreview}
@@ -867,6 +1034,9 @@ export default function App() {
             workflowSaveState={workflowSaveState}
             canFallbackToRegular={canFallbackToRegular}
             lastRenamedPaths={lastRenamedPaths}
+            completedAt={completedAt}
+            completedVisibilityMs={workspaceSettings.completedVisibilityMs}
+            waterSlothMotion={dailyWaterSlothMotion}
             onChangeRenameMode={(mode) => setRenameSelection((prev) => ({ ...prev, mode }))}
             onChangeCustomPreset={(customPresetId) => {
               setRenameSelection({ mode: 'custom', customPresetId });
@@ -880,19 +1050,24 @@ export default function App() {
             hasValidated={hasValidated}
             hasIssues={hasIssues}
             canRename={canRename}
+            failedValidationFolderCount={failedValidationFolderPaths.length}
             isTableExpanded={isTableExpanded}
             onToggleTable={() => setIsTableExpanded((prev) => !prev)}
             onToggleManualSize={(size) => setManualTargetSizes((prev) => prev.includes(size) ? prev.filter((item) => item !== size) : [...prev, size])}
+            onSelectRequirementSizes={() => setManualTargetSizes((prev) => dedupeStrings([...prev, ...requirementSizes]))}
+            onRestoreDefaultSizes={() => setManualTargetSizes([...DEFAULT_MANUAL_TARGET_SIZES])}
+            onClearManualSizes={() => setManualTargetSizes([])}
             onChangeJson={() => void handleChangeJson()}
             onShowPendingExtraction={() => setIsExtractionPromptOpen(true)}
             onInitFolders={() => void handleInitFolders()}
             onAddFolder={() => void handleAddFolder()}
             onClearFolders={() => { setFolderPaths([]); setLastRenamedPaths([]); setDetectedFolderSizes([]); setManualTargetSizes([]); resetValidationState(); }}
-            onRemoveFolder={(path) => { setFolderPaths((prev) => prev.filter((item) => item !== path)); resetValidationState(); }}
+            onRemoveFolder={(path) => void removeFolder(path)}
             onValidate={() => void handleValidate()}
+            onRevalidateFailed={() => void handleValidate(failedValidationFolderPaths, true)}
             onRename={() => void handleRename()}
             onTrashValidationFile={(row) => void handleTrashValidationFile(row)}
-            onOpenSettings={() => setActiveView('settings')}
+            onOpenSettings={() => { setRequestedSettingsTab('templates'); setActiveView('settings'); }}
             onOpenHistory={() => setHistoryOpened(true)}
             onDropPaths={(paths) => void addFolders(dedupeStrings(paths))}
             onOpenFolder={(path) => {
@@ -905,7 +1080,7 @@ export default function App() {
           <OrganizerWorkspace
             workflowSettings={workflowSettings}
             workspaceSettings={workspaceSettings}
-            onOpenSettings={() => setActiveView('settings')}
+            onOpenSettings={() => { setRequestedSettingsTab('workspace'); setActiveView('settings'); }}
             onChangeWorkspaceSettings={async (partialSettings) => {
               const newSettings = { ...workspaceSettings, ...partialSettings };
               setWorkspaceSettings(newSettings);
@@ -933,6 +1108,7 @@ export default function App() {
             workflowSaveState={workflowSaveState}
             requestedTab={requestedSettingsTab}
             onActiveTabChange={setRequestedSettingsTab}
+            activeWorkspacePaths={folderPaths}
           />
         ) : activeView === 'format' ? (
           <FormatProcessor onBusyChange={setFormatBusy} />
@@ -940,6 +1116,65 @@ export default function App() {
           <FormatProcessor onBusyChange={setFormatBusy} />
         )}
       </Box>
+
+      <Modal
+        opened={Boolean(folderCreationPrompt)}
+        onClose={() => setFolderCreationPrompt(null)}
+        centered
+        title={folderCreationPrompt?.conflict.kind === 'media-kind' ? '选择素材类型' : '选择目录格式'}
+        className="focus-modal"
+      >
+        <Stack gap="md">
+          <Text size="sm">{folderCreationPrompt?.conflict.message}</Text>
+          {Boolean(folderCreationPrompt?.conflict.projectNames?.length) && (
+            <Card withBorder p="xs">
+              <Text size="xs" c="dimmed" mb={4}>无法自动判断的项目</Text>
+              <Text size="sm" fw={700}>{folderCreationPrompt?.conflict.projectNames?.join('、')}</Text>
+            </Card>
+          )}
+          <Group gap="xs">
+            {folderCreationPrompt?.conflict.options.map((option) => (
+              <Button key={option.value} variant="light" onClick={() => resolveFolderCreationConflict(option.value)}>
+                {option.label}
+              </Button>
+            ))}
+          </Group>
+          <Text size="xs" c="dimmed">选择只影响本次创建；已有文件夹不会改名，也不会覆盖内容。</Text>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={Boolean(folderCreationReport)}
+        onClose={() => setFolderCreationReport(null)}
+        centered
+        size="calc(100vw - 32px)"
+        title="目录准备报告"
+        className="focus-modal"
+      >
+        <Stack gap="sm">
+          <Group gap={6}>
+            <Badge color="teal">新建 {folderCreationReport?.createdPaths?.length || 0}</Badge>
+            <Badge color="gray">复用 {folderCreationReport?.reusedPaths?.length || 0}</Badge>
+            <Badge color="blue">项目目录 {folderCreationReport?.projectPaths?.length || 0}</Badge>
+          </Group>
+          <Text size="xs" c="dimmed" truncate>本次位置：{folderCreationReport?.destPath}</Text>
+          <ScrollArea h="min(55vh, 380px)" type="auto">
+            <Stack gap="sm">
+              <Box>
+                <Text size="xs" fw={800} mb={4}>新建目录</Text>
+                {(folderCreationReport?.createdPaths || []).map((path) => <Text key={path} size="xs" c="teal" truncate>{path}</Text>)}
+                {!folderCreationReport?.createdPaths?.length && <Text size="xs" c="dimmed">没有新建目录，全部沿用现有目录。</Text>}
+              </Box>
+              <Box>
+                <Text size="xs" fw={800} mb={4}>已存在并复用</Text>
+                {(folderCreationReport?.reusedPaths || []).map((path) => <Text key={path} size="xs" c="dimmed" truncate>{path}</Text>)}
+              </Box>
+              {Boolean(folderCreationReport?.warnings?.length) && <Box><Text size="xs" fw={800} c="orange" mb={4}>提示</Text>{folderCreationReport?.warnings?.map((warning) => <Text key={warning} size="xs" c="orange">{warning}</Text>)}</Box>}
+            </Stack>
+          </ScrollArea>
+          <Group justify="flex-end"><Button onClick={() => setFolderCreationReport(null)}>知道了</Button></Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={Boolean(pendingExtractionCandidate) && isExtractionPromptOpen}
@@ -1009,8 +1244,10 @@ export default function App() {
         </Stack>
       </Drawer>
 
-      <Drawer opened={historyOpened} onClose={() => setHistoryOpened(false)} position="right" size={420} title="历史记录">
+      <Modal opened={historyOpened} onClose={() => setHistoryOpened(false)} centered size="calc(100vw - 32px)" title="历史记录" className="focus-modal">
         <Stack gap="sm">
+          <Text size="xs" c="dimmed">普通处理记录自动保留 {workspaceSettings.historyRetentionDays} 天</Text>
+          <ScrollArea h="min(62vh, 440px)" type="auto"><Stack gap="sm">
           {historyData.length === 0 && <Text c="dimmed">暂无历史记录</Text>}
           {historyData.map((item) => (
             <Card key={item.id} withBorder radius="xl">
@@ -1019,14 +1256,18 @@ export default function App() {
                   <Text fw={700}>{item.project}</Text>
                   <Text size="sm" c="dimmed">重命名 · {item.count} 个文件</Text>
                 </Box>
-                <Badge color={item.status === 'success' ? 'teal' : item.status === 'warning' ? 'orange' : 'red'} variant="light">
-                  {formatHistoryTime(item.timestamp)}
-                </Badge>
+                <Stack gap={4} align="flex-end">
+                  <Badge color={item.cleanedAt ? 'gray' : item.status === 'success' ? 'teal' : item.status === 'warning' ? 'orange' : 'red'} variant="light">
+                    {item.cleanedAt ? '素材已清理' : formatHistoryTime(item.timestamp)}
+                  </Badge>
+                  {item.paths?.[0] && <Button size="compact-xs" variant="subtle" disabled={Boolean(item.cleanedAt)} onClick={() => window.electronAPI.shell.openPath(item.paths![0])}>打开目录</Button>}
+                </Stack>
               </Group>
             </Card>
           ))}
+          </Stack></ScrollArea>
         </Stack>
-      </Drawer>
+      </Modal>
     </Flex>
   );
 }

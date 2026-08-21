@@ -12,6 +12,18 @@ import type {
 import type { UpdateActivitySnapshot, UpdateViewState } from '../../../shared/updateContract.ts'
 import type { DiagnosticEventInput } from '../../../shared/diagnosticsContract.ts'
 import type { DesktopExtractionCandidate } from '../../../shared/extractionContract.ts'
+import type {
+  WorkspaceAutomationSettings,
+  WorkspaceCleanupDiscoveryRequest,
+  WorkspaceCleanupDiscoveryResult,
+  WorkspaceCleanupScanRequest,
+  WorkspaceCleanupScanResult,
+  WorkspaceCleanupTreeRequest,
+  WorkspaceCleanupTreeResult,
+  WorkspaceFolderPreset,
+  WorkspaceInitRequest,
+  WorkspaceInitResult,
+} from '../../../shared/workspaceContract.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -36,12 +48,7 @@ export interface ValidationResult {
 }
 
 /** 初始化文件夹的结果 */
-export interface InitFoldersResult {
-  success: boolean
-  destPath: string
-  createdPaths?: string[]
-  error?: string
-}
+export type InitFoldersResult = WorkspaceInitResult
 
 export interface RequirementDetail {
   resolution: string
@@ -82,6 +89,8 @@ export interface HistoryEntry {
   count: number
   status: 'success' | 'warning' | 'error'
   timestamp: number
+  paths?: string[]
+  cleanedAt?: number
 }
 
 /** 消息中心条目 */
@@ -119,6 +128,11 @@ export interface SystemSettings {
 export interface WorkspaceSettings {
   sourceDir: string
   destDir: string
+  rootDir: string
+  folderPresets: WorkspaceFolderPreset[]
+  completedVisibilityMs: number
+  historyRetentionDays: number
+  cleanupReportRetentionDays: number
 }
 
 /** 快捷键设置 */
@@ -189,9 +203,24 @@ export interface ElectronAPI {
      * 批量在选定目录下创建多项目文件夹结构（主进程内弹窗选择目标总目录）
      * @param projectsData 项目列表，每项含 projectName、sizes；尺寸子文件夹按纯数字命名（如 1080x1920）
      */
-    initFolders: (
-      projectsData: RequirementProject[]
-    ) => Promise<InitFoldersResult>
+    initFolders: (request: WorkspaceInitRequest) => Promise<InitFoldersResult>
+
+    /** 懒加载工作区清理目录树的一层子目录 */
+    listWorkspaceCleanupChildren: (request: WorkspaceCleanupTreeRequest) => Promise<WorkspaceCleanupTreeResult>
+
+    /** 在月份、日期或游戏范围内批量查找配置的生成目录 */
+    discoverWorkspaceCleanupTargets: (request: WorkspaceCleanupDiscoveryRequest) => Promise<WorkspaceCleanupDiscoveryResult>
+
+    /** 只读扫描待清理目录，返回精确路径、文件数和体积 */
+    scanWorkspaceCleanup: (request: WorkspaceCleanupScanRequest) => Promise<WorkspaceCleanupScanResult>
+
+    cancelWorkspaceCleanupScan: (scanId: string) => Promise<{ success: boolean }>
+
+    /** 将已扫描确认的工作区目录移动到系统废纸篓 */
+    trashWorkspacePaths: (request: WorkspaceCleanupScanRequest) => Promise<{ success: boolean; removedPaths: string[]; error?: string }>
+
+    /** 永久删除已扫描确认的工作区目录；界面必须进行二次确认 */
+    deleteWorkspacePaths: (request: WorkspaceCleanupScanRequest) => Promise<{ success: boolean; removedPaths: string[]; error?: string }>
 
     /**
      * 读取若干文件夹下的一级子目录名，识别尺寸格式（如 720x1280）并返回规范化尺寸数组
