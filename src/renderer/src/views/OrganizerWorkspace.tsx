@@ -43,6 +43,50 @@ interface ScannedFile {
   selected: boolean;
 }
 
+function OrganizerFilePreview({ file }: { file: ScannedFile }) {
+  const isVideo = file.ext.toLowerCase() === '.mp4';
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [file.filePath]);
+
+  if (isVideo) {
+    return (
+      <Box
+        className="organizer-file-preview"
+        role="img"
+        aria-label="视频文件预览"
+        data-preview-state="video"
+      >
+        <PlayCircle aria-hidden="true" size={28} color="var(--mantine-color-dimmed)" />
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      className="organizer-file-preview"
+      role="img"
+      aria-label={imageFailed ? '图片预览不可用' : '图片文件预览'}
+      data-preview-state={imageFailed ? 'fallback' : 'image'}
+    >
+      {imageFailed ? (
+        <ImageIcon aria-hidden="true" size={28} color="var(--mantine-color-dimmed)" />
+      ) : (
+        <Image
+          src={`asset://${encodeURIComponent(file.filePath)}`}
+          alt=""
+          width="100%"
+          height="100%"
+          fit="cover"
+          onError={() => setImageFailed(true)}
+        />
+      )}
+    </Box>
+  );
+}
+
 export function OrganizerWorkspace({
   isQimiEnabled,
   onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings, onBusyChange }: OrganizerWorkspaceProps) {
@@ -421,7 +465,6 @@ export function OrganizerWorkspace({
                   </Box>
 
                   {files.map(file => {
-                    const isVideo = file.ext === '.mp4';
                     const destinationLabel = `${file.gameName}/${file.resolution}/`;
                     return (
                       <Card className="organizer-file-card" key={file.id} withBorder radius="md" p="sm">
@@ -433,19 +476,7 @@ export function OrganizerWorkspace({
                             size="md"
                           />
 
-                          <Box className="organizer-file-preview">
-                            {isVideo ? (
-                              <PlayCircle size={28} color="var(--mantine-color-dimmed)" />
-                            ) : (
-                              <Image
-                                src={`asset://${file.filePath}`}
-                                width="100%"
-                                height="100%"
-                                fit="cover"
-                                fallbackSrc={<ImageIcon size={28} color="var(--mantine-color-dimmed)" />}
-                              />
-                            )}
-                          </Box>
+                          <OrganizerFilePreview file={file} />
 
                           <Stack className="organizer-file-copy" gap={4}>
                             <Text fw={600} truncate title={file.fileName}>{file.fileName}</Text>

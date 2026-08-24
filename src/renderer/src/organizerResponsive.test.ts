@@ -82,6 +82,37 @@ describe('Organizer workspace responsive contract', () => {
     assert.match(organizer, /title=\{destinationLabel\}/);
   });
 
+  it('encodes Windows paths for the established asset preview protocol', () => {
+    assert.match(organizer, /src=\{`asset:\/\/\$\{encodeURIComponent\(file\.filePath\)\}`\}/);
+    assert.doesNotMatch(organizer, /src=\{`asset:\/\/\$\{file\.filePath\}`\}/);
+  });
+
+  it('removes the image element after a preview error instead of exposing a broken image', () => {
+    assert.match(organizer, /const \[imageFailed, setImageFailed\] = useState\(false\)/);
+    assert.match(organizer, /onError=\{\(\) => setImageFailed\(true\)\}/);
+    assert.match(organizer, /imageFailed \? \([\s\S]*?<ImageIcon[\s\S]*?\) : \([\s\S]*?<Image/);
+    assert.doesNotMatch(organizer, /fallbackSrc=\{<ImageIcon/);
+  });
+
+  it('keeps successful image previews and image fallbacks as distinct states', () => {
+    assert.match(organizer, /data-preview-state=\{imageFailed \? 'fallback' : 'image'\}/);
+    assert.match(organizer, /aria-label=\{imageFailed \? '图片预览不可用' : '图片文件预览'\}/);
+    assert.match(organizer, /alt=""/);
+    assert.match(organizer, /<ImageIcon aria-hidden="true"/);
+  });
+
+  it('keeps video and image fallback visuals distinguishable', () => {
+    assert.match(organizer, /data-preview-state="video"/);
+    assert.match(organizer, /aria-label="视频文件预览"/);
+    assert.match(organizer, /<PlayCircle aria-hidden="true"/);
+    assert.match(organizer, /<ImageIcon aria-hidden="true"/);
+  });
+
+  it('holds previews to the established fixed box in every fallback state', () => {
+    assert.match(css, /\.organizer-file-preview\s*\{[\s\S]*?width:\s*52px[\s\S]*?height:\s*52px/);
+    assert.match(css, /\.organizer-file-preview \.mantine-Image-root\s*\{[\s\S]*?width:\s*100%[\s\S]*?height:\s*100%/);
+  });
+
   it('uses semantic surfaces without a page-specific dark card implementation', () => {
     assert.match(css, /\.organizer-section\s*\{[\s\S]*?background:\s*var\(--openflow-bg-surface\)/);
     assert.match(css, /\.organizer-empty-state\s*\{[\s\S]*?background:\s*var\(--openflow-bg-subtle\)/);
