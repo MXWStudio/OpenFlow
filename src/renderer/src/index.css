@@ -263,8 +263,102 @@ body {
   padding: var(--openflow-page-padding);
 }
 
+.settings-workspace,
+.settings-body,
 .settings-tabs {
-  padding: var(--openflow-page-padding);
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-workspace,
+.settings-body {
+  overflow: hidden;
+}
+
+.settings-workspace {
+  position: relative;
+}
+
+.settings-body {
+  position: relative;
+}
+
+.settings-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  padding: var(--openflow-space-4) var(--openflow-page-padding) var(--openflow-page-padding);
+}
+
+.settings-navigation {
+  flex: 0 0 196px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-content: flex-start;
+  width: 196px;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  gap: var(--openflow-space-2);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: var(--openflow-space-4);
+  border-right: 1px solid var(--openflow-border);
+  scrollbar-gutter: stable;
+}
+
+.settings-navigation-group,
+.settings-navigation-item {
+  flex: 0 0 auto;
+}
+
+.settings-navigation-group {
+  white-space: nowrap;
+}
+
+.settings-navigation-item {
+  width: 100%;
+  min-height: var(--openflow-control-height);
+  padding: 10px var(--openflow-space-3);
+  border-radius: var(--openflow-radius-control);
+  color: var(--openflow-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.settings-navigation-item[data-active] {
+  color: var(--mantine-color-white);
+}
+
+.settings-content {
+  flex: 1 1 auto;
+  width: auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--openflow-space-3) var(--openflow-page-padding) var(--openflow-page-padding);
+  scrollbar-gutter: stable;
+}
+
+.settings-content > :first-child {
+  width: 100%;
+  max-width: 840px;
+  margin-inline: auto;
+}
+
+.settings-field-row {
+  min-width: 0;
+}
+
+.settings-field-row > .mantine-Box-root {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .mantine-Button-root {
@@ -405,14 +499,15 @@ body {
     padding: 24px !important;
   }
 
-  .settings-tabs .mantine-Tabs-list {
-    width: 180px !important;
-    padding-right: 12px !important;
+  .settings-navigation {
+    flex-basis: 180px;
+    width: 180px;
+    padding-right: var(--openflow-space-3);
   }
 
-  .settings-tabs .mantine-Tabs-panel {
-    padding-inline: 22px !important;
-    padding-bottom: 22px !important;
+  .settings-content {
+    padding-inline: 22px;
+    padding-bottom: 22px;
   }
 }
 
@@ -466,20 +561,61 @@ body {
   }
 
   .settings-tabs {
-    padding: 12px !important;
+    padding: var(--openflow-space-3);
   }
 
-  .settings-tabs .mantine-Tabs-list {
-    width: 156px !important;
+  .settings-navigation {
+    flex-basis: 156px;
+    width: 156px;
+    padding-right: var(--openflow-space-2);
   }
 
-  .settings-tabs .mantine-Tabs-tab {
-    padding: 10px 12px !important;
+  .settings-navigation-item {
+    padding: 9px 10px;
   }
 
-  .settings-tabs .mantine-Tabs-panel {
-    padding-inline: 16px !important;
-    padding-bottom: 16px !important;
+  .settings-content {
+    padding: var(--openflow-space-2) var(--openflow-space-4) var(--openflow-space-4);
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-tabs {
+    padding: var(--openflow-space-2);
+  }
+
+  .settings-navigation {
+    flex-basis: 136px;
+    width: 136px;
+  }
+
+  .settings-content {
+    padding: var(--openflow-space-2) var(--openflow-space-3) var(--openflow-space-3);
+  }
+
+  .settings-field-row {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 560px) {
+  .settings-navigation {
+    flex-basis: 124px;
+    width: 124px;
+  }
+
+  .settings-navigation-item {
+    padding-inline: var(--openflow-space-2);
+  }
+
+  .settings-field-row {
+    flex-direction: column;
+  }
+
+  .settings-field-row > .mantine-Box-root,
+  .settings-field-row > .mantine-Select-root {
+    flex-basis: auto;
+    width: 100%;
   }
 }
 
@@ -519,6 +655,24 @@ body {
 
   .app-utilities {
     gap: var(--openflow-space-1);
+  }
+
+  .settings-tabs {
+    padding-block: var(--openflow-space-2);
+  }
+
+  .settings-navigation {
+    gap: var(--openflow-space-1);
+  }
+
+  .settings-navigation-group {
+    margin-top: var(--openflow-space-2);
+    margin-bottom: var(--openflow-space-1);
+  }
+
+  .settings-navigation-item {
+    min-height: 30px;
+    padding-block: 6px;
   }
 
   .daily-content {

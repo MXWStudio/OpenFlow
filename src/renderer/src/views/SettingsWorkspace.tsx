@@ -231,9 +231,14 @@ export function SettingsWorkspace({
         icon={<Settings size={20} />}
       />
 
-      <Flex flex={1} style={{ overflow: 'hidden', position: 'relative' }}>
+      <Flex className="settings-body" flex={1}>
         <Tabs
           className="settings-tabs"
+          classNames={{
+            list: 'settings-navigation',
+            tab: 'settings-navigation-item',
+            panel: 'settings-content',
+          }}
           value={activeTab}
           onChange={(value) => {
             const nextTab = (value || 'system') as RestorableSettingsTab;
@@ -242,30 +247,18 @@ export function SettingsWorkspace({
           }}
           orientation="vertical"
           variant="pills"
-          p="md"
-          styles={{
-            root: { width: '100%' },
-            list: { width: 220, borderRight: '1px solid var(--mantine-color-default-border)', paddingRight: 16, gap: 8 },
-            tab: { padding: '12px 16px', fontWeight: 500, borderRadius: 8, color: 'var(--mantine-color-text)' },
-            panel: { paddingLeft: 32, paddingRight: 32, paddingBottom: 32, overflowY: 'auto' },
-          }}
         >
-          <style>{`
-            .mantine-Tabs-tab[data-active] {
-              color: white !important;
-            }
-          `}</style>
-          <Tabs.List>
-            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="xs" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>核心配置</Text>
+          <Tabs.List aria-label="设置分类">
+            <Text className="settings-navigation-group" size="xs" fw={600} tt="uppercase" mb="xs" mt="xs" px="xs" c="dimmed">核心配置</Text>
             <Tabs.Tab value="system" leftSection={<MonitorPlay size={18} />}>常规</Tabs.Tab>
             <Tabs.Tab value="account" leftSection={<User size={18} />}>账户</Tabs.Tab>
             <Tabs.Tab value="workspace" leftSection={<HardDrive size={18} />}>工作区</Tabs.Tab>
             <Tabs.Tab value="templates" leftSection={<Workflow size={18} />}>命名模板</Tabs.Tab>
 
-            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>高级设定</Text>
+            <Text className="settings-navigation-group" size="xs" fw={600} tt="uppercase" mb="xs" mt="md" px="xs" c="dimmed">高级设定</Text>
             <Tabs.Tab value="shortcuts" leftSection={<Keyboard size={18} />}>快捷键</Tabs.Tab>
 
-            <Text size="xs" fw={700} tt="uppercase" mb="xs" mt="md" px="xs" style={{ color: 'var(--mantine-color-text)', opacity: 0.6 }}>其他</Text>
+            <Text className="settings-navigation-group" size="xs" fw={600} tt="uppercase" mb="xs" mt="md" px="xs" c="dimmed">其他</Text>
             <Tabs.Tab value="about" leftSection={<Info size={18} />}>关于</Tabs.Tab>
           </Tabs.List>
 
@@ -275,7 +268,7 @@ export function SettingsWorkspace({
                 <Title order={4} mb="lg">常规设置</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="lg">
-                    <Group justify="space-between">
+                    <Group className="settings-field-row" justify="space-between">
                       <Box>
                         <Text fw={500}>外观主题</Text>
                         <Text size="sm" c="dimmed">选择界面的颜色风格</Text>
@@ -302,7 +295,7 @@ export function SettingsWorkspace({
                 <Title order={4} mb="lg">系统行为</Title>
                 <Card withBorder radius="md" p="lg">
                   <Stack gap="lg">
-                    <Group justify="space-between">
+                    <Group className="settings-field-row" justify="space-between">
                       <Box>
                         <Text fw={500}>开机自启动</Text>
                         <Text size="sm" c="dimmed">随系统启动并在后台运行</Text>
@@ -313,7 +306,7 @@ export function SettingsWorkspace({
                       />
                     </Group>
                     <Divider />
-                    <Group justify="space-between">
+                    <Group className="settings-field-row" justify="space-between">
                       <Box>
                         <Text fw={500}>关闭主窗口时</Text>
                         <Text size="sm" c="dimmed">点击 X 时最小化到系统托盘，而不是退出程序</Text>
