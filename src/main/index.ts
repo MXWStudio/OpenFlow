@@ -398,8 +398,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
-    minWidth: 1080,
-    minHeight: 640,
+    minWidth: 760,
+    minHeight: 520,
     show: false, // 先隐藏，等 ready-to-show 再显示，避免白屏
     autoHideMenuBar: true,
     backgroundColor: getWindowBackgroundColor(getResolvedNativeColorScheme()),
