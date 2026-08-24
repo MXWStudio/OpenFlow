@@ -22,6 +22,7 @@ import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, F
 import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
 import { isDarkColorScheme } from '../theme';
+import { PageHeader } from '../components/PageHeader';
 
 interface OrganizerWorkspaceProps {
   isQimiEnabled: boolean;
@@ -242,26 +243,12 @@ export function OrganizerWorkspace({
   return (
     <Box className="organizer-workspace" style={{ flex: 1, minWidth: 0, position: 'relative', height: '100%' }}>
       <Flex direction="column" h="100%">
-        <Group
+        <PageHeader
           className="organizer-header"
-          justify="space-between"
-          px={30}
-          h={102}
-          style={{
-            borderBottom: '1px solid var(--mantine-color-default-border)',
-            background: 'var(--mantine-color-default)',
-          }}
-        >
-          <Stack gap="xs">
-            <Title order={2} size="h3" c="var(--mantine-color-text)" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <FolderSearch size={24} color="var(--mantine-color-blue-filled)" />
-              素材自动整理
-            </Title>
-            <Text c="dimmed" size="sm">
-              自动扫描下载目录中的素材，并按解析出的“游戏名”和“分辨率”归档到目标文件夹。
-            </Text>
-          </Stack>
-        </Group>
+          title="素材自动整理"
+          description="扫描下载目录，并按游戏名和分辨率归档素材"
+          icon={<FolderSearch size={20} />}
+        />
 
         <ScrollArea className="app-scroll" style={{ flex: 1 }}>
           <Stack className="organizer-content" gap={22} px={30} py={18} pb={132}>

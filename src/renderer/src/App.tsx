@@ -13,8 +13,6 @@ import {
   Modal,
   Stack,
   Text,
-  Title,
-  useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
 import { notify } from './utils/notify';
@@ -54,7 +52,6 @@ import { buildValidationPresentation } from './validationPresentation';
 import { OrganizerWorkspace } from './views/OrganizerWorkspace';
 import { FormatProcessor } from './views/FormatProcessor';
 import { SettingsWorkspace } from './views/SettingsWorkspace';
-import { isDarkColorScheme } from './theme';
 import {
   buildDailyRequirementSession,
   buildDailyRequirementSessionFromExtraction,
@@ -82,8 +79,6 @@ export default function App() {
   const [isQimiEnabled, setIsQimiEnabled] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>('daily');
   const { setColorScheme } = useMantineColorScheme();
-  const resolvedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
-  const isDarkTheme = isDarkColorScheme(resolvedColorScheme);
   const [isAppReady, setIsAppReady] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -689,55 +684,28 @@ export default function App() {
     }
   }
 
-  const navItems: Array<{ key: ViewKey; label: string; icon: React.ReactNode; color: string }> = [
-    { key: 'daily', label: '日常', icon: <CalendarDays size={20} />, color: 'blue' },
-    { key: 'organizer', label: '整理', icon: <FolderSearch size={20} />, color: 'indigo' },
-    { key: 'format', label: '格式处理', icon: <Workflow size={20} />, color: 'orange' },
+  const navItems: Array<{ key: ViewKey; label: string; icon: React.ReactNode }> = [
+    { key: 'daily', label: '日常', icon: <CalendarDays size={20} /> },
+    { key: 'organizer', label: '整理', icon: <FolderSearch size={20} /> },
+    { key: 'format', label: '格式处理', icon: <Workflow size={20} /> },
   ];
 
   if (!isAppReady) return null;
 
-  const sidebarActiveBackground = isDarkTheme
-    ? 'rgba(34, 139, 230, 0.18)'
-    : 'rgba(34, 139, 230, 0.12)';
-  const sidebarActiveColor = isDarkTheme
-    ? 'var(--mantine-color-blue-1)'
-    : 'var(--mantine-color-blue-8)';
   const updateNeedsAttention = Boolean(updateState && ['available', 'downloading', 'downloaded'].includes(updateState.desktop.status));
   const updateAttentionColor = updateState?.desktop.updateType === 'critical' ? 'red' : 'orange';
 
   return (
-    <Flex data-openflow-app-ready="true" className="app-shell" h="100vh" style={{ background: 'var(--mantine-color-body)', overflow: 'hidden' }}>
-      <Box
-        className="app-sidebar"
-        w={92}
-        style={{
-          background: isDarkTheme ? 'var(--mantine-color-dark-8)' : 'var(--mantine-color-gray-1)',
-          borderRight: `1px solid ${isDarkTheme ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-3)'}`,
-          boxShadow: 'var(--openflow-shadow-sidebar)',
-          zIndex: 20,
-        }}
-      >
-        <Flex className="app-sidebar-inner" direction="column" h="100%" align="center" py={18}>
-          <Box className="app-avatar" mb={30} mt={2} style={{ position: 'relative' }}>
-            <Avatar src={avatarSrc} size={50} radius="xl" />
-            <Box
-              style={{
-                position: 'absolute',
-                left: '50%',
-                bottom: -10,
-                width: 28,
-                height: 6,
-                transform: 'translateX(-50%)',
-                borderRadius: 999,
-                background: 'linear-gradient(90deg, var(--mantine-color-orange-filled) 0%, var(--mantine-color-red-filled) 50%, var(--mantine-color-indigo-filled) 100%)',
-              }}
-            />
+    <Flex data-openflow-app-ready="true" className="app-shell" h="100vh">
+      <Box className="app-sidebar">
+        <Flex className="app-sidebar-inner" direction="column" h="100%" align="center">
+          <Box className="app-avatar">
+            <Avatar src={avatarSrc} size={40} radius="md" />
           </Box>
 
-          <Box my={4} w={46} h={1} style={{ background: 'var(--mantine-color-default-border)' }} />
+          <Box className="app-sidebar-divider" />
 
-          <Stack className="app-nav" gap={10} align="center" mt={18}>
+          <Stack className="app-nav" align="center">
             {navItems.map((item) => {
               const active = activeView === item.key;
 
@@ -745,95 +713,42 @@ export default function App() {
                 <button
                   className="app-nav-button"
                   key={item.key}
+                  data-active={active || undefined}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={item.label}
                   onClick={() => setActiveView(item.key)}
-                  style={{
-                    position: 'relative',
-                    width: 72,
-                    height: 72,
-                    padding: 0,
-                    border: 'none',
-                    borderRadius: 20,
-                    cursor: 'pointer',
-                    background: active ? sidebarActiveBackground : 'transparent',
-                    color: active ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    fontFamily: 'inherit',
-                    fontWeight: 900,
-                    outline: 'none',
-                  }}
                 >
-                  {active && (
-                    <Box
-                      style={{
-                        position: 'absolute',
-                        left: -12,
-                        top: '50%',
-                        width: 4,
-                        height: 30,
-                        transform: 'translateY(-50%)',
-                        borderRadius: 999,
-                        background: 'var(--mantine-color-blue-filled)',
-                      }}
-                    />
-                  )}
                   {item.icon}
-                  <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>
-                    {item.label}
-                  </span>
+                  <span className="app-nav-label">{item.label}</span>
                 </button>
               );
             })}
           </Stack>
 
-          <Box style={{ marginTop: 'auto' }} />
-
-          <Stack className="app-utilities" gap={16} align="center" pb={10}>
+          <Stack className="app-utilities" align="center">
             <Indicator color="red" size={8} offset={5} disabled={notificationHistory.length === 0}>
               <ActionIcon
+                className="app-utility-button"
                 variant="subtle"
+                aria-label="消息中心"
+                data-active={isNotificationCenterOpened || undefined}
                 onClick={() => setIsNotificationCenterOpened(true)}
-                styles={{
-                  root: {
-                    width: 46,
-                    height: 46,
-                    color: isNotificationCenterOpened ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
-                    background: isNotificationCenterOpened ? sidebarActiveBackground : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: 12,
-                  },
-                }}
               >
-                <Bell size={22} />
+                <Bell size={20} />
               </ActionIcon>
             </Indicator>
             <Indicator color={updateAttentionColor} size={9} offset={5} disabled={!updateNeedsAttention} processing={updateState?.desktop.status === 'downloading'}>
               <ActionIcon
+                className="app-utility-button"
                 variant="subtle"
                 aria-label={updateNeedsAttention ? '设置中心，有新版本' : '设置中心'}
+                data-active={activeView === 'settings' || undefined}
                 onClick={() => {
                   setRequestedSettingsTab(updateNeedsAttention ? 'about' : 'system');
                   setActiveView('settings');
                 }}
-                styles={{
-                  root: {
-                    width: 46,
-                    height: 46,
-                    color: activeView === 'settings' ? sidebarActiveColor : 'var(--mantine-color-dimmed)',
-                    background: activeView === 'settings' ? sidebarActiveBackground : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: 12,
-                  },
-                }}
               >
-                <Settings size={22} />
+                <Settings size={20} />
               </ActionIcon>
             </Indicator>
           </Stack>

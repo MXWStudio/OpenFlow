@@ -17,8 +17,9 @@ import {
   Loader,
 } from '@mantine/core';
 import { notify } from '../utils/notify';
-import { Trash2, FolderSearch, UploadCloud, Settings, ChevronRight } from 'lucide-react';
+import { Trash2, FolderSearch, UploadCloud, Settings, ChevronRight, Workflow } from 'lucide-react';
 import { dedupeStrings } from '../appState';
+import { PageHeader } from '../components/PageHeader';
 
 interface MediaFile {
   id: string;
@@ -237,13 +238,12 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
     : [{ value: '', label: '保持原格式' }, { value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }];
 
   return (
-    <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
-      <Group justify="space-between">
-         <Box>
-            <Title order={3} c="var(--mantine-color-text)">格式处理</Title>
-            <Text size="sm" c="dimmed">批量调整分辨率、压缩质量、转换格式</Text>
-         </Box>
-      </Group>
+    <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)">
+      <PageHeader
+        title="格式处理"
+        description="批量调整分辨率、压缩质量和文件格式"
+        icon={<Workflow size={20} />}
+      />
 
       <Flex className="format-layout" gap="lg" style={{ flex: 1, minHeight: 0 }}>
         {/* 左侧：文件列表与拖拽区 */}

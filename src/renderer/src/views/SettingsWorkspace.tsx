@@ -44,6 +44,7 @@ import {
 import { RenameTemplateSettings } from './RenameTemplateSettings';
 import type { UpdateViewState } from '../../../shared/updateContract';
 import type { RestorableSettingsTab } from '../../../shared/updateContract';
+import { PageHeader } from '../components/PageHeader';
 
 interface SettingsWorkspaceProps {
   userInfo: UserInfo;
@@ -223,12 +224,12 @@ export function SettingsWorkspace({
 
   return (
     <Flex className="settings-workspace" h="100%" direction="column">
-      <Box className="settings-header" p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-        <Group>
-          <Settings size={24} color="var(--mantine-color-blue-filled)" />
-          <Title order={3}>设置中心</Title>
-        </Group>
-      </Box>
+      <PageHeader
+        className="settings-header"
+        title="设置中心"
+        description="管理应用行为、工作路径与外观主题"
+        icon={<Settings size={20} />}
+      />
 
       <Flex flex={1} style={{ overflow: 'hidden', position: 'relative' }}>
         <Tabs

@@ -26,6 +26,7 @@ import {
 import { Dropzone } from '@mantine/dropzone';
 import {
   CheckCircle2,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   FileJson,
@@ -40,6 +41,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
+import { PageHeader } from '../components/PageHeader';
 import { formatBytes, type ValidationResult } from '../appState';
 import { StatusBadge } from '../StatusBadge';
 import {
@@ -486,34 +488,27 @@ export function DailyWorkspace({
 
   return (
     <Flex className="daily-workspace" h="100%" direction="column" style={{ background: 'var(--mantine-color-body)', position: 'relative', minHeight: 0 }}>
-      <Group
+      <PageHeader
         className="daily-header"
-        h={86}
-        px={30}
-        gap="md"
-        wrap="nowrap"
-        style={{
-          borderBottom: '1px solid var(--mantine-color-default-border)',
-          background: 'var(--mantine-color-default)',
-        }}
-      >
-        <Title order={2} size="h3" c="var(--mantine-color-text)" style={{ whiteSpace: 'nowrap' }}>
-          日常处理
-        </Title>
-        <Badge color={statusState.color} variant="light" radius="sm" styles={{ root: { fontWeight: 850 } }}>
-          {statusState.label}
-        </Badge>
-        <Tooltip label="历史记录">
-          <ActionIcon variant="subtle" color="gray" radius={8} aria-label="历史记录" onClick={onOpenHistory}>
-            <History size={18} />
-          </ActionIcon>
-        </Tooltip>
-        <Tooltip label="设置">
-          <ActionIcon variant="subtle" color="gray" radius={8} aria-label="设置" onClick={onOpenSettings}>
-            <Settings size={18} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
+        title="日常处理"
+        description="导入需求、校验素材并生成规范文件名"
+        icon={<CalendarDays size={20} />}
+        actions={(
+          <>
+            <Badge color={statusState.color}>{statusState.label}</Badge>
+            <Tooltip label="历史记录">
+              <ActionIcon variant="subtle" color="gray" aria-label="历史记录" onClick={onOpenHistory}>
+                <History size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="设置">
+              <ActionIcon variant="subtle" color="gray" aria-label="设置" onClick={onOpenSettings}>
+                <Settings size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </>
+        )}
+      />
 
       <ScrollArea className="app-scroll" style={{ flex: 1 }}>
         <Box className="daily-content" px={30} py={22} pb={118}>

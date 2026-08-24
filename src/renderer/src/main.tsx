@@ -5,10 +5,11 @@ import './index.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MantineProvider, createTheme } from '@mantine/core';
+import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { init as initSentryRenderer } from '@sentry/electron/renderer';
 import App from './App.tsx';
+import { openFlowTheme } from './theme.ts';
 
 initSentryRenderer();
 
@@ -39,12 +40,6 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
-const theme = createTheme({
-  primaryColor: 'blue',
-  defaultRadius: 'md',
-  fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif',
-});
-
 const root = document.getElementById('root');
 
 if (!root) {
@@ -53,7 +48,7 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider theme={openFlowTheme} defaultColorScheme="auto">
       <Notifications position="top-right" limit={1} />
       <App />
     </MantineProvider>
