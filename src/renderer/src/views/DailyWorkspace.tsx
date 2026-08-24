@@ -137,12 +137,12 @@ function SectionTitle({
   aside?: React.ReactNode;
 }) {
   return (
-    <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-      <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
-        <ThemeIcon size={30} radius={8} variant="light" color="blue">
+    <Group className="daily-section-heading" justify="space-between" align="center" mb="md" wrap="nowrap">
+      <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+        <ThemeIcon size={28} radius={6} variant="light" color="blue">
           {icon}
         </ThemeIcon>
-        <Text fw={900} size="lg" c="var(--mantine-color-text)" truncate>
+        <Text className="daily-section-title" c="var(--mantine-color-text)" truncate>
           {title}
         </Text>
       </Group>
@@ -154,14 +154,15 @@ function SectionTitle({
 function StepMarker({ value, active }: { value: number; active: boolean }) {
   return (
     <Box
-      w={26}
-      h={26}
+      className="daily-step-marker"
+      w={24}
+      h={24}
       style={{
         borderRadius: 8,
         display: 'grid',
         placeItems: 'center',
         fontSize: 13,
-        fontWeight: 900,
+        fontWeight: 600,
         color: active ? 'var(--mantine-color-white)' : 'var(--mantine-color-dimmed)',
         background: active ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default)',
         border: active ? '1px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)',
@@ -188,13 +189,13 @@ function SizePill({
       onClick={onClick}
       styles={{
         root: {
-          height: 38,
+          height: 32,
           paddingInline: 10,
           background: active ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default)',
           color: active ? 'var(--mantine-color-white)' : 'var(--mantine-color-text)',
           border: active ? '1px solid var(--mantine-primary-color-filled)' : '1px solid var(--mantine-color-default-border)',
           fontSize: 13,
-          fontWeight: 850,
+          fontWeight: 600,
         },
         label: {
           overflow: 'hidden',
@@ -510,16 +511,16 @@ export function DailyWorkspace({
         )}
       />
 
-      <ScrollArea className="app-scroll" style={{ flex: 1 }}>
-        <Box className="daily-content" px={30} py={22} pb={118}>
-          <Flex className="daily-layout" gap={22} align="flex-start">
-            <Stack className="daily-sidebar" gap={18} w={342} style={{ flexShrink: 0 }}>
-              <Card className="daily-flow-card" withBorder radius={8} p={20} style={cardStyle}>
-                <Stack gap={14}>
+      <ScrollArea className="daily-scroll" style={{ flex: 1 }}>
+        <Box className="daily-content">
+          <Flex className="daily-layout" gap={16} align="flex-start">
+            <Stack className="daily-sidebar" gap={16}>
+              <Card className="daily-flow-card" withBorder radius={8} p={16} style={cardStyle}>
+                <Stack gap={8}>
                   {flowSteps.map((step, index) => (
                     <Group key={step.label} gap={12} wrap="nowrap">
                       <StepMarker value={index + 1} active={step.active} />
-                      <Text fw={850} c={step.active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)'}>
+                      <Text className="daily-step-label" c={step.active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)'}>
                         {step.label}
                       </Text>
                     </Group>
@@ -527,7 +528,7 @@ export function DailyWorkspace({
                 </Stack>
               </Card>
 
-              <Card className="daily-requirement-card" withBorder radius={8} p={20} style={cardStyle}>
+              <Card className="daily-requirement-card" withBorder radius={8} p={16} style={cardStyle}>
                 <SectionTitle icon={<FileJson size={16} />} title="今日需求" />
                 <Stack className="daily-requirement-actions" gap="md">
                   <TextInput
@@ -541,7 +542,7 @@ export function DailyWorkspace({
                         background: 'var(--mantine-color-default)',
                         border: '1px solid var(--mantine-color-default-border)',
                         color: projectsCount > 0 ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
-                        fontWeight: 750,
+                        fontWeight: 500,
                       },
                     }}
                   />
@@ -570,7 +571,7 @@ export function DailyWorkspace({
                     styles={{
                       root: {
                         height: 44,
-                        fontWeight: 900,
+                        fontWeight: 600,
                       },
                     }}
                   >
@@ -584,7 +585,7 @@ export function DailyWorkspace({
                     styles={{
                       root: {
                         height: 46,
-                        fontWeight: 900,
+                        fontWeight: 600,
                       },
                     }}
                   >
@@ -593,7 +594,7 @@ export function DailyWorkspace({
                 </Stack>
               </Card>
 
-              <Card className="daily-naming-card" withBorder radius={8} p={20} style={cardStyle}>
+              <Card className="daily-naming-card" withBorder radius={8} p={16} style={cardStyle}>
                 <SectionTitle icon={<Sparkles size={16} />} title="命名方式" />
                 <Stack gap="md">
                   <SegmentedControl
@@ -605,7 +606,7 @@ export function DailyWorkspace({
                       { label: '特殊', value: 'special' },
                       { label: '自定义', value: 'custom', disabled: customRenamePresets.length === 0 },
                     ]}
-                    styles={{ label: { fontWeight: 850 } }}
+                    styles={{ label: { fontWeight: 600 } }}
                   />
 
                   {renameSelection.mode === 'custom' && (
@@ -620,11 +621,11 @@ export function DailyWorkspace({
                     />
                   )}
 
-                  <Paper withBorder radius={8} p="sm" style={{ ...compactCardStyle, borderLeft: '4px solid var(--mantine-color-violet-filled)' }}>
+                  <Paper withBorder radius={8} p="sm" style={compactCardStyle}>
                     <Group justify="space-between" align="flex-start" wrap="nowrap">
                       <Box style={{ minWidth: 0 }}>
-                        <Text size="xs" c="dimmed" fw={850}>当前模板</Text>
-                        <Text fw={900} truncate>{previewPresetName || renameExample?.presetName || '模板不可用'}</Text>
+                        <Text size="xs" c="dimmed" fw={500}>当前模板</Text>
+                        <Text fw={600} truncate>{previewPresetName || renameExample?.presetName || '模板不可用'}</Text>
                       </Box>
                       <Badge color={renamePreview?.canExecute ? 'teal' : renamePreview ? 'red' : 'gray'} variant="light">
                         {renamePreview?.canExecute ? '预检通过' : renamePreview ? '预检阻断' : '未预检'}
@@ -697,8 +698,8 @@ export function DailyWorkspace({
               </Card>
             </Stack>
 
-            <Stack className="daily-main" gap={18} style={{ flex: 1, minWidth: 0 }}>
-              <Card className="daily-status-card" withBorder radius={8} p={22} style={cardStyle}>
+            <Stack className="daily-main" gap={16} style={{ flex: 1, minWidth: 0 }}>
+              <Card className="daily-status-card" withBorder radius={8} p={16} style={cardStyle}>
                 <Group justify="space-between" wrap="nowrap" align="center">
                   <Box style={{ flex: 1, minWidth: 0 }}>
                     <Group gap={10} mb={8}>
@@ -714,21 +715,21 @@ export function DailyWorkspace({
                         {statusState.label}
                       </Badge>
                     </Group>
-                    <Title order={2} c="var(--mantine-color-text)" mb={8} style={{ fontSize: 30, lineHeight: 1.1 }}>
+                    <Title className="daily-status-title" order={2} c="var(--mantine-color-text)" mb={4}>
                       {statusState.title}
                     </Title>
-                    <Text c="var(--mantine-color-dimmed)" size="md" fw={550}>
+                    <Text className="daily-status-description" c="var(--mantine-color-dimmed)">
                       {statusState.description}
                     </Text>
                   </Box>
-                  <ThemeIcon size={70} radius={8} variant="light" color={statusState.color}>
+                  <ThemeIcon size={48} radius={8} variant="light" color={statusState.color}>
                     {statusState.icon}
                   </ThemeIcon>
                 </Group>
               </Card>
 
-              <Flex className="daily-upload-grid" gap={18} align="stretch">
-                <Card className="daily-upload-card" withBorder radius={8} p={22} style={{ ...cardStyle, flex: 1.15, minWidth: 0 }}>
+              <Flex className="daily-upload-grid" gap={16} align="stretch">
+                <Card className="daily-upload-card" withBorder radius={8} p={16} style={{ ...cardStyle, flex: 1.15, minWidth: 0 }}>
                   <SectionTitle
                     icon={<UploadCloud size={16} />}
                     title="上传素材"
@@ -773,7 +774,7 @@ export function DailyWorkspace({
                     radius={8}
                     styles={{
                       root: {
-                        minHeight: 228,
+                        minHeight: 192,
                         border: folderPaths.length > 0 ? '1px solid var(--mantine-color-default-border)' : '2px dashed var(--mantine-color-default-border)',
                         background: 'var(--mantine-color-default)',
                         display: 'flex',
@@ -808,10 +809,10 @@ export function DailyWorkspace({
                                     <FolderOpen size={16} />
                                   </ThemeIcon>
                                   <Stack gap={2} style={{ minWidth: 0, overflow: 'hidden' }}>
-                                    <Text truncate c="var(--mantine-color-text)" fw={850} size="sm">
+                                    <Text title={getFolderName(path)} truncate c="var(--mantine-color-text)" fw={600} size="sm">
                                       {getFolderName(path)}
                                     </Text>
-                                    <Text truncate c="dimmed" size="xs">
+                                    <Text title={path} truncate c="dimmed" size="xs">
                                       {path}
                                     </Text>
                                   </Stack>
@@ -820,7 +821,7 @@ export function DailyWorkspace({
                                   variant="subtle"
                                   color="red"
                                   radius={8}
-                                  aria-label="删除目录"
+                                  aria-label={`删除目录 ${getFolderName(path)}`}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     onRemoveFolder(path);
@@ -861,7 +862,7 @@ export function DailyWorkspace({
                   )}
                 </Card>
 
-                <Card className="daily-sizes-card" withBorder radius={8} p={22} style={{ ...cardStyle, flex: 0.85, minWidth: 280 }}>
+                <Card className="daily-sizes-card" withBorder radius={8} p={16} style={{ ...cardStyle, flex: 0.85 }}>
                   <SectionTitle icon={<FileText size={16} />} title="尺寸目标" />
                   <Stack gap="lg">
                     <Box>
@@ -1195,63 +1196,44 @@ export function DailyWorkspace({
               </Card>
             </Stack>
           </Flex>
+          <Paper
+            className="daily-actions"
+            radius={8}
+            p="md"
+            withBorder
+            style={{
+              background: 'var(--mantine-color-default)',
+              borderColor: 'var(--mantine-color-default-border)',
+              boxShadow: 'none',
+            }}
+          >
+            <Group className="daily-action-buttons" gap={12} justify="flex-end">
+              <Button
+                radius={8}
+                color="blue"
+                variant={canRename ? 'default' : 'filled'}
+                leftSection={<Play size={16} fill="currentColor" />}
+                onClick={onValidate}
+                loading={isValidating}
+                styles={{ root: { fontWeight: 600 } }}
+              >
+                开始校验
+              </Button>
+              <Button
+                radius={8}
+                color="blue"
+                leftSection={<CheckCircle2 size={18} />}
+                onClick={onRename}
+                loading={isRenaming}
+                disabled={!canRename}
+                styles={{ root: { fontWeight: 600 } }}
+              >
+                执行重命名
+              </Button>
+            </Group>
+          </Paper>
         </Box>
       </ScrollArea>
-
-      <Paper
-        className="daily-actions"
-        radius={8}
-        p={10}
-        shadow="md"
-        style={{
-          position: 'absolute',
-          right: 28,
-          bottom: 24,
-          background: 'var(--mantine-color-default)',
-          border: '1px solid var(--mantine-color-default-border)',
-          boxShadow: 'var(--openflow-shadow-floating)',
-        }}
-      >
-        <Group gap={12}>
-          <Button
-            radius={8}
-            color="blue"
-            size="lg"
-            leftSection={<Play size={18} fill="currentColor" />}
-            onClick={onValidate}
-            loading={isValidating}
-            styles={{
-              root: {
-                height: 54,
-                paddingInline: 30,
-                fontSize: 17,
-                fontWeight: 900,
-              },
-            }}
-          >
-            开始校验
-          </Button>
-          <Button
-            radius={8}
-            color="teal"
-            size="lg"
-            leftSection={<CheckCircle2 size={20} />}
-            onClick={onRename}
-            loading={isRenaming}
-            disabled={!canRename}
-            styles={{
-              root: {
-                height: 54,
-                paddingInline: 30,
-                fontSize: 17,
-                fontWeight: 900,
-              },
-            }}
-          >
-            执行重命名
-          </Button>
-        </Group>
-      </Paper>
     </Flex>
   );
 }
