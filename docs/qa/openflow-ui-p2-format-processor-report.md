@@ -2,7 +2,7 @@
 
 ## 1. 结论
 
-**PASS**。工程门禁、隔离视觉/交互、FORMAT 14 项真实文件回归和完整 25 项核心功能回归均为 0 FAIL / 0 BLOCKED。当前结果适合作为 UI-P3 的输入基线。
+**最终 PASS**。原始工程与功能验收通过后，后续人工视觉补充审计发现“处理中”按钮 Spinner 错位并将 UI-P2 视觉结论改为 FAIL；该缺陷现已通过追加 Renderer 修复、重新工程门禁、真实处理几何复核、FORMAT 14 项和完整 25 项回归闭环。修复后各项均为 0 FAIL / 0 BLOCKED，当前结果适合作为 UI-P3 的输入基线。原缺陷发现和失败证据保留在第 9 节及隔离证据目录中。
 
 - 分支：`feature/ui-format-processor`
 - BASE_SHA：`06ccd141515601f1ca5099a265d801bb64353532`
@@ -151,9 +151,65 @@ Sharp 对所有图片执行 metadata 与完整 decode；项目自带 `ffprobe-st
 
 修改前证据位于相邻 `screenshots/pre-change`。布局测量、Console 和窗口控制日志位于 `logs/ui-p2-layout.jsonl`、`logs/ui-p2-console.log` 和 `logs/window-control-results.jsonl`。
 
-## 9. 遗留与进入下一阶段判断
+## 9. 人工视觉补充审计与修复
+
+### 9.1 原证据不足与缺陷确认
+
+首次 P2 报告中的处理态单帧未能证明开始按钮内部的加载指示。2026-08-24 后续人工审计改用可重新生成的隔离视频，连续观察 6 帧、约 1.20 秒：文件行持续显示“处理中”，按钮持续禁用但呈空白色块，Spinner 稳定出现在按钮外、质量输入附近；因此该阶段视觉结论曾明确为 **FAIL**。历史证据保留在：
+
+- `C:/Users/EDY/AppData/Local/Temp/OpenFlow-QA-UI-P2/20260824-123905/screenshots/processing-defect-20260824-135355`
+- `C:/Users/EDY/AppData/Local/Temp/OpenFlow-QA-UI-P2/20260824-123905/screenshots/evidence-correction-backup-20260824-134345`
+
+### 9.2 根因、修复和提交
+
+缺陷态 DOM 中，按钮为 `BUTTON.format-start-button.mantine-Button-root`，同时具有 `data-loading="true"` 和 `disabled`；Mantine Loader 仍是该按钮的子节点。项目 CSS 却把 `.format-start-button` 覆盖为 `position: static`，使 Mantine 的绝对定位 Loader 失去按钮作为 containing block，转而相对外层设置卡定位。760×520 下按钮中心为 `(402, 426.78125)`，Loader 中心为 `(402, 131.390625)`，`dx=0`、`dy=-295.390625`，中心明确不在按钮矩形内。
+
+最小修复仅把页面专用 `.format-start-button` 恢复为 `position: relative`，没有改变 `isProcessing`、`loading`、`disabled`、`onClick`、文件队列、IPC 或处理参数。针对性测试新增定位上下文契约，并继续锁定既有处理状态与 BrowserWindow 尺寸。修复提交：`537a574c13d1759ac98006c4dd1eab0e33edf10b`（`fix(renderer): keep processing indicator inside action button`）。
+
+### 9.3 修复后工程与真实几何
+
+- `git diff --check`：退出码 0，仅有 LF/CRLF 工作区提示。
+- `npm run lint`：退出码 0。
+- `npm test`：release 27 + source 126 = **153 PASS / 0 FAIL**；定向 FormatProcessor 测试 9/9。
+- `npm run build`：退出码 0；Renderer/Main/Preload、Windows NSIS 与扩展包完成。
+- `package-lock.json` SHA-256：`E80235F04807173AE6F09F367AEFECFF7BD63726AFB117D39D4076FF2256F217`，未变化。
+
+修复后使用最终 build、隔离 APPDATA/LOCALAPPDATA/userData 和真实处理过程测量：
+
+| 场景 | 结果 | Loader 中心偏差 |
+| --- | --- | --- |
+| 760×520，深色，100% | 连续 6 帧、约 1.34 秒全部位于按钮内；文件行持续“处理中”，按钮持续禁用 | `dx=0px`，`dy=-1.5px` |
+| 1080×640，浅色，125% | Spinner 位于按钮内，无参数控件重叠 | `dx≈0px`，`dy=-2.19px` |
+| 最大化 1920×1032，深色，150% | Spinner 位于按钮内，无覆盖或横向溢出 | `dx≈0px`，`dy=-2.19px` |
+
+所有偏差均小于 4px。处理完成后文件行显示“完成”，按钮恢复“开始处理”且重新可用。
+
+### 9.4 FORMAT 与完整功能重验
+
+新建隔离 working-copy：`C:/Users/EDY/AppData/Local/Temp/OpenFlow-QA-UI-P2/20260824-123905/processing-indicator-fix-rerun-20260824-151420`。
+
+- FORMAT-001～014：**14/14 PASS**。PNG `640×360→320×180`、短 MP4 `320×240→160×120` 且时长保持 `1.000s`；PNG/JPEG 经 Sharp metadata 和完整 decode，MP4 经项目 `ffprobe-static` 解析；路径失效返回明确失败且无伪输出；输入大小和 SHA-256 不变；零字节 0。
+- DAILY：**5/5 PASS**。有效/错误需求表、隔离目录创建、双目录尺寸与 8 个文件校验、命名模板与尺寸选择均复核。
+- ORG：**3/3 PASS**。真实空目录扫描、2 JPG + 1 MP4 识别、TXT 排除、冲突日期后缀、奇觅目录、转移与撤销均通过；撤销后来源 4 文件，目标仅留 1 个预置冲突样本。
+- SETTINGS：**3/3 PASS**。隔离来源/目标、`UI-P2验收模板`、JPG/MP4 与 `CommandOrControl+Alt+F11` 重启读回；快捷键实际隐藏并恢复窗口。
+- 合计：**25/25 PASS / 0 FAIL / 0 BLOCKED**。
+
+真实配置 SHA-256 仍为 `EA43CAF1D0D08625FED535E421708A1DC10A52B1D9971D742162ECFAF3F8AD41`，最后写入仍为 `2026-08-21 17:07:22`。Console 仅出现已记录的隔离环境 Sentry CSP/SDK 消息，没有新增未处理异常或 Promise rejection。
+
+### 9.5 纠正证据
+
+四张关键紧凑截图均为 744×481：
+
+- `screenshots/final/settings-760x520-about-smoke.png`
+- `screenshots/final/format-760x520-processing.png`
+- `screenshots/final/format-760x520-processing-action.png`
+- `screenshots/final/format-760x520-success.png`
+
+另有 760×520 连续 6 帧、1080×640 浅色 125% 和最大化深色 150% 处理态截图。纠正包：`C:/Users/EDY/AppData/Local/Temp/OpenFlow-QA-UI-P2/20260824-123905/final-corrected.zip`，SHA-256 `D12850DFF5ECB534CFF91DFD3D27D17EF95FE34F3B94AAAC199F95294BCC70B0`；共 33 个条目，ZIP 根为 `final/`，不含绝对路径或 `..`。清单：同目录 `final-corrected.sha256.txt`。完整复验摘要：`logs/processing-indicator-fix-regression-summary.md`。
+
+## 10. 遗留与进入下一阶段判断
 
 - FAIL：0
 - BLOCKED：0
 - 已知环境记录：Sentry CSP/SDK 基线消息和隔离 wrapper 扩展元数据路径 ENOENT；均未影响页面、格式处理或 25 项功能结果。
-- 是否适合进入 UI-P3：**是**。
+- 是否适合进入 UI-P3：**是**。原人工视觉 FAIL 已通过上述追加修复和重验闭环，但原失败证据继续保留。
