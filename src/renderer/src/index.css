@@ -480,7 +480,7 @@ body {
 }
 
 .format-start-button {
-  position: static;
+  position: relative;
   flex: 0 0 auto;
   margin-top: var(--openflow-space-4);
 }

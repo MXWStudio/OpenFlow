@@ -76,8 +76,14 @@ describe('format processor responsive contract', () => {
     for (const selector of ['.format-empty-state', '.format-settings-card', '.format-start-button']) {
       assert.doesNotMatch(readCssRule(css, selector), /display:\s*none|visibility:\s*hidden/);
     }
-    assert.match(readCssRule(css, '.format-start-button'), /position:\s*static/);
     assert.doesNotMatch(css, /\.format-start-button[^}]*position:\s*fixed/);
+  });
+
+  it('positions the processing indicator against the primary action button', () => {
+    const startButtonRule = readCssRule(css, '.format-start-button');
+    assert.match(startButtonRule, /position:\s*relative/);
+    assert.doesNotMatch(startButtonRule, /position:\s*(?:static|absolute|fixed)/);
+    assert.match(formatProcessor, /className="format-start-button"[\s\S]*?loading=\{isProcessing\}/);
   });
 
   it('keeps compact queue and setting content in normal flow', () => {
