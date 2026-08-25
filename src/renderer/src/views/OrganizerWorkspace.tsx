@@ -8,20 +8,17 @@ import {
   Group,
   Image,
   ScrollArea,
-  SimpleGrid,
   Stack,
   Text,
   Title,
   Badge,
-  Paper,
   ThemeIcon,
   Tooltip,
-  useComputedColorScheme,
 } from '@mantine/core';
-import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
+import { FolderSearch, FolderSync, PlayCircle, Image as ImageIcon, FolderOpen, CheckCircle2 } from 'lucide-react';
 import { notify } from '../utils/notify';
 import { WorkflowSettings, WorkspaceSettings, formatBytes } from '../appState';
-import { isDarkColorScheme } from '../theme';
+import { PageHeader } from '../components/PageHeader';
 
 interface OrganizerWorkspaceProps {
   isQimiEnabled: boolean;
@@ -46,11 +43,53 @@ interface ScannedFile {
   selected: boolean;
 }
 
+function OrganizerFilePreview({ file }: { file: ScannedFile }) {
+  const isVideo = file.ext.toLowerCase() === '.mp4';
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [file.filePath]);
+
+  if (isVideo) {
+    return (
+      <Box
+        className="organizer-file-preview"
+        role="img"
+        aria-label="视频文件预览"
+        data-preview-state="video"
+      >
+        <PlayCircle aria-hidden="true" size={28} color="var(--mantine-color-dimmed)" />
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      className="organizer-file-preview"
+      role="img"
+      aria-label={imageFailed ? '图片预览不可用' : '图片文件预览'}
+      data-preview-state={imageFailed ? 'fallback' : 'image'}
+    >
+      {imageFailed ? (
+        <ImageIcon aria-hidden="true" size={28} color="var(--mantine-color-dimmed)" />
+      ) : (
+        <Image
+          src={`asset://${encodeURIComponent(file.filePath)}`}
+          alt=""
+          width="100%"
+          height="100%"
+          fit="cover"
+          onError={() => setImageFailed(true)}
+        />
+      )}
+    </Box>
+  );
+}
+
 export function OrganizerWorkspace({
   isQimiEnabled,
   onToggleQimiEnabled, workflowSettings, workspaceSettings, onOpenSettings, onChangeWorkspaceSettings, onBusyChange }: OrganizerWorkspaceProps) {
-  const resolvedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
-  const isDarkTheme = isDarkColorScheme(resolvedColorScheme);
   const [files, setFiles] = useState<ScannedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
@@ -196,12 +235,7 @@ export function OrganizerWorkspace({
 
   const allSelected = files.length > 0 && files.every(f => f.selected);
   const indeterminate = files.some(f => f.selected) && !allSelected;
-  const cardShadow = 'var(--openflow-shadow-card)';
-  const floatingShadow = 'var(--openflow-shadow-floating)';
-  const deepSurface = isDarkTheme ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-default)';
-  const statusSurface = isDarkTheme
-    ? 'linear-gradient(135deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-8) 100%)'
-    : 'linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 1) 100%)';
+  const selectedCount = files.filter(file => file.selected).length;
 
   const statusLabel = isScanning
     ? '正在扫描'
@@ -240,404 +274,260 @@ export function OrganizerWorkspace({
             : '点击下方“一键扫描”开始读取下载目录中的素材。';
 
   return (
-    <Box className="organizer-workspace" style={{ flex: 1, minWidth: 0, position: 'relative', height: '100%' }}>
-      <Flex direction="column" h="100%">
-        <Group
+    <Box className="organizer-workspace">
+      <Flex direction="column" h="100%" style={{ minHeight: 0 }}>
+        <PageHeader
           className="organizer-header"
-          justify="space-between"
-          px={30}
-          h={102}
-          style={{
-            borderBottom: '1px solid var(--mantine-color-default-border)',
-            background: 'var(--mantine-color-default)',
-          }}
-        >
-          <Stack gap="xs">
-            <Title order={2} size="h3" c="var(--mantine-color-text)" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <FolderSearch size={24} color="var(--mantine-color-blue-filled)" />
-              素材自动整理
-            </Title>
-            <Text c="dimmed" size="sm">
-              自动扫描下载目录中的素材，并按解析出的“游戏名”和“分辨率”归档到目标文件夹。
-            </Text>
-          </Stack>
-        </Group>
+          title="素材自动整理"
+          description="扫描下载目录，并按游戏名和分辨率归档素材"
+          icon={<FolderSearch size={20} />}
+        />
 
-        <ScrollArea className="app-scroll" style={{ flex: 1 }}>
-          <Stack className="organizer-content" gap={22} px={30} py={18} pb={132}>
-            <Card
-              className="organizer-overview"
-              radius={30}
-              p={30}
-              withBorder
-              shadow="sm"
-              style={{
-                borderColor: 'var(--mantine-color-default-border)',
-                boxShadow: cardShadow,
-              }}
-            >
-              <Group className="organizer-overview-grid" wrap="nowrap" align="stretch" gap={30}>
-                {/* 左侧 60% 系统状态 */}
-                <Box className="organizer-status-column" style={{ flex: '0 0 calc(60% - 15px)', minWidth: 0 }}>
-                  <Group gap={8} mb="lg">
-                    <FolderSearch size={14} color="var(--mantine-color-dimmed)" />
-                    <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
-                      系统状态
-                    </Text>
+        <ScrollArea className="organizer-scroll app-scroll" style={{ flex: 1, minHeight: 0 }}>
+          <Stack className="organizer-content" gap="md">
+            <Box className="organizer-top-grid">
+              <Card className="organizer-section organizer-status-card" withBorder radius="md" p="md">
+                <Group className="organizer-section-heading" justify="space-between" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap">
+                    <ThemeIcon variant="light" color={hasOrganized ? 'green' : 'blue'} size="md" radius="sm">
+                      {hasOrganized ? <CheckCircle2 size={16} /> : <FolderSearch size={16} />}
+                    </ThemeIcon>
+                    <Text className="organizer-section-title">系统状态</Text>
                   </Group>
-                  <Paper
-                    radius={26}
-                    p={30}
-                    h="100%"
-                    style={{
-                      background: statusSurface,
-                      border: '1px solid var(--mantine-color-default-border)',
-                      boxShadow: isDarkTheme ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.02)' : 'inset 0 0 48px rgba(191, 219, 254, 0.16)',
-                      overflow: 'hidden',
-                    }}
+                  <Badge
+                    variant="light"
+                    radius="sm"
+                    color={hasOrganized ? 'green' : isScanning || isOrganizing ? 'orange' : 'gray'}
                   >
-                    <Group justify="space-between" wrap="nowrap" align="center" h="100%">
-                      <Box style={{ flex: 1, minWidth: 0 }}>
-                        <Group gap={10} mb="md">
-                          <Box
-                            w={8}
-                            h={8}
-                            style={{
-                              borderRadius: 999,
-                              background: hasOrganized ? 'var(--mantine-color-green-filled)' : isScanning || isOrganizing ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-dimmed)',
-                            }}
-                          />
-                          <Badge
-                            variant="light"
-                            radius="sm"
-                            color={hasOrganized ? 'teal' : isScanning || isOrganizing ? 'blue' : 'gray'}
-                            styles={{ root: { fontWeight: 800 } }}
-                          >
-                            {statusLabel}
-                          </Badge>
-                        </Group>
+                    {statusLabel}
+                  </Badge>
+                </Group>
 
-                        <Title order={1} c="var(--mantine-color-text)" mb={12} style={{ fontSize: 32, lineHeight: 1.02 }}>
-                          {statusTitle}
-                        </Title>
+                <Stack className="organizer-status-body" gap="xs">
+                  <Title order={2} className="organizer-status-title">{statusTitle}</Title>
+                  <Text className="organizer-status-description" c="dimmed">{statusDescription}</Text>
+                  <Box className="organizer-directory-summary">
+                    <Text size="xs" c="dimmed">来源目录</Text>
+                    <Text className="organizer-path" title={organizerSourceDir || '未配置源目录'}>
+                      {organizerSourceDir || '未配置源目录'}
+                    </Text>
+                  </Box>
+                  <Group className="organizer-status-actions" gap="sm">
+                    <Button
+                      variant="default"
+                      leftSection={<FolderOpen size={16} />}
+                      onClick={handleOpenSourceFolder}
+                    >
+                      打开源目录
+                    </Button>
+                    {hasOrganized && (
+                      <Button
+                        variant="light"
+                        color="blue"
+                        leftSection={<FolderOpen size={16} />}
+                        onClick={handleOpenDestFolder}
+                      >
+                        打开整理目录
+                      </Button>
+                    )}
+                  </Group>
+                </Stack>
+              </Card>
 
-                        <Text c="var(--mantine-color-dimmed)" size="md" fw={500}>
-                          {statusDescription}
-                        </Text>
+              <Card className="organizer-section organizer-shortcuts-card" withBorder radius="md" p="md">
+                <Group className="organizer-section-heading" gap="xs" wrap="nowrap">
+                  <ThemeIcon variant="light" color="gray" size="md" radius="sm">
+                    <FolderSync size={16} />
+                  </ThemeIcon>
+                  <Text className="organizer-section-title">快捷操作</Text>
+                </Group>
 
-                        <Group mt="xl">
-                          <Button
-                            size="md"
-                            radius="xl"
-                            variant="default"
-                            leftSection={<FolderOpen size={18} />}
-                            onClick={handleOpenSourceFolder}
-                            styles={{ root: { fontWeight: 800 } }}
-                          >
-                            打开源目录
-                          </Button>
-                          {hasOrganized && (
-                            <Button
-                              size="md"
-                              radius="xl"
-                              variant="light"
-                              color="blue"
-                              leftSection={<FolderOpen size={18} />}
-                              onClick={handleOpenDestFolder}
-                              styles={{ root: { fontWeight: 800 } }}
-                            >
-                              打开整理目录
-                            </Button>
-                          )}
-                        </Group>
-                      </Box>
-                      <Paper
-                        radius={22}
-                        p="lg"
-                        shadow="sm"
-                        style={{
-                          width: 88,
-                          height: 110,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: deepSurface,
-                          flexShrink: 0
+                <Stack className="organizer-shortcuts" gap="sm">
+                  <Box className="organizer-qimi-option">
+                    <Checkbox
+                      label="视频转移-奇觅生成"
+                      description="启用后，视频将沿用现有奇觅生成目录规则"
+                      checked={isQimiEnabled}
+                      onChange={(event) => onToggleQimiEnabled(event.currentTarget.checked)}
+                      iconColor="blue"
+                    />
+                  </Box>
+
+                  <Box className="organizer-directory-control">
+                    <Box className="organizer-directory-copy">
+                      <Text size="xs" c="dimmed">源目录</Text>
+                      <Text className="organizer-path" title={organizerSourceDir || '未配置源目录'}>
+                        {organizerSourceDir || '未配置源目录'}
+                      </Text>
+                    </Box>
+                    <Tooltip label={organizerSourceDir || '未配置源目录'}>
+                      <Button
+                        variant="default"
+                        leftSection={<FolderOpen size={16} />}
+                        onClick={async () => {
+                          const newPath = await window.electronAPI.dialog.selectFolder();
+                          if (newPath) {
+                            if (onChangeWorkspaceSettings) {
+                              onChangeWorkspaceSettings({ sourceDir: newPath });
+                            }
+                            notify('green', '成功', '已更改源目录配置。');
+                          }
                         }}
                       >
-                        <FileText size={36} color="var(--mantine-color-dimmed)" />
-                      </Paper>
-                    </Group>
-                  </Paper>
-                </Box>
+                        更改源目录
+                      </Button>
+                    </Tooltip>
+                  </Box>
 
-                {/* 右侧 40% 快捷操作 */}
-                <Box className="organizer-actions-column" style={{ flex: '0 0 calc(40% - 15px)', minWidth: 0 }}>
-                   <Group gap={8} mb="lg">
-                    <FolderSearch size={14} color="var(--mantine-color-dimmed)" opacity={0} />
-                    <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
-                      快捷操作
-                    </Text>
-                  </Group>
-                  <Paper
-                    radius={26}
-                    p={22}
-                    h="100%"
-                    style={{
-                      background: deepSurface,
-                      border: '1px solid var(--mantine-color-default-border)',
-                      overflow: 'hidden',
+                  <Box className="organizer-directory-control">
+                    <Box className="organizer-directory-copy">
+                      <Text size="xs" c="dimmed">转移目录</Text>
+                      <Text className="organizer-path" title={organizerDestDir || '未配置转移目录'}>
+                        {organizerDestDir || '未配置转移目录'}
+                      </Text>
+                    </Box>
+                    <Tooltip label={organizerDestDir || '未配置转移目录'}>
+                      <Button
+                        variant="default"
+                        leftSection={<FolderOpen size={16} />}
+                        onClick={async () => {
+                          const newPath = await window.electronAPI.dialog.selectFolder();
+                          if (newPath) {
+                            if (onChangeWorkspaceSettings) {
+                              onChangeWorkspaceSettings({ destDir: newPath });
+                            }
+                            notify('green', '成功', '已更改转移目录配置。');
+                          }
+                        }}
+                      >
+                        更改转移目录
+                      </Button>
+                    </Tooltip>
+                  </Box>
+
+                  <Button
+                    className="organizer-undo-button"
+                    variant="subtle"
+                    color="red"
+                    leftSection={<FolderSync size={16} />}
+                    onClick={async () => {
+                      try {
+                        const result = await window.electronAPI.fs.undoOrganize();
+                        if (result.success) {
+                          notify('green', '撤销成功', result.message);
+                          handleScan();
+                        } else {
+                          notify('orange', '撤销失败', result.error);
+                        }
+                      } catch (err) {
+                        notify('red', '执行撤销时出错', String(err));
+                      }
                     }}
                   >
-                    <Stack gap="md" h="100%">
-                      <SimpleGrid cols={2} spacing="md" style={{ marginTop: 'auto', marginBottom: 'auto' }}>
-                        <Button
-                          variant={isQimiEnabled ? "filled" : "light"}
-                          color={isQimiEnabled ? "orange" : "gray"}
-                          leftSection={<PlayCircle size={16} />}
-                          onClick={() => onToggleQimiEnabled(!isQimiEnabled)}
-                          radius="xl"
-                          size="md"
-                          styles={{
-                            root: {
-                              fontWeight: 800,
-                              transition: 'all 0.2s ease',
-                              gridColumn: 'span 2'
-                            },
-                          }}
-                        >
-                          视频转移-奇觅生成
-                        </Button>
-                        <Tooltip label={organizerSourceDir || '未配置源目录'}>
-                          <Button
-                            variant="light"
-                            color="blue"
-                            leftSection={<FolderOpen size={16} />}
-                            onClick={async () => {
-                              const newPath = await window.electronAPI.dialog.selectFolder();
-                              if (newPath) {
-                                if (onChangeWorkspaceSettings) {
-                                  onChangeWorkspaceSettings({ sourceDir: newPath });
-                                }
-                                notify('green', '成功', '已更改源目录配置。');
-                              }
-                            }}
-                            radius="xl"
-                            size="md"
-                            styles={{
-                              root: {
-                                fontWeight: 800,
-                              },
-                              label: {
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }
-                            }}
-                          >
-                            更改源目录
-                          </Button>
-                        </Tooltip>
-                        <Tooltip label={organizerDestDir || '未配置转移目录'}>
-                          <Button
-                            variant="light"
-                            color="blue"
-                            leftSection={<FolderOpen size={16} />}
-                            onClick={async () => {
-                              const newPath = await window.electronAPI.dialog.selectFolder();
-                              if (newPath) {
-                                if (onChangeWorkspaceSettings) {
-                                  onChangeWorkspaceSettings({ destDir: newPath });
-                                }
-                                notify('green', '成功', '已更改转移目录配置。');
-                              }
-                            }}
-                            radius="xl"
-                            size="md"
-                            styles={{
-                              root: {
-                                fontWeight: 800,
-                              },
-                              label: {
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }
-                            }}
-                          >
-                            更改转移目录
-                          </Button>
-                        </Tooltip>
-                        <Button
-                          variant="light"
-                          color="red"
-                          leftSection={<FolderSync size={16} />}
-                          onClick={async () => {
-                            try {
-                              const result = await window.electronAPI.fs.undoOrganize();
-                              if (result.success) {
-                                notify('green', '撤销成功', result.message);
-                                handleScan();
-                              } else {
-                                notify('orange', '撤销失败', result.error);
-                              }
-                            } catch (err) {
-                              notify('red', '执行撤销时出错', String(err));
-                            }
-                          }}
-                          radius="xl"
-                          size="md"
-                          style={{ gridColumn: 'span 2' }}
-                          styles={{
-                            root: {
-                              fontWeight: 800,
-                            },
-                          }}
-                        >
-                          撤销转移
-                        </Button>
-                      </SimpleGrid>
-                    </Stack>
-                  </Paper>
-                </Box>
-              </Group>
-            </Card>
+                    撤销转移
+                  </Button>
+                </Stack>
+              </Card>
+            </Box>
 
-            <Card
-              radius={30}
-              p={22}
-              withBorder
-              shadow="sm"
-              style={{
-                borderColor: 'var(--mantine-color-default-border)',
-                boxShadow: cardShadow,
-              }}
-            >
-              <Group justify="space-between" mb="md">
-                <Group gap={8}>
-                  <FolderSync size={14} color="var(--mantine-color-dimmed)" />
-                  <Text fw={800} size="lg" c="var(--mantine-color-dimmed)">
-                    待整理素材
-                  </Text>
+            <Card className="organizer-section organizer-materials-card" withBorder radius="md" p="md">
+              <Group className="organizer-materials-heading" justify="space-between" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap">
+                  <ThemeIcon variant="light" color="gray" size="md" radius="sm">
+                    <FolderSync size={16} />
+                  </ThemeIcon>
+                  <Text className="organizer-section-title">待整理素材</Text>
                 </Group>
+                <Badge variant="light" color={files.length > 0 ? 'blue' : 'gray'}>
+                  {files.length} 个文件
+                </Badge>
               </Group>
 
               {files.length === 0 ? (
-                <Flex h={200} align="center" justify="center" direction="column" gap="md" c="dimmed" style={{ backgroundColor: deepSurface, borderRadius: 24, border: '2px dashed var(--mantine-color-default-border)' }}>
-                  <FolderSearch size={48} opacity={0.3} />
-                  <Text>未发现匹配的素材，请确认源目录配置或重新扫描</Text>
+                <Flex className="organizer-empty-state" align="center" justify="center" direction="column" gap="sm" c="dimmed">
+                  <FolderSearch size={36} aria-hidden="true" />
+                  <Text ta="center">
+                    {hasScanned ? '没有需要整理的文件' : '未发现匹配的素材，请确认源目录配置或开始扫描'}
+                  </Text>
                   {(!organizerSourceDir || !organizerDestDir) && (
                     <Button variant="light" size="xs" onClick={onOpenSettings}>去设置目录</Button>
                   )}
                 </Flex>
               ) : (
-                <Stack gap="md">
-                  <Card withBorder radius="md" p="sm" style={{ borderColor: 'var(--mantine-color-default-border)' }}>
+                <Stack className="organizer-results" gap="sm">
+                  <Box className="organizer-select-all">
                     <Checkbox
                       label="全选"
                       checked={allSelected}
                       indeterminate={indeterminate}
-                      onChange={(e) => toggleSelectAll(e.currentTarget.checked)}
+                      onChange={(event) => toggleSelectAll(event.currentTarget.checked)}
                     />
-                  </Card>
+                  </Box>
 
                   {files.map(file => {
-                    const isVideo = file.ext === '.mp4';
+                    const destinationLabel = `${file.gameName}/${file.resolution}/`;
                     return (
-                      <Card key={file.id} withBorder radius="md" p="md" shadow="sm" style={{ borderColor: 'var(--mantine-color-default-border)' }}>
-                        <Group wrap="nowrap" align="center">
+                      <Card className="organizer-file-card" key={file.id} withBorder radius="md" p="sm">
+                        <Group className="organizer-file-row" wrap="nowrap" align="center">
                           <Checkbox
+                            aria-label={`选择 ${file.fileName}`}
                             checked={file.selected}
-                            onChange={(e) => toggleSelect(file.id, e.currentTarget.checked)}
+                            onChange={(event) => toggleSelect(file.id, event.currentTarget.checked)}
                             size="md"
                           />
 
-                          <Box w={64} h={64} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--mantine-color-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {isVideo ? (
-                              <PlayCircle size={32} color="var(--mantine-color-dimmed)" />
-                            ) : (
-                               <Image src={`asset://${file.filePath}`} width="100%" height="100%" fit="cover" fallbackSrc={<ImageIcon size={32} color="var(--mantine-color-dimmed)" />} />
-                            )}
-                          </Box>
+                          <OrganizerFilePreview file={file} />
 
-                          <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                          <Stack className="organizer-file-copy" gap={4}>
                             <Text fw={600} truncate title={file.fileName}>{file.fileName}</Text>
-                            <Group gap="xs">
+                            <Group className="organizer-file-metadata" gap="xs">
                               <Badge variant="light" color="blue">{file.gameName}</Badge>
                               <Badge variant="light" color="grape">{file.resolution}</Badge>
                               <Badge variant="outline" color="gray">{formatBytes(file.size)}</Badge>
                             </Group>
                           </Stack>
 
-                          <Box style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <Box className="organizer-file-destination">
                             <Text size="xs" c="dimmed">将移至</Text>
-                            <Text size="sm" fw={500} c="teal">{`${file.gameName}/${file.resolution}/`}</Text>
+                            <Text className="organizer-path" size="sm" fw={500} title={destinationLabel}>
+                              {destinationLabel}
+                            </Text>
                           </Box>
                         </Group>
                       </Card>
-                    )
+                    );
                   })}
                 </Stack>
               )}
+
+              <Box className="organizer-action-bar">
+                <Group className="organizer-action-buttons" justify="flex-end" gap="sm">
+                  <Button
+                    className="organizer-scan-button"
+                    variant={files.length > 0 ? 'default' : 'filled'}
+                    color="blue"
+                    leftSection={<FolderSearch size={18} />}
+                    onClick={handleScan}
+                    loading={isScanning}
+                  >
+                    一键扫描
+                  </Button>
+                  <Button
+                    className="organizer-transfer-button"
+                    color="blue"
+                    leftSection={<CheckCircle2 size={18} />}
+                    onClick={handleOrganize}
+                    loading={isOrganizing}
+                    disabled={files.length === 0 || files.filter(file => file.selected).length === 0}
+                  >
+                    确认转移 ({selectedCount})
+                  </Button>
+                </Group>
+              </Box>
             </Card>
           </Stack>
         </ScrollArea>
       </Flex>
-
-      <Paper
-        className="organizer-floating-actions"
-        radius={26}
-        p={10}
-        shadow="md"
-        style={{
-          position: 'absolute',
-          right: 28,
-          bottom: 24,
-          background: deepSurface,
-          border: '1px solid var(--mantine-color-default-border)',
-          boxShadow: floatingShadow,
-          zIndex: 100,
-        }}
-      >
-        <Group gap={14}>
-          <Button
-            radius={18}
-            color="blue"
-            size="lg"
-            leftSection={<FolderSearch size={18} fill="currentColor" />}
-            onClick={handleScan}
-            loading={isScanning}
-            styles={{
-              root: {
-                height: 58,
-                paddingInline: 32,
-                fontSize: 18,
-                fontWeight: 900,
-                boxShadow: isDarkTheme ? '0 12px 28px rgba(34, 139, 230, 0.18)' : '0 12px 28px rgba(17, 26, 52, 0.2)',
-              },
-            }}
-          >
-            一键扫描
-          </Button>
-          <Button
-            radius={18}
-            color="teal"
-            size="lg"
-            leftSection={<CheckCircle2 size={20} />}
-            onClick={handleOrganize}
-            loading={isOrganizing}
-            disabled={files.length === 0 || files.filter(f => f.selected).length === 0}
-            styles={{
-              root: {
-                height: 58,
-                paddingInline: 32,
-                fontSize: 18,
-                fontWeight: 900,
-              },
-            }}
-          >
-            确认转移 ({files.filter(f => f.selected).length})
-          </Button>
-        </Group>
-      </Paper>
     </Box>
   );
 }

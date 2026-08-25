@@ -3,7 +3,6 @@ import {
   Box,
   Flex,
   Text,
-  Title,
   Card,
   Stack,
   Button,
@@ -17,8 +16,9 @@ import {
   Loader,
 } from '@mantine/core';
 import { notify } from '../utils/notify';
-import { Trash2, FolderSearch, UploadCloud, Settings, ChevronRight } from 'lucide-react';
+import { Trash2, UploadCloud, Settings, ChevronRight, Workflow, FileImage, Film } from 'lucide-react';
 import { dedupeStrings } from '../appState';
+import { PageHeader } from '../components/PageHeader';
 
 interface MediaFile {
   id: string;
@@ -237,64 +237,66 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
     : [{ value: '', label: '保持原格式' }, { value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }];
 
   return (
-    <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)" p={24} gap="lg">
-      <Group justify="space-between">
-         <Box>
-            <Title order={3} c="var(--mantine-color-text)">格式处理</Title>
-            <Text size="sm" c="dimmed">批量调整分辨率、压缩质量、转换格式</Text>
-         </Box>
-      </Group>
+    <Flex className="format-workspace" h="100%" direction="column" bg="var(--mantine-color-body)">
+      <PageHeader
+        title="格式处理"
+        description="批量调整分辨率、压缩质量和文件格式"
+        icon={<Workflow size={20} />}
+      />
 
-      <Flex className="format-layout" gap="lg" style={{ flex: 1, minHeight: 0 }}>
+      <Flex className="format-layout">
         {/* 左侧：文件列表与拖拽区 */}
         <Card
-          className="format-file-card"
-          radius="xl"
+          className={`format-file-card${isDragging ? ' format-file-card--dragging' : ''}`}
+          radius="md"
           withBorder
-          shadow="sm"
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            borderColor: isDragging ? 'var(--mantine-primary-color-filled)' : undefined,
-            backgroundColor: isDragging ? 'var(--openflow-drag-surface)' : undefined,
-            transition: 'all 0.2s'
-          }}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           {files.length === 0 ? (
-            <Flex direction="column" align="center" justify="center" h="100%" c="dimmed">
-              <UploadCloud size={48} strokeWidth={1.5} style={{ marginBottom: 16, opacity: 0.5 }} />
-              <Text fw={500} size="lg">拖拽图片或视频到此处</Text>
-              <Text size="sm" mt={8}>一次只能处理同一类型的文件（全图片或全视频）</Text>
+            <Flex className="format-empty-state" direction="column" align="center" justify="center" c="dimmed">
+              <Box className="format-empty-icon" aria-hidden="true">
+                <UploadCloud size={28} strokeWidth={1.7} />
+              </Box>
+              <Text className="format-empty-title">拖拽图片或视频到此处</Text>
+              <Text className="format-empty-description">一次只能处理同一类型的文件（全图片或全视频）</Text>
             </Flex>
           ) : (
-            <ScrollArea style={{ flex: 1 }}>
-              <Stack gap="xs" p="xs">
-                <Group justify="space-between" mb="xs">
-                  <Text size="sm" fw={500} c="dimmed">已添加 {files.length} 个文件</Text>
+            <ScrollArea className="format-queue-scroll" type="auto">
+              <Stack className="format-queue" gap="xs">
+                <Group className="format-queue-header" justify="space-between">
+                  <Group gap="xs">
+                    <Text size="sm" fw={600}>处理队列</Text>
+                    <Badge color="gray" variant="light">{files.length} 个文件</Badge>
+                  </Group>
                   <Button variant="light" color="red" size="xs" onClick={clearFiles} disabled={isProcessing}>清空列表</Button>
                 </Group>
                 {files.map(f => (
-                  <Card key={f.id} withBorder p="sm" radius="md">
-                    <Group justify="space-between" wrap="nowrap">
-                      <Group wrap="nowrap" style={{ flex: 1, overflow: 'hidden' }}>
-                        <Badge color={f.type === 'image' ? 'blue' : 'violet'} variant="light">{f.type === 'image' ? '图片' : '视频'}</Badge>
-                        <Text truncate style={{ flex: 1 }} title={f.filePath}>{f.fileName}</Text>
+                  <Card className="format-queue-item" key={f.id} withBorder p="sm" radius="md">
+                    <Group className="format-queue-item-row" justify="space-between" wrap="nowrap">
+                      <Group className="format-queue-file" wrap="nowrap">
+                        <Box className="format-file-type-icon" aria-hidden="true">
+                          {f.type === 'image' ? <FileImage size={16} /> : <Film size={16} />}
+                        </Box>
+                        <Box className="format-file-copy">
+                          <Text className="format-file-name" truncate title={f.filePath}>{f.fileName}</Text>
+                          <Text size="xs" c="dimmed">{f.type === 'image' ? '图片' : '视频'} · {(f.size / 1024).toFixed(1)} KB</Text>
+                        </Box>
                       </Group>
-                      <Group gap="sm">
-                        {f.status === 'processing' && <Loader size="xs" />}
+                      <Group className="format-file-status" gap="xs" wrap="nowrap">
+                        {f.status === 'pending' && <Badge color="gray" variant="outline">待处理</Badge>}
+                        {f.status === 'processing' && <><Loader size="xs" /><Badge color="orange" variant="light">处理中</Badge></>}
                         {f.status === 'success' && <Badge color="green">完成</Badge>}
                         {f.status === 'error' && <Badge color="red" title={f.error}>失败</Badge>}
-                        <ActionIcon color="red" variant="subtle" onClick={() => removeFile(f.id)} disabled={isProcessing}>
+                        <ActionIcon aria-label={`移除 ${f.fileName}`} color="red" variant="subtle" onClick={() => removeFile(f.id)} disabled={isProcessing}>
                           <Trash2 size={16} />
                         </ActionIcon>
                       </Group>
                     </Group>
-                    {f.targetPath && <Text size="xs" c="dimmed" mt={4} truncate title={f.targetPath}>输出: {f.targetPath}</Text>}
+                    {f.targetPath && <Text className="format-file-result" size="xs" c="dimmed" truncate title={f.targetPath}>输出: {f.targetPath}</Text>}
+                    {f.error && <Text className="format-file-error" size="xs" c="red" title={f.error}>{f.error}</Text>}
                   </Card>
                 ))}
               </Stack>
@@ -303,15 +305,19 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
         </Card>
 
         {/* 右侧：动作流配置区 */}
-        <Card className="format-settings-card" radius="xl" withBorder shadow="sm" w={340} style={{ display: 'flex', flexDirection: 'column' }}>
-          <Title order={5} mb="md" c="var(--mantine-color-text)" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={18} /> 处理动作流
-          </Title>
+        <Card className="format-settings-card" radius="md" withBorder>
+          <Group className="format-settings-header" gap="xs" wrap="nowrap">
+            <Box className="format-settings-icon" aria-hidden="true"><Settings size={17} /></Box>
+            <Box>
+              <Text className="format-settings-title">处理动作流</Text>
+              <Text className="format-settings-description">设置输出尺寸、质量与位置</Text>
+            </Box>
+          </Group>
 
-          <ScrollArea style={{ flex: 1 }} type="scroll">
-            <Stack gap="xl" pr="sm">
+          <ScrollArea className="format-settings-scroll" type="auto">
+            <Stack className="format-settings-stack">
               {/* 尺寸调整 */}
-              <Box>
+              <Box className="format-settings-section">
                 <Checkbox
                   label="调整分辨率"
                   checked={config.resize.enabled}
@@ -319,11 +325,10 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
                     const checked = e.currentTarget.checked;
                     setConfig(prev => ({ ...prev, resize: { ...prev.resize, enabled: checked } }));
                   }}
-                  mb="sm"
                   fw={500}
                 />
                 {config.resize.enabled && (
-                  <Card withBorder radius="md" p="sm" bg="var(--mantine-color-default)">
+                  <Card className="format-option-surface" withBorder radius="md" p="sm">
                     <Select
                       label="调整方式"
                       size="sm"
@@ -363,9 +368,9 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
               </Box>
 
               {/* 质量压缩 */}
-              <Box>
-                <Text fw={500} size="sm" mb="xs">输出质量压缩</Text>
-                <Card withBorder radius="md" p="sm" bg="var(--mantine-color-default)">
+              <Box className="format-settings-section">
+                <Text className="format-field-heading">输出质量压缩</Text>
+                <Card className="format-option-surface" withBorder radius="md" p="sm">
                   <NumberInput
                     description="1-100，越小体积越小，质量越低"
                     size="sm"
@@ -377,8 +382,8 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
               </Box>
 
               {/* 格式转换 */}
-              <Box>
-                <Text fw={500} size="sm" mb="xs">格式转换</Text>
+              <Box className="format-settings-section">
+                <Text className="format-field-heading">格式转换</Text>
                 <Select
                   size="sm"
                   data={formatOptions}
@@ -388,8 +393,8 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
               </Box>
 
               {/* 导出设置 */}
-              <Box>
-                 <Title order={6} mb="sm" c="var(--mantine-color-text)">导出设置</Title>
+              <Box className="format-settings-section">
+                 <Text className="format-field-heading">导出设置</Text>
                  <Stack gap="sm">
                     <Checkbox
                        label="使用动作拼接文件夹名"
@@ -400,10 +405,10 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
                          setConfig(prev => ({ ...prev, useDynamicFolderName: checked }));
                        }}
                     />
-                    <Box>
-                       <Text size="sm" fw={500} mb={4}>自定义导出目录</Text>
-                       <Group wrap="nowrap">
-                          <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>
+                    <Box className="format-export-path">
+                       <Text size="sm" fw={500}>自定义导出目录</Text>
+                       <Group className="format-export-path-row" wrap="nowrap">
+                          <Text className="format-export-path-value" size="xs" c="dimmed" truncate title={config.customExportPath || '默认(原文件同级目录下创建)'}>
                              {config.customExportPath || '默认(原文件同级目录下创建)'}
                           </Text>
                           <Button size="xs" variant="light" onClick={handleSelectExportPath}>选择</Button>
@@ -415,7 +420,7 @@ export function FormatProcessor({ onBusyChange }: FormatProcessorProps) {
           </ScrollArea>
 
           <Button
-            mt="md"
+            className="format-start-button"
             size="lg"
             fullWidth
             onClick={handleProcess}
