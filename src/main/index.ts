@@ -23,6 +23,7 @@ import { JsonConfigStore } from './configStore'
 import { DesktopUpdateManager } from './desktopUpdateManager'
 import { DiagnosticsManager } from './diagnosticsManager'
 import { initializeOpenFlowSentry } from './sentryRuntime'
+import { loadRuntimeBuildInfo } from './runtimeBuildIdentity'
 import { ExtensionUpdateManager } from './extensionUpdateManager'
 import { ExtractionInbox } from './extractionInbox.ts'
 import { canInstallCriticalUpdate, updateAttentionColor } from './updatePolicy'
@@ -39,6 +40,13 @@ import {
 // ─── 初始化 ────────────────────────────────────────────
 // 禁用硬件加速，解决部分环境下的黑屏问题
 app.disableHardwareAcceleration()
+
+const runtimeBuildInfo = loadRuntimeBuildInfo()
+app.setName(runtimeBuildInfo.appName)
+const e2eUserDataRoot = process.env.OPENFLOW_E2E === '1' && process.env.OPENFLOW_E2E_USER_DATA_ROOT
+  ? process.env.OPENFLOW_E2E_USER_DATA_ROOT
+  : ''
+app.setPath('userData', e2eUserDataRoot || join(app.getPath('appData'), runtimeBuildInfo.userDataDirectory))
 
 const updateConfigurationPath = app.isPackaged
   ? join(process.resourcesPath, 'update-config.json')
@@ -396,6 +404,7 @@ function createWindow(): void {
   const windowHeight = Math.min(900, Math.max(640, Math.floor(workHeight * 0.92)))
 
   mainWindow = new BrowserWindow({
+    title: runtimeBuildInfo.appName,
     width: windowWidth,
     height: windowHeight,
     minWidth: 760,
@@ -412,6 +421,10 @@ function createWindow(): void {
   })
 
   const window = mainWindow
+  window.on('page-title-updated', (event) => {
+    event.preventDefault()
+    window.setTitle(runtimeBuildInfo.appName)
+  })
   let rendererRecoveryAttempts = 0
   let rendererHealthTimer: NodeJS.Timeout | null = null
 
@@ -641,6 +654,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
+  app.setAppUserModelId(runtimeBuildInfo.appId)
 
   // 读取系统设置
   const systemSettings = await storeGetValue('systemSettings') as { theme?: unknown, autoStart?: boolean, closeToTray?: boolean } | undefined
@@ -1676,6 +1690,8 @@ ipcMain.handle('shell:openPath', async (_, path: string) => {
 ipcMain.handle('store:get', async (_, key: string) => {
   return storeGetValue(key)
 })
+
+ipcMain.handle('app:get-build-info', () => ({ ...runtimeBuildInfo }))
 
 ipcMain.handle('store:set', async (_, { key, value }: { key: string; value: unknown }) => {
   await storeSetValue(key, value)

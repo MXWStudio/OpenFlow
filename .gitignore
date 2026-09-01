@@ -3,6 +3,9 @@ build/
 out/
 dist/
 coverage/
+test-results/
+playwright-report/
+.cursor/skills/logo-generator-skill/
 .DS_Store
 *.log
 .env*

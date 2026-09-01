@@ -201,6 +201,25 @@ body {
   background: var(--openflow-bg-canvas);
 }
 
+.dev-sync-batch {
+  position: fixed;
+  left: calc(var(--openflow-sidebar-width) + var(--openflow-space-2));
+  bottom: var(--openflow-space-2);
+  z-index: 30;
+  max-width: 180px;
+  padding: 2px var(--openflow-space-2);
+  border: 1px solid color-mix(in srgb, var(--openflow-focus-ring) 34%, var(--openflow-border));
+  border-radius: 999px;
+  color: var(--openflow-nav-active-text);
+  background: color-mix(in srgb, var(--openflow-nav-active-bg) 90%, var(--openflow-bg-surface));
+  box-shadow: var(--openflow-shadow-floating);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .openflow-page-header {
   width: 100%;
   height: var(--openflow-page-header-height);

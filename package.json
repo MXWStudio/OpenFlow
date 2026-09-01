@@ -17,18 +17,27 @@
     "check:extension-version": "node scripts/extension-version.mjs --check",
     "prepare:extension": "node scripts/prepare-extension-package.mjs",
     "prepare:update-config": "node scripts/prepare-update-config.mjs",
+    "prepare:build-metadata": "node scripts/prepare-build-metadata.mjs",
     "prepare:update-feed-local": "node scripts/prepare-local-update-feed.mjs",
     "serve:update-feed-local": "node scripts/serve-local-update-feed.mjs",
     "release:generate-keys": "node scripts/generate-release-keypair.mjs",
-    "predev": "npm run prepare:extension && npm run prepare:update-config",
+    "predev": "npm run prepare:extension && npm run prepare:update-config && node scripts/prepare-build-metadata.mjs --channel dev",
     "dev": "electron-vite dev",
-    "prebuild": "npm run prepare:extension && npm run prepare:update-config",
+    "prebuild": "npm run prepare:extension && npm run prepare:update-config && node scripts/prepare-build-metadata.mjs --channel stable",
     "build": "electron-vite build && node scripts/upload-sentry-sourcemaps.mjs && electron-builder --win --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
+    "build:app": "electron-vite build",
+    "build:windows:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-channel.ps1 -Channel Dev",
+    "build:windows:candidate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-channel.ps1 -Channel Candidate",
     "preview": "electron-vite preview",
-    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "check:extension": "npm run check:extension-version && node scripts/check-chrome-extension.mjs && node scripts/test-chrome-deadline-extraction.mjs && node scripts/test-chrome-update-flow.mjs",
     "check:release": "node --test scripts/*.test.mjs",
     "test": "npm run check:extension && npm run check:release && node --test src/main/*.test.ts src/renderer/src/*.test.ts src/shared/*.test.ts",
+    "test:e2e": "node scripts/prepare-build-metadata.mjs --channel dev && npm run prepare:extension && npm run prepare:update-config && electron-vite build && playwright test",
+    "test:e2e:packaged": "playwright test",
+    "verify:windows:remote": "bash scripts/remote-windows-electron.sh",
+    "verify:windows:candidate": "bash scripts/remote-windows-electron.sh --candidate",
     "version": "npm run sync:extension-version"
   },
   "build": {
@@ -54,6 +63,10 @@
       {
         "from": ".openflow-build/update-config.json",
         "to": "update-config.json"
+      },
+      {
+        "from": ".openflow-build/build-metadata.json",
+        "to": "build-metadata.json"
       }
     ],
     "win": {
@@ -94,6 +107,8 @@
     "sharp": "^0.35.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.62.1",
     "@sentry/cli": "3.6.2",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/fs-extra": "^11.0.4",
@@ -104,6 +119,8 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
-    "typescript": "~5.8.2"
+    "eslint": "^9.39.5",
+    "typescript": "~5.8.2",
+    "typescript-eslint": "^8.68.0"
   }
 }

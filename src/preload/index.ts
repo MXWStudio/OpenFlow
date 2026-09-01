@@ -8,6 +8,7 @@ import type { RenameRequest } from '../shared/renameTemplates'
 import type { DiagnosticEventInput } from '../shared/diagnosticsContract'
 import type { DesktopExtractionCandidate } from '../shared/extractionContract'
 import type { UpdateActivitySnapshot, UpdateViewState } from '../shared/updateContract'
+import type { OpenFlowRuntimeBuildInfo } from '../shared/buildIdentity'
 
 const updateStateListeners = new WeakMap<
   (state: UpdateViewState) => void,
@@ -30,6 +31,7 @@ const extractionListeners = new WeakMap<
 contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     rendererReady: () => ipcRenderer.send('app:renderer-ready'),
+    getBuildInfo: () => ipcRenderer.invoke('app:get-build-info') as Promise<OpenFlowRuntimeBuildInfo>,
     onNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => {
       const wrapped = (_event: Electron.IpcRendererEvent, target: { view: string, settingsTab?: string }) => listener(target)
       navigationListeners.set(listener, wrapped)

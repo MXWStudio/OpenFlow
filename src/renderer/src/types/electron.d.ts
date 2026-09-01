@@ -12,6 +12,7 @@ import type {
 import type { UpdateActivitySnapshot, UpdateViewState } from '../../../shared/updateContract.ts'
 import type { DiagnosticEventInput } from '../../../shared/diagnosticsContract.ts'
 import type { DesktopExtractionCandidate } from '../../../shared/extractionContract.ts'
+import type { OpenFlowRuntimeBuildInfo } from '../../../shared/buildIdentity.ts'
 
 /** 校验结果状态 */
 export type ValidationStatus = 'valid' | 'mismatch' | 'missing' | 'error' | 'format_error'
@@ -164,6 +165,7 @@ export interface ElectronAPI {
   /** 应用启动状态 */
   app: {
     rendererReady: () => void
+    getBuildInfo: () => Promise<OpenFlowRuntimeBuildInfo>
     onNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => void
     offNavigate: (listener: (target: { view: string, settingsTab?: string }) => void) => void
   }

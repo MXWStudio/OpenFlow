@@ -71,6 +71,7 @@ import {
   type RenameSelection,
 } from '../../shared/renameTemplates.ts';
 import type { RestorableAppView, RestorableSettingsTab, UpdateViewState } from '../../shared/updateContract.ts';
+import type { OpenFlowRuntimeBuildInfo } from '../../shared/buildIdentity.ts';
 import { normalizeRestorableSettingsTab, normalizeRestorableView } from './updateSession';
 
 type ViewKey = RestorableAppView;
@@ -114,6 +115,7 @@ export default function App() {
   const [formatBusy, setFormatBusy] = useState(false);
   const [requestedSettingsTab, setRequestedSettingsTab] = useState<RestorableSettingsTab>('system');
   const [pendingExtractionCandidate, setPendingExtractionCandidate] = useState<DesktopExtractionCandidate | null>(null);
+  const [buildInfo, setBuildInfo] = useState<OpenFlowRuntimeBuildInfo | null>(null);
   const [isExtractionPromptOpen, setIsExtractionPromptOpen] = useState(false);
   const lastUserActivityAtRef = useRef(Date.now());
   const workflowContentRef = useRef({ hasContent: false, sourceMessageId: '' });
@@ -215,6 +217,14 @@ export default function App() {
       }).toDataUri(),
     [userInfo.name],
   );
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    void window.electronAPI.app.getBuildInfo().then((info) => {
+      document.title = info.appName;
+      setBuildInfo(info);
+    }).catch(() => setBuildInfo(null));
+  }, []);
 
   useEffect(() => {
     const handleNotification = async (e: Event) => {
@@ -754,6 +764,16 @@ export default function App() {
           </Stack>
         </Flex>
       </Box>
+
+      {buildInfo?.channel === 'dev' && buildInfo.devSyncLabel ? (
+        <Text
+          className="dev-sync-batch"
+          data-openflow-dev-batch={buildInfo.devSyncLabel}
+          aria-label={`开发版同步批次 ${buildInfo.devSyncLabel}`}
+        >
+          {buildInfo.devSyncLabel}
+        </Text>
+      ) : null}
 
       <Box className="app-content" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         {activeView === 'daily' ? (
